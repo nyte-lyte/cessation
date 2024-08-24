@@ -480,3 +480,148 @@ let healthDataSets = [
     },
   },
 ];
+
+let minMaxValues = {
+  ventRate: { min: Infinity, max: -Infinity },
+  prInterval: { min: Infinity, max: -Infinity },
+  qrsInterval: { min: Infinity, max: -Infinity },
+  qtcInterval: { min: Infinity, max: -Infinity },
+  pAxis: { min: Infinity, max: -Infinity },
+  rAxis: { min: Infinity, max: -Infinity },
+  tAxis: { min: Infinity, max: -Infinity },
+  glucose: { min: Infinity, max: -Infinity },
+  nitrogen: { min: Infinity, max: -Infinity },
+  creatinine: { min: Infinity, max: -Infinity },
+  eGFR: { min: Infinity, max: -Infinity },
+  sodium: { min: Infinity, max: -Infinity },
+  potassium: { min: Infinity, max: -Infinity },
+  chloride: { min: Infinity, max: -Infinity },
+  carbonDioxide: { min: Infinity, max: -Infinity },
+  calcium: { min: Infinity, max: -Infinity },
+};
+
+healthDataSets.forEach((dataSet) => {
+  // Update min/max for ECG metrics
+  minMaxValues.ventRate.min = Math.min(
+    minMaxValues.ventRate.min,
+    dataSet.ecg.ventRate
+  );
+  minMaxValues.ventRate.max = Math.max(
+    minMaxValues.ventRate.max,
+    dataSet.ecg.ventRate
+  );
+
+  minMaxValues.prInterval.min = Math.min(
+    minMaxValues.prInterval.min,
+    dataSet.ecg.prInterval
+  );
+  minMaxValues.prInterval.max = Math.max(
+    minMaxValues.prInterval.max,
+    dataSet.ecg.prInterval
+  );
+
+  minMaxValues.qrsInterval.min = Math.min(
+    minMaxValues.qrsInterval.min,
+    dataSet.ecg.qrsInterval
+  );
+  minMaxValues.qrsInterval.max = Math.max(
+    minMaxValues.qrsInterval.max,
+    dataSet.ecg.qrsInterval
+  );
+
+  minMaxValues.qtcInterval.min = Math.min(
+    minMaxValues.qtcInterval.min,
+    dataSet.ecg.qtcInterval
+  );
+  minMaxValues.qtcInterval.max = Math.max(
+    minMaxValues.qtcInterval.max,
+    dataSet.ecg.qtcInterval
+  );
+
+  minMaxValues.pAxis.min = Math.min(minMaxValues.pAxis.min, dataSet.ecg.pAxis);
+  minMaxValues.pAxis.max = Math.max(minMaxValues.pAxis.max, dataSet.ecg.pAxis);
+
+  minMaxValues.rAxis.min = Math.min(minMaxValues.rAxis.min, dataSet.ecg.rAxis);
+  minMaxValues.rAxis.max = Math.max(minMaxValues.rAxis.max, dataSet.ecg.rAxis);
+
+  minMaxValues.tAxis.min = Math.min(minMaxValues.tAxis.min, dataSet.ecg.tAxis);
+  minMaxValues.tAxis.max = Math.max(minMaxValues.tAxis.max, dataSet.ecg.tAxis);
+
+  // Update min/max for lab values
+  minMaxValues.glucose.min = Math.min(
+    minMaxValues.glucose.min,
+    dataSet.labs.glucose
+  );
+  minMaxValues.glucose.max = Math.max(
+    minMaxValues.glucose.max,
+    dataSet.labs.glucose
+  );
+
+  minMaxValues.nitrogen.min = Math.min(
+    minMaxValues.nitrogen.min,
+    dataSet.labs.nitrogen
+  );
+  minMaxValues.nitrogen.max = Math.max(
+    minMaxValues.nitrogen.max,
+    dataSet.labs.nitrogen
+  );
+
+  minMaxValues.creatinine.min = Math.min(
+    minMaxValues.creatinine.min,
+    dataSet.labs.creatinine
+  );
+  minMaxValues.creatinine.max = Math.max(
+    minMaxValues.creatinine.max,
+    dataSet.labs.creatinine
+  );
+
+  minMaxValues.eGFR.min = Math.min(minMaxValues.eGFR.min, dataSet.labs.eGFR);
+  minMaxValues.eGFR.max = Math.max(minMaxValues.eGFR.max, dataSet.labs.eGFR);
+
+  minMaxValues.sodium.min = Math.min(
+    minMaxValues.sodium.min,
+    dataSet.labs.sodium
+  );
+  minMaxValues.sodium.max = Math.max(
+    minMaxValues.sodium.max,
+    dataSet.labs.sodium
+  );
+
+  minMaxValues.potassium.min = Math.min(
+    minMaxValues.potassium.min,
+    dataSet.labs.potassium
+  );
+  minMaxValues.potassium.max = Math.max(
+    minMaxValues.potassium.max,
+    dataSet.labs.potassium
+  );
+
+  minMaxValues.chloride.min = Math.min(
+    minMaxValues.chloride.min,
+    dataSet.labs.chloride
+  );
+  minMaxValues.chloride.max = Math.max(
+    minMaxValues.chloride.max,
+    dataSet.labs.chloride
+  );
+
+  minMaxValues.carbonDioxide.min = Math.min(
+    minMaxValues.carbonDioxide.min,
+    dataSet.labs.carbonDioxide
+  );
+  minMaxValues.carbonDioxide.max = Math.max(
+    minMaxValues.carbonDioxide.max,
+    dataSet.labs.carbonDioxide
+  );
+
+  minMaxValues.calcium.min = Math.min(
+    minMaxValues.calcium.min,
+    dataSet.labs.calcium
+  );
+  minMaxValues.calcium.max = Math.max(
+    minMaxValues.calcium.max,
+    dataSet.labs.calcium
+  );
+});
+
+console.log(minMaxValues);
