@@ -482,11 +482,11 @@ let healthDataSets = [
 ];
 
 healthDataSets.sort((a, b) => {
-    return new Date(a.date) - new Date(b.date);
+  return new Date(a.date) - new Date(b.date);
 });
 
 healthDataSets.forEach((dataSet) => {
-    console.log('Date: ${dataSet.date}, Health Index: ${dataSet.healthIndex}');
+  console.log("Date: ${dataSet.date}, Health Index: ${dataSet.healthIndex}");
 });
 
 let minMaxValues = {
