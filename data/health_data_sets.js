@@ -481,6 +481,14 @@ let healthDataSets = [
   },
 ];
 
+healthDataSets.sort((a, b) => {
+    return new Date(a.date) - new Date(b.date);
+});
+
+healthDataSets.forEach((dataSet) => {
+    console.log('Date: ${dataSet.date}, Health Index: ${dataSet.healthIndex}');
+});
+
 let minMaxValues = {
   ventRate: { min: Infinity, max: -Infinity },
   prInterval: { min: Infinity, max: -Infinity },
@@ -627,10 +635,10 @@ healthDataSets.forEach((dataSet) => {
 console.log(minMaxValues);
 
 function normalize(value, min, max) {
-    if (max - min === 0) {
-        return 0;
-    }
-    return (value - min) / (max - min);
+  if (max - min === 0) {
+    return 0;
+  }
+  return (value - min) / (max - min);
 }
 
 function calculateHealthIndex(data) {
@@ -721,8 +729,7 @@ function calculateHealthIndex(data) {
   return weightedIndex;
 }
 
-healthDataSets.forEach((dataSet, index) => {
+healthDataSets.forEach((dataSet) => {
   let healthIndex = calculateHealthIndex(dataSet);
-  console.log(`Health Index for DataSet ${index + 1}:`, healthIndex);
+  console.log(`Health Index for DataSet ${dataSet.date}:`, healthIndex);
 });
-
