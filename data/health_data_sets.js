@@ -625,3 +625,104 @@ healthDataSets.forEach((dataSet) => {
 });
 
 console.log(minMaxValues);
+
+function normalize(value, min, max) {
+    if (max - min === 0) {
+        return 0;
+    }
+    return (value - min) / (max - min);
+}
+
+function calculateHealthIndex(data) {
+  let weightedIndex =
+    // ECG Data Points (Vector Field Control)
+    normalize(
+      data.ecg.ventRate,
+      minMaxValues.ventRate.min,
+      minMaxValues.ventRate.max
+    ) *
+      0.2 +
+    normalize(
+      data.ecg.prInterval,
+      minMaxValues.prInterval.min,
+      minMaxValues.prInterval.max
+    ) *
+      0.15 +
+    normalize(
+      data.ecg.qrsInterval,
+      minMaxValues.qrsInterval.min,
+      minMaxValues.qrsInterval.max
+    ) *
+      0.1 +
+    normalize(
+      data.ecg.qtcInterval,
+      minMaxValues.qtcInterval.min,
+      minMaxValues.qtcInterval.max
+    ) *
+      0.25 +
+    normalize(data.ecg.pAxis, minMaxValues.pAxis.min, minMaxValues.pAxis.max) *
+      0.03 +
+    normalize(data.ecg.rAxis, minMaxValues.rAxis.min, minMaxValues.rAxis.max) *
+      0.03 +
+    normalize(data.ecg.tAxis, minMaxValues.tAxis.min, minMaxValues.tAxis.max) *
+      0.04 +
+    // Metabolic Data Points (Particle Field Control)
+    normalize(
+      data.labs.glucose,
+      minMaxValues.glucose.min,
+      minMaxValues.glucose.max
+    ) *
+      0.15 +
+    normalize(
+      data.labs.nitrogen,
+      minMaxValues.nitrogen.min,
+      minMaxValues.nitrogen.max
+    ) *
+      0.03 +
+    normalize(
+      data.labs.creatinine,
+      minMaxValues.creatinine.min,
+      minMaxValues.creatinine.max
+    ) *
+      0.02 +
+    normalize(data.labs.eGFR, minMaxValues.eGFR.min, minMaxValues.eGFR.max) *
+      0.1 +
+    normalize(
+      data.labs.sodium,
+      minMaxValues.sodium.min,
+      minMaxValues.sodium.max
+    ) *
+      0.05 +
+    normalize(
+      data.labs.potassium,
+      minMaxValues.potassium.min,
+      minMaxValues.potassium.max
+    ) *
+      0.05 +
+    normalize(
+      data.labs.chloride,
+      minMaxValues.chloride.min,
+      minMaxValues.chloride.max
+    ) *
+      0.05 +
+    normalize(
+      data.labs.carbonDioxide,
+      minMaxValues.carbonDioxide.min,
+      minMaxValues.carbonDioxide.max
+    ) *
+      0.03 +
+    normalize(
+      data.labs.calcium,
+      minMaxValues.calcium.min,
+      minMaxValues.calcium.max
+    ) *
+      0.02;
+
+  return weightedIndex;
+}
+
+healthDataSets.forEach((dataSet, index) => {
+  let healthIndex = calculateHealthIndex(dataSet);
+  console.log(`Health Index for DataSet ${index + 1}:`, healthIndex);
+});
+
