@@ -3,10 +3,13 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// Flow Field Settings
-const cols = 300; // Number of columns
-const rows = 300; // Number of rows
+ctx.strokeStyle = "white";
+ctx.fillStyle = "white";
+ctx.lineWidth = 1;
 
+// Flow Field Settings
+const cols = 30; // Number of columns
+const rows = 30; // Number of rows
 
 // Particle System
 let particles = [];
@@ -88,12 +91,29 @@ class Particle {
     const col = Math.floor(this.x / this.flowField.cellWidth);
     const row = Math.floor(this.y / this.flowField.cellHeight);
 
-    const vector = this.flowField.field[row][col];
-    this.direction = vector.angle;
+    console.log(
+      `Col: ${col}, Row: ${row}, FlowField Cols: ${this.flowField.cols}, Rows: ${this.flowField.rows}`
+    );
 
-    this.x += Math.cos(this.direction) * this.speed;
-    this.y += Math.sin(this.direction) * this.speed;
-
+    if (
+      col >= 0 &&
+      col < this.flowField.cols &&
+      row >= 0 &&
+      row < this.flowField.rows
+    ) {
+      const vector = this.flowField.field[row][col];
+      if (vector) {
+        this.direction = vector.angle;
+        this.x += Math.cos(this.direction) * this.speed;
+        this.y += Math.sin(this.direction) * this.speed;
+      } else {
+        console.error("Vector is undefined at this position:", col, row);
+      }
+    } else {
+      console.warn("Particle is out of bounds:", this.x, this.y);
+      this.x = Math.random() * this.flowField.width;
+      this.y = Math.random() * this.flowField.height;
+    }
     // Keep particles within bounds
     if (this.x < 0) this.x = canvas.width;
     if (this.x > canvas.width) this.x = 0;
@@ -127,6 +147,5 @@ function animate() {
 
   requestAnimationFrame(animate);
 }
-
 // Start the animation
 animate();
