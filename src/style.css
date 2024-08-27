@@ -1,0 +1,49 @@
+/* Reset some basic styles for consistency across browsers */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Set the body to occupy the full viewport */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #000;
+    /* Background color for the page */
+    color: white;
+    font-family: Arial, sans-serif;
+}
+
+/* Style the canvas element */
+canvas {
+    display: block;
+    background-color: #111;
+    /* Background color for the canvas */
+    border: 2px solid #555;
+    /* Optional border to make the canvas stand out */
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
+    /* Optional shadow for depth */
+}
+
+/* Optionally style any text or controls on the page */
+h1,
+p {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+/* If you have any buttons or controls */
+button {
+    background-color: #333;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #555;
+}
