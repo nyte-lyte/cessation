@@ -479,6 +479,30 @@ let healthDataSets = [
       calcium: 9.2,
     },
   },
+  {
+    date: "2024-09-16",
+    ecg: {
+      ventRate: 68,
+      prInterval: 163,
+      qrsInterval: 82,
+      qtInterval: 389,
+      qtcInterval: 407,
+      pAxis: 80,
+      rAxis: 93,
+      tAxis: 67,
+    },
+    labs: {
+      glucose: 103,
+      nitrogen: 16,
+      creatinine: 0.59,
+      eGFR: 115,
+      sodium: 137,
+      potassium: 4.3,
+      chloride: 106,
+      carbonDioxide: 23,
+      calcium: 9.0,
+    },
+  },
 ];
 
 healthDataSets.sort((a, b) => {
