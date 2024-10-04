@@ -1,7 +1,7 @@
 const canvas = document.getElementById("canvas1");
 const ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+canvas.width = 1000;
+canvas.height = 800;
 
 let currentHealthIndex;
 let currentDataSetIndex = 0;
@@ -266,8 +266,8 @@ function animate() {
 }
 
 window.addEventListener("resize", () => {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  canvas.width = 1000;
+  canvas.height = 800;
 
   flowField = new FlowField(
     resolution,
@@ -290,4 +290,4 @@ window.addEventListener("resize", () => {
   console.log("Particles repositioned.");
 });
 
-initializePiece(healthDataSets[15]); // Initialize with the first dataset
+initializePiece(healthDataSets[20]); // Initialize with the first dataset

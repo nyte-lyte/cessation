@@ -1,17 +1,36 @@
-
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
+html,
+body {
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #111, #333);
+    /* Background gradient */
+}
 
+/* Style the canvas */
 canvas {
     display: block;
-    background-color: #000000;
-    position: absolute;
-    
-    
+    background-color: #000;
+    /* Fallback if WebGL isn't loaded */
+    border: 2px solid #555;
+    /* Optional border */
+    width: 80vw;
+    /* Make canvas responsive */
+    height: 80vh;
+    /* Make canvas responsive */
+    max-width: 800px;
+    /* Max width for large screens */
+    max-height: 800px;
+    /* Max height for large screens */
 }
+
+
 
 
