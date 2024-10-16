@@ -157,9 +157,9 @@ let healthDataSets = [
     },
     labs: {
       glucose: 116,
-      nitrogen: 17,
+      nitrogen: 19,
       creatinine: 0.75,
-      eGFR: 110,
+      eGFR: 113,
       sodium: 136,
       potassium: 4.0,
       chloride: 109,
@@ -181,9 +181,9 @@ let healthDataSets = [
     },
     labs: {
       glucose: 115,
-      nitrogen: 17,
+      nitrogen: 18,
       creatinine: 0.75,
-      eGFR: 110,
+      eGFR: 107,
       sodium: 137,
       potassium: 4.1,
       chloride: 108,
@@ -301,7 +301,7 @@ let healthDataSets = [
     },
     labs: {
       glucose: 117,
-      nitrogen: 9,
+      nitrogen: 09,
       creatinine: 0.62,
       eGFR: 113,
       sodium: 140,
