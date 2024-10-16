@@ -290,4 +290,4 @@ window.addEventListener("resize", () => {
   console.log("Particles repositioned.");
 });
 
-initializePiece(healthDataSets[20]); // Initialize with the first dataset
+initializePiece(healthDataSets[5]); // Initialize with the first dataset
