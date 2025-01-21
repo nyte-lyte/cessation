@@ -47,6 +47,8 @@ function updateDecayRate(dataSet) {
     adjustedDecayRate = dynamicBaseDecayRate;
   }
 
+  dataSet.decayRate = adjustedDecayRate;
+
   console.log(
     `Date: ${dataSet.date}, Health Index: ${healthIndex}, Decay Rate: ${adjustedDecayRate}`
   );
@@ -61,3 +63,5 @@ function applyDecay(rate) {
 healthDataSets.forEach((dataSet) => {
   updateDecayRate(dataSet);
 });
+
+console.log("Updated healthDataSets with decay rates:", healthDataSets);

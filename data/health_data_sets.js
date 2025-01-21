@@ -301,7 +301,7 @@ let healthDataSets = [
     },
     labs: {
       glucose: 117,
-      nitrogen: 09,
+      nitrogen: 9,
       creatinine: 0.62,
       eGFR: 113,
       sodium: 140,
@@ -565,6 +565,7 @@ let minMaxValues = {
   ventRate: { min: Infinity, max: -Infinity },
   prInterval: { min: Infinity, max: -Infinity },
   qrsInterval: { min: Infinity, max: -Infinity },
+  qtInterval: { min: Infinity, max: -Infinity },
   qtcInterval: { min: Infinity, max: -Infinity },
   pAxis: { min: Infinity, max: -Infinity },
   rAxis: { min: Infinity, max: -Infinity },
@@ -607,6 +608,15 @@ healthDataSets.forEach((dataSet) => {
   minMaxValues.qrsInterval.max = Math.max(
     minMaxValues.qrsInterval.max,
     dataSet.ecg.qrsInterval
+  );
+
+  minMaxValues.qtInterval.min = Math.min(
+    minMaxValues.qtInterval.min,
+    dataSet.ecg.qtInterval
+  );
+  minMaxValues.qtInterval.max = Math.max(
+    minMaxValues.qtInterval.max,
+    dataSet.ecg.qtInterval
   );
 
   minMaxValues.qtcInterval.min = Math.min(
@@ -804,4 +814,11 @@ function calculateHealthIndex(data) {
 healthDataSets.forEach((dataSet) => {
   let healthIndex = calculateHealthIndex(dataSet);
   console.log(`Health Index for DataSet ${dataSet.date}:`, healthIndex);
+});
+
+healthDataSets.forEach((dataSet, index) => {
+  let healthIndex = calculateHealthIndex(dataSet);
+  console.log(
+    `Dataset ${index} (${dataSet.date}): Health Index = ${healthIndex}`
+  );
 });
