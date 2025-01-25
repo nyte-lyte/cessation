@@ -5,7 +5,8 @@ let selectedDataSet;
 let DEBUG = true; // Set to false to disable logs
 
 function setup() {
-  createCanvas(600, 600);
+  let canvas = createCanvas(800, 800);
+  canvas.parent('canvas-container');
   colorMode(HSB, 360, 100, 100);
 
   cols = floor(width / resolution);
