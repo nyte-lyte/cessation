@@ -1,4 +1,3 @@
-// Utility: Create a 2D array
 function make2DArray(cols, rows) {
   let arr = new Array(cols);
   for (let i = 0; i < cols; i++) {
@@ -7,79 +6,68 @@ function make2DArray(cols, rows) {
   return arr;
 }
 
-// Utility: Shuffle array for random data point assignment
-function shuffleArray(array, enableShuffle = true) {
-  if (!enableShuffle) return array;
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-  return array;
-}
+// Function to generate randomized cluster centers within overlapping zones
+function generateClusterCenters(groupCount, canvasWidth, canvasHeight) {
+  let clusterCenters = {};
 
-// Validate data key for min/max values
-function isValidKey(dataKey) {
-  return (
-    minMaxValues[dataKey] &&
-    typeof minMaxValues[dataKey].min !== "undefined" &&
-    typeof minMaxValues[dataKey].max !== "undefined"
-  );
+  // Define overlapping zones by splitting the canvas
+  const zoneWidth = (canvasWidth / Math.sqrt(groupCount)) * 1.2; // Slightly larger for overlap
+  const zoneHeight = (canvasHeight / Math.sqrt(groupCount)) * 1.2;
+
+  let groupIndex = 0;
+  for (let x = 0; x < Math.sqrt(groupCount); x++) {
+    for (let y = 0; y < Math.sqrt(groupCount); y++) {
+      if (groupIndex < groupCount) {
+        clusterCenters[groupIndex] = {
+          x: random(x * zoneWidth, (x + 1) * zoneWidth),
+          y: random(y * zoneHeight, (y + 1) * zoneHeight),
+        };
+        groupIndex++;
+      }
+    }
+  }
+
+  return clusterCenters;
 }
 
 // Function to initialize the grid
 function initializeGrid(cols, rows, resolution, selectedDataSet) {
-  let grid = make2DArray(cols, rows);
+  const grid = make2DArray(cols, rows);
 
-  let dataPoints = Object.entries(selectedDataSet.labs).concat(
+  const dataPoints = Object.entries(selectedDataSet.labs).concat(
     Object.entries(selectedDataSet.ecg)
   );
 
-  dataPoints = shuffleArray(dataPoints);
+  const healthIndex = selectedDataSet.healthIndex || 0.5;
 
-  let healthIndex = calculateHealthIndex(selectedDataSet);
+  let dataPointIndex = 0;
+
+  // Generate cluster centers dynamically
+  const clusterCenters = generateClusterCenters(10, width, height); // 10 groups for now
 
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
-      let index = (i * rows + j) % dataPoints.length;
-      let [dataKey, dataValue] = dataPoints[index];
+      // Cycle through data points
+      const [dataKey, dataValue] = dataPoints[dataPointIndex];
+      dataPointIndex = (dataPointIndex + 1) % dataPoints.length;
 
-      if (!isValidKey(dataKey)) {
-        if (DEBUG) {
-          console.warn(
-            `Skipping cell (${i}, ${j}) due to invalid min/max for key: ${dataKey}`
-          );
-        }
-        grid[i][j] = null;
-        continue;
-      }
-
-      let normalizedValue = normalize(
-        dataValue,
-        minMaxValues[dataKey].min,
-        minMaxValues[dataKey].max
-      );
-
-      let group = Math.floor(normalizedValue * 10);
+      // Assign cell properties
+      const normalizedValue = dataValue; // Data is already normalized
+      const group = Math.floor(normalizedValue * 10); // Assign group based on value
 
       grid[i][j] = {
         x: i * resolution + resolution / 2,
         y: j * resolution + resolution / 2,
         health: healthIndex * normalizedValue || 0.5,
         decayRate: selectedDataSet.decayRate * normalizedValue || 0.01,
-        palette: selectedDataSet.palette,
+        palette: selectedDataSet.palette, // Palette assignment
         dataKey: dataKey,
         dataValue: normalizedValue || 0,
         group: group,
+        
       };
-
-      if (DEBUG) {
-        console.log(
-          `Cell initialized at (${i}, ${j}):`,
-          `Health: ${grid[i][j]?.health}, DecayRate: ${grid[i][j]?.decayRate}, Group: ${grid[i][j]?.group}`
-        );
-      }
     }
   }
 
-  return grid;
+  return grid; 
 }
