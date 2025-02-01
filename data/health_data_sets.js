@@ -822,3 +822,5 @@ healthDataSets.forEach((dataSet, index) => {
     `Dataset ${index} (${dataSet.date}): Health Index = ${healthIndex}`
   );
 });
+
+export { healthDataSets, normalize, minMaxValues, calculateHealthIndex };

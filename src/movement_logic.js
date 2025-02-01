@@ -22,16 +22,20 @@ function initializeMovement(cell, selectedDataSet) {
   };
 }
 
-// Get neighboring cells for clustering behavior
 function getNeighborCells(grid, targetCell) {
-  if (!Array.isArray(grid) || !Array.isArray(grid[0]));
-  console.error('Invalid grid passed to getNeighborCells:', grid);
-  return[];
-}
-if (!targetCell || typeof targetCell.x !== "number" || typeof targetCell.y !== "number") {
-  console.error("Invalid targetCell passed to getNeighborCells:", targetCell);
-  return[];
-}
+  if (!Array.isArray(grid) || !Array.isArray(grid[0])) {
+    console.error("Invalid grid passed to getNeighborCells:", grid);
+    return []; // Fix return statement (proper scope)
+  }
+
+  if (
+    !targetCell ||
+    typeof targetCell.x !== "number" ||
+    typeof targetCell.y !== "number"
+  ) {
+    console.error("Invalid targetCell passed to getNeighborCells:", targetCell);
+    return []; // Fix return statement (proper scope)
+  }
 
   const neighbors = [];
   const range = resolution * 1.5; // Define the distance to consider as "neighbors"
@@ -47,6 +51,7 @@ if (!targetCell || typeof targetCell.x !== "number" || typeof targetCell.y !== "
     }
   }
   return neighbors;
+}
 
 
 // Update movement for a single cell
