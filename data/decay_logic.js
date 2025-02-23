@@ -1,6 +1,3 @@
-import { healthDataSets } from "./health_data_sets.js";
-import { minMaxValues, normalize, calculateHealthIndex } from "./health_data_sets.js";
-
 let baseDecayRate = 0.01;
 
 function calculateDynamicBaseDecayRate(dataSet) {

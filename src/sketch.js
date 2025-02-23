@@ -1,5 +1,3 @@
-//import { calculateClusterCenters }from "./movement_logic";
-
 let grid;
 let cols, rows;
 let resolution = 20;
@@ -17,7 +15,7 @@ function setup() {
   // Select a dataset
   selectedDataSet = healthDataSets[10];
   if (DEBUG) console.log(`Using dataset for date: ${selectedDataSet.date}`);
-
+console.log("🔍 Selected dataset before palette generation:", selectedDataSet);
   selectedDataSet.palette = validatePalette(
     generateOrganicPalette(selectedDataSet)
   ) || {
@@ -31,36 +29,39 @@ function setup() {
   grid = initializeGrid(cols, rows, resolution, selectedDataSet);
 
   if (!grid || !Array.isArray(grid)) {
-    console.error("Grid initialization failed:", grid);
+    console.error("❌ Grid initialization failed:", grid);
     noLoop(); // Stop the sketch if the grid fails to initialize
     return;
   }
 
-  console.log("Initialized grid:", grid);
-
-  // Calculate cluster centers
-  const clusterCenters = calculateClusterCenters(grid);
-  console.log("Cluster centers:", clusterCenters);
+ 
 
   // Assign movement properties
   assignMovementToGrid(grid, selectedDataSet);
 }
 
-
 function draw() {
-  background(0); // Clear the canvas
+  background(0);
+  
+  // Ensure grid exists before trying to update it
+  if (!grid || !Array.isArray(grid)) return;
 
-  // Update movement for all cells in the grid
   updateGridMovement(grid);
 
-  // Loop through the grid to draw each cell
+  // Draw each cell
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
       let cell = grid[i][j];
-      if (!cell) continue; // Skip invalid cells
+      if (!cell) continue;
+
+       // 🔹 **Log to check if the cell is being processed**
+      //console.log(`Drawing cell at (${cell.x}, ${cell.y}) with health: ${cell.health}`);
 
       if (cell.health > 0) {
-        // Determine the color based on health
+        // 🔹 **Log to check if colors are applied correctly**
+        //console.log(`Blended color: ${cell.palette.start} to ${cell.palette.end}`);
+
+      if (cell.health > 0) {
         let blendedColor = lerpColor(
           cell.palette.start,
           cell.palette.end,
@@ -69,21 +70,19 @@ function draw() {
         fill(blendedColor);
         noStroke();
 
-        // Draw the organic blob for the cell
         drawOrganicBlob(cell);
-        
+
         // Apply decay to the cell's health
-        cell.health -= cell.decayRate * 0.0001;
+        cell.health -= cell.decayRate * 0.001;
         if (cell.health < 0) cell.health = 0;
       } else {
-        // If the cell has "died," draw a placeholder or nothing
         fill(0);
         noStroke();
-        ellipse(cell.x, cell.y, resolution * 0.8); // Placeholder for dead cells
+        ellipse(cell.x, cell.y, resolution * 0.8);
       }
     }
   }
 
-  // Update the animation time for organic forms
-  updateBlobTime(); 
+  updateBlobTime();
+}
 }

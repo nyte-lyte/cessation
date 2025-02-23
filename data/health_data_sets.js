@@ -551,6 +551,30 @@ let healthDataSets = [
       calcium: 9.0,
     },
   },
+  {
+    date: "2024-12-30",
+    ecg: {
+      ventRate: 63,
+      prInterval: 155,
+      qrsInterval: 86,
+      qtInterval: 431,
+      qtcInterval: 438,
+      pAxis: 73,
+      rAxis: 87,
+      tAxis: 67,
+    },
+    labs: {
+      glucose: 109,
+      nitrogen: 15,
+      creatinine: 0.62,
+      eGFR: 113,
+      sodium: 138,
+      potassium: 4.3,
+      chloride: 105,
+      carbonDioxide: 23,
+      calcium: 9.4,
+    },
+  },
 ];
 
 healthDataSets.sort((a, b) => {
@@ -724,8 +748,18 @@ function normalize(value, min, max) {
 }
 
 function calculateHealthIndex(data) {
+  console.log("Checking dataset:", data);
+
+  if (!data.ecg) {
+    console.error("❌ ERROR: Missing 'ecg' in dataset", data);
+    return 0; // Avoid crash, return a default value
+  }
+  if (!data.ecg?.ventRate) {
+    console.error("❌ ERROR: Missing 'ventRate' in dataset", data);
+    return 0;
+  }
+
   let weightedIndex =
-    // ECG Data Points (Vector Field Control)
     normalize(
       data.ecg.ventRate,
       minMaxValues.ventRate.min,
@@ -756,7 +790,6 @@ function calculateHealthIndex(data) {
       0.03 +
     normalize(data.ecg.tAxis, minMaxValues.tAxis.min, minMaxValues.tAxis.max) *
       0.04 +
-    // Metabolic Data Points (Particle Field Control)
     normalize(
       data.labs.glucose,
       minMaxValues.glucose.min,
@@ -822,5 +855,3 @@ healthDataSets.forEach((dataSet, index) => {
     `Dataset ${index} (${dataSet.date}): Health Index = ${healthIndex}`
   );
 });
-
-export { healthDataSets, normalize, minMaxValues, calculateHealthIndex };
