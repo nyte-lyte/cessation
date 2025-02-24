@@ -748,17 +748,6 @@ function normalize(value, min, max) {
 }
 
 function calculateHealthIndex(data) {
-  console.log("Checking dataset:", data);
-
-  if (!data.ecg) {
-    console.error("❌ ERROR: Missing 'ecg' in dataset", data);
-    return 0; // Avoid crash, return a default value
-  }
-  if (!data.ecg?.ventRate) {
-    console.error("❌ ERROR: Missing 'ventRate' in dataset", data);
-    return 0;
-  }
-
   let weightedIndex =
     normalize(
       data.ecg.ventRate,
@@ -776,6 +765,12 @@ function calculateHealthIndex(data) {
       data.ecg.qrsInterval,
       minMaxValues.qrsInterval.min,
       minMaxValues.qrsInterval.max
+    ) *
+      0.3 +
+    normalize(
+      data.ecg.qtIntervalInterval,
+      minMaxValues.qtInterval.min,
+      minMaxValues.qtInterval.max
     ) *
       0.1 +
     normalize(
