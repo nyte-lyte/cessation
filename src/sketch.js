@@ -5,7 +5,17 @@ let selectedDataSet;
 let DEBUG = true; // Set to false to disable logs
 
 function setup() {
-  createCanvas(800, 600);
+  let w, h;
+  if (random() > 0.5) {
+    w = 800;
+    h = 600;
+  } else {
+    w = 600;
+    h = 800;
+  }
+  createCanvas(w, h);
+  console.log('Canvas size: ${w}x${h}');
+  }
   colorMode(HSB, 360, 100, 100);
 
   cols = floor(width / resolution);
