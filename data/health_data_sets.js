@@ -356,7 +356,7 @@ let healthDataSets = [
       potassium: 3.9,
       chloride: 109,
       carbonDioxide: 23,
-      calcium: 9.0,
+      calcium: 9,
     },
   },
   {
@@ -449,7 +449,7 @@ let healthDataSets = [
       creatinine: 0.55,
       eGFR: 117,
       sodium: 142,
-      potassium: 4.0,
+      potassium: 4,
       chloride: 113,
       carbonDioxide: 20,
       calcium: 9.2,
@@ -548,7 +548,7 @@ let healthDataSets = [
       potassium: 4.3,
       chloride: 106,
       carbonDioxide: 23,
-      calcium: 9.0,
+      calcium: 9,
     },
   },
   {
@@ -582,7 +582,10 @@ healthDataSets.sort((a, b) => {
 });
 
 healthDataSets.forEach((dataSet) => {
-  console.log("Date: ${dataSet.date}, Health Index: ${dataSet.healthIndex}");
+  if (!dataSet.ecg || !dataSet.labs) {
+    console.error("ERROR: Missing 'ecg' or 'labs' data in:", dataSet);
+  }
+  console.log('Date: ${dataSet.date}, Health Index: ${dataSet.healthIndex}');
 });
 
 let minMaxValues = {
@@ -739,6 +742,7 @@ healthDataSets.forEach((dataSet) => {
 });
 
 console.log(minMaxValues);
+console.log("Min/Max Values:", minMaxValues);
 
 function normalize(value, min, max) {
   if (max - min === 0) {
@@ -768,7 +772,7 @@ function calculateHealthIndex(data) {
     ) *
       0.3 +
     normalize(
-      data.ecg.qtIntervalInterval,
+      data.ecg.qtInterval,
       minMaxValues.qtInterval.min,
       minMaxValues.qtInterval.max
     ) *
@@ -848,5 +852,10 @@ healthDataSets.forEach((dataSet, index) => {
   let healthIndex = calculateHealthIndex(dataSet);
   console.log(
     `Dataset ${index} (${dataSet.date}): Health Index = ${healthIndex}`
+    
   );
 });
+
+console.log("✅ Health datasets loaded successfully:", healthDataSets.length);
+console.log("First dataset:", healthDataSets[0]);
+console.log("Last dataset:", healthDataSets[healthDataSets.length - 1]);
