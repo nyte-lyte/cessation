@@ -5,14 +5,14 @@ let selectedDataSet;
 let DEBUG = true; // Set to false to disable logs
 
 function setup() {
-  createCanvas(600, 600);
+  createCanvas(800, 600);
   colorMode(HSB, 360, 100, 100);
 
   cols = floor(width / resolution);
   rows = floor(height / resolution);
 
   // Select a dataset
-  selectedDataSet = healthDataSets[13]; // Change index to test other datasets
+  selectedDataSet = healthDataSets[10]; // Change index to test other datasets
   if (DEBUG) console.log(`Using dataset for date: ${selectedDataSet.date}`);
 
   selectedDataSet.palette = validatePalette(
