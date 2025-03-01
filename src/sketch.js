@@ -5,14 +5,14 @@ let selectedDataSet;
 let DEBUG = true; // Set to false to disable logs
 
 function setup() {
-  createCanvas(800, 600);
+  createCanvas(600, 800);
   colorMode(HSB, 360, 100, 100);
 
   cols = floor(width / resolution);
   rows = floor(height / resolution);
 
   // Select a dataset
-  selectedDataSet = healthDataSets[10]; // Change index to test other datasets
+  selectedDataSet = healthDataSets[1]; // Change index to test other datasets
   if (DEBUG) console.log(`Using dataset for date: ${selectedDataSet.date}`);
 
   selectedDataSet.palette = validatePalette(
@@ -55,8 +55,8 @@ function draw() {
         );
         fill(blendedColor);
         noStroke();
-        ellipse(cell.x, cell.y, resolution * 0.8); // Changed to ellipse for movement clarity
-
+        //ellipse(cell.x, cell.y, resolution * 0.8); // Changed to ellipse for movement clarity
+        drawOrganicBlob(cell);
         // Apply decay
         cell.health -= cell.decayRate * 0.0001;
         if (cell.health < 0) cell.health = 0;
