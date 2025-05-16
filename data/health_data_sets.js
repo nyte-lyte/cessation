@@ -605,13 +605,6 @@ healthDataSets.sort((a, b) => {
   return new Date(a.date) - new Date(b.date);
 });
 
-healthDataSets.forEach((dataSet) => {
-  if (!dataSet.ecg || !dataSet.labs) {
-    console.error("ERROR: Missing 'ecg' or 'labs' data in:", dataSet);
-  }
-  console.log('Date: ${dataSet.date}, Health Index: ${dataSet.healthIndex}');
-});
-
 let minMaxValues = {
   ventRate: { min: Infinity, max: -Infinity },
   prInterval: { min: Infinity, max: -Infinity },
@@ -765,7 +758,6 @@ healthDataSets.forEach((dataSet) => {
   );
 });
 
-console.log(minMaxValues);
 console.log("Min/Max Values:", minMaxValues);
 
 function normalize(value, min, max) {
@@ -866,11 +858,6 @@ function calculateHealthIndex(data) {
 
   return weightedIndex;
 }
-
-healthDataSets.forEach((dataSet) => {
-  let healthIndex = calculateHealthIndex(dataSet);
-  console.log(`Health Index for DataSet ${dataSet.date}:`, healthIndex);
-});
 
 healthDataSets.forEach((dataSet, index) => {
   let healthIndex = calculateHealthIndex(dataSet);

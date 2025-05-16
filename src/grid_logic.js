@@ -86,11 +86,8 @@ function initializeGrid(cols, rows, resolution, selectedDataSet) {
 
 function drawGrid() {
   if (!grid) {
-  if (DEBUG)  console.error("drawGrid() called but grid is undefined!");
-    return;
   }
-  if (DEBUG)  console.log("drawGrid() is running!");
-
+  
   for (let i = 0; i < grid.length; i++) {
     for (let j = 0; j < grid[i].length; j++) {
       let cell = grid[i][j];
@@ -104,10 +101,10 @@ function drawGrid() {
   }
 }
 
-   function updateGrid(dataSet) {
+   function updateGrid(grid, dataSet) {
      grid.forEach((row) => {
        row.forEach((cell) => {
-         applyDecay(cell, dataSet.decayRate);
+         if (cell) applyDecay(cell, dataSet.decayRate);
        });
      });
    }

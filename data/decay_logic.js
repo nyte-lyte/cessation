@@ -61,11 +61,11 @@ function applyDecay(cell, rate) {
   if (cell.health < 0) {
     cell.health = 0;
   }
- if (DEBUG) console.log(`Applying decay at rate: ${rate}`);
+ 
 }
 
 healthDataSets.forEach((dataSet) => {
   updateDecayRate(dataSet);
 });
 
-if (DEBUG) console.log("Updated healthDataSets with decay rates:", healthDataSets);
+ console.log("Updated healthDataSets with decay rates:", healthDataSets);
