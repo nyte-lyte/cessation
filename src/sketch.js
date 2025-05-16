@@ -12,7 +12,7 @@ function setup() {
   rows = floor(height / resolution);
 
   // Select a dataset
-  selectedDataSet = healthDataSets[23]; // Change index to test other datasets
+  selectedDataSet = healthDataSets[24]; // Change index to test other datasets
   if (DEBUG) console.log(`Using dataset for date: ${selectedDataSet.date}`);
 
   selectedDataSet.palette = validatePalette(
