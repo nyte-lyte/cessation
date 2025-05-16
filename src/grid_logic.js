@@ -83,3 +83,31 @@ function initializeGrid(cols, rows, resolution, selectedDataSet) {
 
   return grid;
 }
+
+function drawGrid() {
+  if (!grid) {
+  if (DEBUG)  console.error("drawGrid() called but grid is undefined!");
+    return;
+  }
+  if (DEBUG)  console.log("drawGrid() is running!");
+
+  for (let i = 0; i < grid.length; i++) {
+    for (let j = 0; j < grid[i].length; j++) {
+      let cell = grid[i][j];
+      if (!cell) continue;
+
+      let blendedColor = lerpColor(cell.palette.start, cell.palette.end, 1 - cell.health);
+      fill(blendedColor);
+      noStroke();
+      ellipse(cell.x, cell.y, resolution * 0.8);
+    }
+  }
+}
+
+   function updateGrid(dataSet) {
+     grid.forEach((row) => {
+       row.forEach((cell) => {
+         applyDecay(cell, dataSet.decayRate);
+       });
+     });
+   }

@@ -54,7 +54,7 @@ function updateMovement(cell) {
   let clusteringForce = map(cell.clusterAttraction, 0, 1, -0.05, 0.05);
 
   // Apply movement
-  cell.x += (cell.velocity.x + clusteringForce) * 0.1;
+  cell.x += (cell.velocity.x + clusteringForce) * 0.01;
   cell.y += (cell.velocity.y + clusteringForce) * 0.1;
 
   // Wrap-around boundaries

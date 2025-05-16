@@ -41,10 +41,10 @@ function updateDecayRate(dataSet) {
 
   let healthIndex = calculateHealthIndex(dataSet);
 
-  let adjustedDecayRate = dynamicBaseDecayRate * (1 + (1 - healthIndex));
+  let adjustedDecayRate = dynamicBaseDecayRate * (1 + Math.pow(1 - healthIndex, 2));
 
   if (adjustedDecayRate < dynamicBaseDecayRate) {
-    adjustedDecayRate = dynamicBaseDecayRate;
+    adjustedDecayRate = constrain(adjustedDecayRate, 0.0001, dynamicBaseDecayRate * 2);
   }
 
   dataSet.decayRate = adjustedDecayRate;
@@ -56,12 +56,16 @@ function updateDecayRate(dataSet) {
   applyDecay(adjustedDecayRate);
 }
 
-function applyDecay(rate) {
-  console.log(`Applying decay at rate: ${rate}`);
+function applyDecay(cell, rate) {
+  cell.health -= rate;
+  if (cell.health < 0) {
+    cell.health = 0;
+  }
+ if (DEBUG) console.log(`Applying decay at rate: ${rate}`);
 }
 
 healthDataSets.forEach((dataSet) => {
   updateDecayRate(dataSet);
 });
 
-console.log("Updated healthDataSets with decay rates:", healthDataSets);
+if (DEBUG) console.log("Updated healthDataSets with decay rates:", healthDataSets);

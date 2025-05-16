@@ -12,9 +12,9 @@ function generateOrganicPalette(dataSet) {
     300
   );
   let endHue = map(
-    dataSet.ecg.qtcInterval,
-    minMaxValues.qtcInterval.min,
-    minMaxValues.qtcInterval.max,
+    dataSet.ecg.qtInterval,
+    minMaxValues.qtInterval.min,
+    minMaxValues.qtInterval.max,
     40,
     320
   );

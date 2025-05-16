@@ -2,7 +2,7 @@ let grid;
 let cols, rows;
 let resolution = 20;
 let selectedDataSet;
-let DEBUG = true; // Set to false to disable logs
+let DEBUG = false; // Set to false to disable logs
 
 function setup() {
   createCanvas(600, 800);
@@ -12,7 +12,7 @@ function setup() {
   rows = floor(height / resolution);
 
   // Select a dataset
-  selectedDataSet = healthDataSets[1]; // Change index to test other datasets
+  selectedDataSet = healthDataSets[11]; // Change index to test other datasets
   if (DEBUG) console.log(`Using dataset for date: ${selectedDataSet.date}`);
 
   selectedDataSet.palette = validatePalette(
@@ -38,6 +38,8 @@ function setup() {
 
 function draw() {
   background(0);
+  updateGrid(grid, selectedDataSet);
+  drawGrid();
 
   // Update grid movement
   updateGridMovement(grid);
