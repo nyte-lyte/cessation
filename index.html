@@ -2,24 +2,25 @@
 <html lang="en">
 
 <head>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.1/p5.js"></script>
-    <link rel="stylesheet" type="text/css" href="style.css">
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
-    <meta charset="utf-8">
-    <title>cessation</title>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cessation</title>
+    <link rel="icon" href="data:," />
+    <!-- your global styles (if you still have a style.css at project root) -->
+    <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-    <div id="canvas-container"></div>
+    <div id="canvas-container">
+    <canvas id="canvas"></canvas>
+</div>
 
-    
     <script src="data/health_data_sets.js"></script>
     <script src="data/decay_logic.js"></script>
-    <script src="src/grid_logic.js"></script>
-    <script src="src/movement_logic.js"></script>
-    <script src="src/color_logic.js"></script>
-    <script src="src/form_logic.js"></script>
-    <script src="src/sketch.js"></script>
+
+    <!-- then load your main app logic as a module, which will fetch vertex.glsl & fragment.glsl -->
+    <script type="module" src="src/main.js"></script>
 </body>
 
 </html>
