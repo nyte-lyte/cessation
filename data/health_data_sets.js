@@ -599,6 +599,30 @@ let healthDataSets = [
       calcium: 9.3,
     },
   },
+  {
+    date: "2025-06-18",
+    ecg: {
+      ventRate: 51,
+      prInterval: 156,
+      qrsInterval: 80,
+      qtInterval: 459,
+      qtcInterval: 435,
+      pAxis: 77,
+      rAxis: 80,
+      tAxis: 74,
+    },
+    labs: {
+      glucose: 108,
+      nitrogen: 16,
+      creatinine: 0.71,
+      eGFR: 107,
+      sodium: 137,
+      potassium: 4.2,
+      chloride: 106,
+      carbonDioxide: 24,
+      calcium: 8.8,
+    },
+  },
 ];
 
 healthDataSets.sort((a, b) => {
@@ -863,7 +887,6 @@ healthDataSets.forEach((dataSet, index) => {
   let healthIndex = calculateHealthIndex(dataSet);
   console.log(
     `Dataset ${index} (${dataSet.date}): Health Index = ${healthIndex}`
-    
   );
 });
 
