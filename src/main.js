@@ -112,30 +112,17 @@ async function init() {
   const uPotassiumLoc = gl.getUniformLocation(program, "u_potassium");
   const uEgfrLoc = gl.getUniformLocation(program, "u_eGFR");
 
-  let currentDataSetIndex = 25;
+  let currentDataSetIndex = 0;
   let currentDataSet = healthDataSets[currentDataSetIndex];
 
   // F) set uniforms
   function setHSBUniforms() {
-    const glucose = normalize(
-      currentDataSet.labs.glucose,
-      minMaxValues.glucose.min,
-      minMaxValues.glucose.max
-    );
-    const potassium = normalize(
-      currentDataSet.labs.potassium,
-      minMaxValues.potassium.min,
-      minMaxValues.potassium.max
-    );
-    const eGFR = normalize(
-      currentDataSet.labs.eGFR,
-      minMaxValues.eGFR.min,
-      minMaxValues.eGFR.max
-    );
-    
-    gl.uniform1f(uGlucoseLoc, glucose);
-    gl.uniform1f(uPotassiumLoc, potassium);
-    gl.uniform1f(uEgfrLoc, eGFR);
+    const { hue, sat, bri } = computeHSBFromStats(currentDataSet, healthDataSets);
+
+    // Convert hue from [0..1] to degrees
+    gl.uniform1f(uGlucoseLoc, hue); // Used as hue
+    gl.uniform1f(uPotassiumLoc, sat); // Used as saturation
+    gl.uniform1f(uEgfrLoc, bri); // Used as brightness
   }
 
   // H) Tell WebGL the resolution (in pixels)
@@ -173,5 +160,25 @@ async function init() {
   };
 }
 
+function percentile(value, sortedArray) {
+  const rank = sortedArray.filter((v) => v < value).length;
+  return rank / (sortedArray.length - 1); // ensures [0, 1] range
+}
+
+function computeHSBFromStats(dataSet, healthDataSets) {
+  const glucoseValues = healthDataSets.map((d) => d.labs.glucose);
+  const potassiumValues = healthDataSets.map((d) => d.labs.potassium);
+  const egfrValues = healthDataSets.map((d) => d.labs.eGFR);
+
+  glucoseValues.sort((a, b) => a - b);
+  potassiumValues.sort((a, b) => a - b);
+  egfrValues.sort((a, b) => a - b);
+
+  const hue = percentile(dataSet.labs.glucose, glucoseValues); // 0..1
+  const sat = percentile(dataSet.labs.potassium, potassiumValues); // 0..1
+  const bri = percentile(dataSet.labs.eGFR, egfrValues); // 0..1
+
+  return { hue, sat, bri };
+}
 
 init();
