@@ -46,6 +46,7 @@ float n=rand(v_uv*u_resolution.xy*.1)*.02;
 // 2) Hue = glucose * 360°, then add subtle spatial variation (like a gentle “ripple”)
 float pixelHue=mod(u_glucose*360.+(v_uv.x*50.+v_uv.y*50.)*n,360.);
 
+
 // 3) Saturation = 0.3 → 1.0 based on potassium, plus a bit of noise
 float pixelSat=clamp(.3+u_potassium*.7+n*2.,0.,1.);
 
@@ -54,5 +55,5 @@ float pixelBri=clamp(.2+u_eGFR*.8+n*1.5,0.,1.);
 
 vec3 rgbColor=hsb2rgb(pixelHue,pixelSat,pixelBri);
 
-fragColor=vec4(rgbColor,1.);
+fragColor=vec4(rgbColor, 1.0);
 }

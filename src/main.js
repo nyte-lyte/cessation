@@ -11,6 +11,7 @@ if (!gl) {
 
 // 2) A helper to fetch a GLSL file as text
 async function loadShaderSource(url) {
+  console.log("Fetching shader from:", url);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Could not load ${url}: ${response.status}`);
@@ -79,8 +80,8 @@ async function init() {
   });
 
   // B) Load and compile shaders:
-  const vertexSrc = await loadShaderSource("./shaders/vertex.glsl");
-  const fragmentSrc = await loadShaderSource("./shaders/fragment.glsl");
+  const vertexSrc = await loadShaderSource("./src/shaders/vertex.glsl");
+  const fragmentSrc = await loadShaderSource("./src/shaders/fragment.glsl");
   const program = createProgram(gl, vertexSrc, fragmentSrc);
   gl.useProgram(program);
 
@@ -106,51 +107,36 @@ async function init() {
     0 // offset into buffer
   );
 
-  // D) Find uniform locations once:
+  // D) uniform locations
   const uResolutionLoc = gl.getUniformLocation(program, "u_resolution");
-  const uHueLoc = gl.getUniformLocation(program, "u_hueValue");
-  const uSatLoc = gl.getUniformLocation(program, "u_satValue");
-  const uBriLoc = gl.getUniformLocation(program, "u_briValue");
+  const uGlucoseLoc = gl.getUniformLocation(program, "u_glucose");
+  const uPotassiumLoc = gl.getUniformLocation(program, "u_potassium");
+  const uEgfrLoc = gl.getUniformLocation(program, "u_eGFR");
 
-  // E) Pick a dataset index (0…healthDataSets.length-1). You can change this manually later:
-  let currentDataSetIndex = 0;
+  let currentDataSetIndex = 10;
   let currentDataSet = healthDataSets[currentDataSetIndex];
 
-  // F) Compute normalized H/S/B from lab values:
-  function computeHSB(dataset) {
-    // Normalize glucose (97–160) → [0…1], then map to [0°…360°]
-    const gluN = normalize(
-      dataset.labs.glucose,
+  // F) set uniforms
+  function setHSBUniforms() {
+    const glucose = normalize(
+      currentDataSet.labs.glucose,
       minMaxValues.glucose.min,
       minMaxValues.glucose.max
     );
-    const hue = gluN * 360.0;
-
-    // Normalize potassium (3.7–4.5) → [0…1], then map to saturation in [30%…100%]
-    const potN = normalize(
-      dataset.labs.potassium,
+    const potassium = normalize(
+      currentDataSet.labs.potassium,
       minMaxValues.potassium.min,
       minMaxValues.potassium.max
     );
-    const sat = 30 + potN * 70; // 30%→100%
-
-    // Normalize eGFR (94–118) → [0…1], then map to brightness in [20%…80%]
-    const eGFRn = normalize(
-      dataset.labs.eGFR,
+    const eGFR = normalize(
+      currentDataSet.labs.eGFR,
       minMaxValues.eGFR.min,
       minMaxValues.eGFR.max
     );
-    const bri = 20 + eGFRn * 60; // 20%→80%
-
-    return { hue, sat, bri };
-  }
-
-  // G) Set up a function to update those H/S/B uniforms:
-  function setHSBUniforms() {
-    const { hue, sat, bri } = computeHSB(currentDataSet);
-    gl.uniform1f(uHueLoc, hue);
-    gl.uniform1f(uSatLoc, sat);
-    gl.uniform1f(uBriLoc, bri);
+    
+    gl.uniform1f(uGlucoseLoc, glucose);
+    gl.uniform1f(uPotassiumLoc, potassium);
+    gl.uniform1f(uEgfrLoc, eGFR);
   }
 
   // H) Tell WebGL the resolution (in pixels)
@@ -166,12 +152,10 @@ async function init() {
     setHSBUniforms();
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+    requestAnimationFrame(draw);
   }
 
-  // J) Initial clear‐color (optional)
   gl.clearColor(0, 0, 0, 1);
-
-  // K) Kick off the first frame
   draw();
 
   // L) If you want to “manually switch” datasets, e.g. enter a new index in the console:
@@ -190,5 +174,5 @@ async function init() {
   };
 }
 
-// 7) Start everything
+
 init();
