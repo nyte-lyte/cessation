@@ -11,7 +11,6 @@ if (!gl) {
 
 // 2) A helper to fetch a GLSL file as text
 async function loadShaderSource(url) {
-  console.log("Fetching shader from:", url);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Could not load ${url}: ${response.status}`);
@@ -113,7 +112,7 @@ async function init() {
   const uPotassiumLoc = gl.getUniformLocation(program, "u_potassium");
   const uEgfrLoc = gl.getUniformLocation(program, "u_eGFR");
 
-  let currentDataSetIndex = 10;
+  let currentDataSetIndex = 25;
   let currentDataSet = healthDataSets[currentDataSetIndex];
 
   // F) set uniforms
