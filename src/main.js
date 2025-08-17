@@ -112,7 +112,7 @@ async function init() {
   const uPotassiumLoc = gl.getUniformLocation(program, "u_potassium");
   const uEgfrLoc = gl.getUniformLocation(program, "u_eGFR");
 
-  let currentDataSetIndex = 0;
+  let currentDataSetIndex = 25;
   let currentDataSet = healthDataSets[currentDataSetIndex];
 
   // F) set uniforms
