@@ -36,6 +36,21 @@ function compileShader(gl, source, type) {
   return shader;
 }
 
+function lifespanYearsFromHashDigits(x /* 0..99 */) {
+  const n = x / 99;
+  const offset = Math.pow(n, 2.5);
+
+  let lifespan = 5 + offset * 35;
+
+  if (x <5) {
+    lifespan = 5 + n * 10;
+  } else if (x > 95) {
+    lifespan = 40 + n * 25;
+  }
+  
+  return lifespan;
+}
+
 // 4) Link vertex + fragment into a program
 function createProgram(gl, vertexSrc, fragmentSrc) {
   const program = gl.createProgram();
@@ -111,9 +126,22 @@ async function init() {
   const uGlucoseLoc = gl.getUniformLocation(program, "u_glucose");
   const uPotassiumLoc = gl.getUniformLocation(program, "u_potassium");
   const uEgfrLoc = gl.getUniformLocation(program, "u_eGFR");
+  const uDecayPerYearLoc = gl.getUniformLocation(program, "u_decayPerYear");
+  const uTotalYearsLoc = gl.getUniformLocation(program, "u_totalYears");
 
   let currentDataSetIndex = 0;
   let currentDataSet = healthDataSets[currentDataSetIndex];
+
+  let baseDecayPerYear32 = currentDataSet.decayRate;
+
+  //TODO: replace with real chain values
+  const lastTwoHashDigits = 88;
+  const inscriptionUnixSeconds = 1704067200;
+  const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
+
+  // lifespan + aligned rate
+  let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
+  let decayPerYear = baseDecayPerYear32 * (32 / lifespanYears);
 
   // F) set uniforms
   function setHSBUniforms() {
@@ -140,6 +168,10 @@ async function init() {
     setResolutionUniform();
     setHSBUniforms();
     gl.clear(gl.COLOR_BUFFER_BIT);
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const totalYears = Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
+    gl.uniform1f(uDecayPerYearLoc, decayPerYear);
+    gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(draw);
   }

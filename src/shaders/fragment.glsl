@@ -12,6 +12,9 @@ uniform float u_glucose;// normalized [0..1]
 uniform float u_potassium;// normalized [0..1]
 uniform float u_eGFR;// normalized [0..1]
 
+uniform float u_decayPerYear;
+uniform float u_totalYears;
+
 // The resolution of the canvas (width, height)
 uniform vec2 u_resolution;
 
@@ -55,5 +58,7 @@ float pixelBri=clamp(.2+u_eGFR*.8+n*1.5,0.,1.);
 
 vec3 rgbColor=hsb2rgb(pixelHue,pixelSat,pixelBri);
 
-fragColor=vec4(rgbColor, 1.0);
+float decay = exp(-u_decayPerYear * u_totalYears);
+
+fragColor=vec4(rgbColor * decay, 1.0);
 }
