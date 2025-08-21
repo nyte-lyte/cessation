@@ -42,12 +42,12 @@ function lifespanYearsFromHashDigits(x /* 0..99 */) {
 
   let lifespan = 5 + offset * 35;
 
-  if (x <5) {
+  if (x < 5) {
     lifespan = 5 + n * 10;
   } else if (x > 95) {
     lifespan = 40 + n * 25;
   }
-  
+
   return lifespan;
 }
 
@@ -169,7 +169,8 @@ async function init() {
     setHSBUniforms();
     gl.clear(gl.COLOR_BUFFER_BIT);
     const nowUnix = Math.floor(Date.now() / 1000);
-    const totalYears = Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
+    const totalYears =
+      Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
     gl.uniform1f(uDecayPerYearLoc, decayPerYear);
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
