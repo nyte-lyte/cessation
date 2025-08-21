@@ -1,7 +1,7 @@
 // ---------------------------------------------
 // main.js
 // ---------------------------------------------
-
+import { healthDataSets, minMaxValues } from "../data/health_data_sets.js";
 // 1) Grab the canvas and WebGL2 context
 const canvas = document.getElementById("canvas");
 const gl = canvas.getContext("webgl2");
@@ -112,12 +112,15 @@ async function init() {
   const uPotassiumLoc = gl.getUniformLocation(program, "u_potassium");
   const uEgfrLoc = gl.getUniformLocation(program, "u_eGFR");
 
-  let currentDataSetIndex = 25;
+  let currentDataSetIndex = 0;
   let currentDataSet = healthDataSets[currentDataSetIndex];
 
   // F) set uniforms
   function setHSBUniforms() {
-    const { hue, sat, bri } = computeHSBFromStats(currentDataSet, healthDataSets);
+    const { hue, sat, bri } = computeHSBFromStats(
+      currentDataSet,
+      healthDataSets
+    );
 
     // Convert hue from [0..1] to degrees
     gl.uniform1f(uGlucoseLoc, hue); // Used as hue
