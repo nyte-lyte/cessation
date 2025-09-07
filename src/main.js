@@ -2,14 +2,13 @@
 // main.js
 // ---------------------------------------------
 import { healthDataSets, minMaxValues } from "../data/health_data_sets.js";
-// 1) Grab the canvas and WebGL2 context
+
 const canvas = document.getElementById("canvas");
 const gl = canvas.getContext("webgl2");
 if (!gl) {
   alert("WebGL2 is not available in your browser.");
 }
 
-// 2) A helper to fetch a GLSL file as text
 async function loadShaderSource(url) {
   const response = await fetch(url);
   if (!response.ok) {
@@ -18,7 +17,6 @@ async function loadShaderSource(url) {
   return await response.text();
 }
 
-// 3) Compile a single shader (vertex or fragment)
 function compileShader(gl, source, type) {
   const shader = gl.createShader(type);
   gl.shaderSource(shader, source);
@@ -51,7 +49,7 @@ function lifespanYearsFromHashDigits(x /* 0..99 */) {
   return lifespan;
 }
 
-// 4) Link vertex + fragment into a program
+// Link vertex + fragment into a program
 function createProgram(gl, vertexSrc, fragmentSrc) {
   const program = gl.createProgram();
   const vShader = compileShader(gl, vertexSrc, gl.VERTEX_SHADER);
@@ -67,14 +65,14 @@ function createProgram(gl, vertexSrc, fragmentSrc) {
     throw new Error("Could not link WebGL program:\n" + info);
   }
 
-  // We can delete individual shaders once linked
+  // delete individual shaders once linked
   gl.deleteShader(vShader);
   gl.deleteShader(fShader);
 
   return program;
 }
 
-// 5) Resize‐handling utility, to keep canvas at full window size
+// resize‐handling utility, to keep canvas at full window size
 function resizeCanvasToDisplaySize(canvas) {
   const width = window.innerWidth;
   const height = window.innerHeight;
@@ -84,27 +82,27 @@ function resizeCanvasToDisplaySize(canvas) {
   }
 }
 
-// 6) Once everything is ready, we’ll initialize WebGL
+// once everything is ready, initialize WebGL
 async function init() {
-  // A) Resize canvas right away, then whenever the window changes:
+  // resize canvas right away, then whenever the window changes:
   resizeCanvasToDisplaySize(canvas);
   window.addEventListener("resize", () => {
     resizeCanvasToDisplaySize(canvas);
     draw();
   });
 
-  // B) Load and compile shaders:
+  // load and compile shaders:
   const vertexSrc = await loadShaderSource("./src/shaders/vertex.glsl");
   const fragmentSrc = await loadShaderSource("./src/shaders/fragment.glsl");
   const program = createProgram(gl, vertexSrc, fragmentSrc);
   gl.useProgram(program);
 
-  // C) Set up a fullscreen quad (two triangles covering clip-space)
+  // set up a fullscreen quad (two triangles covering clip-space)
   const positionAttribLocation = gl.getAttribLocation(program, "a_position");
   const positionBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 
-  // Six floats: two triangles
+  // six floats: two triangles
   gl.bufferData(
     gl.ARRAY_BUFFER,
     new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
@@ -121,7 +119,7 @@ async function init() {
     0 // offset into buffer
   );
 
-  // D) uniform locations
+  // uniform locations
   const uResolutionLoc = gl.getUniformLocation(program, "u_resolution");
   const uGlucoseLoc = gl.getUniformLocation(program, "u_glucose");
   const uPotassiumLoc = gl.getUniformLocation(program, "u_potassium");
@@ -134,34 +132,44 @@ async function init() {
 
   let baseDecayPerYear32 = currentDataSet.decayRate;
 
-  //TODO: replace with real chain values
+  // TODO: replace with real chain values
   const lastTwoHashDigits = 88;
   const inscriptionUnixSeconds = 1704067200;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
+
+  // decay test helpers
+  const params = {
+    overrideYears: null,
+    timeWarp: 1.0
+  };
+
+  window.setYears = (y) => { params.overrideYears = y; };
+  window.clearYears = () => { params.overrideYears = null; };
+  window.timeWarp = (f) => { params.timeWarp = f; };
 
   // lifespan + aligned rate
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
   let decayPerYear = baseDecayPerYear32 * (32 / lifespanYears);
 
-  // F) set uniforms
+  // set uniforms
   function setHSBUniforms() {
     const { hue, sat, bri } = computeHSBFromStats(
       currentDataSet,
       healthDataSets
     );
 
-    // Convert hue from [0..1] to degrees
+    // convert hue from [0..1] to degrees
     gl.uniform1f(uGlucoseLoc, hue); // Used as hue
     gl.uniform1f(uPotassiumLoc, sat); // Used as saturation
     gl.uniform1f(uEgfrLoc, bri); // Used as brightness
   }
 
-  // H) Tell WebGL the resolution (in pixels)
+  // tell WebGL the resolution (in pixels)
   function setResolutionUniform() {
     gl.uniform2f(uResolutionLoc, gl.canvas.width, gl.canvas.height);
   }
 
-  // I) The draw() call just clears and draws the quad:
+  // the draw() call just clears and draws the quad:
   function draw() {
     resizeCanvasToDisplaySize(canvas);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
@@ -169,8 +177,13 @@ async function init() {
     setHSBUniforms();
     gl.clear(gl.COLOR_BUFFER_BIT);
     const nowUnix = Math.floor(Date.now() / 1000);
+    //const totalYears = Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
+
+    const baseYears = Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
     const totalYears =
-      Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
+      (params.overrideYears !== null ? params.overrideYears : baseYears) *
+      params.timeWarp;
+    
     gl.uniform1f(uDecayPerYearLoc, decayPerYear);
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -180,7 +193,7 @@ async function init() {
   gl.clearColor(0, 0, 0, 1);
   draw();
 
-  // L) If you want to “manually switch” datasets, e.g. enter a new index in the console:
+  // if you want to “manually switch” datasets, e.g. enter a new index in the console:
   window.changeDataset = (newIndex) => {
     if (
       Number.isInteger(newIndex) &&
