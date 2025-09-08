@@ -49,6 +49,9 @@ function lifespanYearsFromHashDigits(x /* 0..99 */) {
   return lifespan;
 }
 
+// clamp helper
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
 // Link vertex + fragment into a program
 function createProgram(gl, vertexSrc, fragmentSrc) {
   const program = gl.createProgram();
@@ -132,6 +135,19 @@ async function init() {
 
   let baseDecayPerYear32 = currentDataSet.decayRate;
 
+  // --- build normalized health track (0..1) once ---
+  const hiTrack = healthDataSets.map((d) => d.healthIndex ?? 0.5);
+  const hiMin = Math.min(...hiTrack),
+    hiMax = Math.max(...hiTrack);
+  const hiNorm = hiTrack.map((h) =>
+    hiMax > hiMin ? (h - hiMin) / (hiMax - hiMin) : 0.5
+  );
+
+  // optional light smoothing
+  for (let i = 1; i < hiNorm.length - 1; i++) {
+    hiNorm[i] = (hiNorm[i - 1] + 2 * hiNorm[i] + hiNorm[i + 1]) / 4;
+  }
+
   // TODO: replace with real chain values
   const lastTwoHashDigits = 88;
   const inscriptionUnixSeconds = 1704067200;
@@ -140,16 +156,28 @@ async function init() {
   // decay test helpers
   const params = {
     overrideYears: null,
-    timeWarp: 1.0
+    timeWarp: 1.0,
+    previewSpeedYPS: 0
   };
 
-  window.setYears = (y) => { params.overrideYears = y; };
-  window.clearYears = () => { params.overrideYears = null; };
-  window.timeWarp = (f) => { params.timeWarp = f; };
+  window.setYears = (y) => {
+    params.overrideYears = (y == null ? null : Number(y));
+  };
+  window.clearYears = () => {
+    params.overrideYears = null;
+  };
+  window.timeWarp = (f) => {
+    params.timeWarp = Math.max(0, Number(f));
+  };
+  window.playPreview = (speedYPS = 4) => { params.previewSpeedYPS = Math.max(0, Number(speedYPS)); };
+  window.stopPreview = () => { params.previewSpeedYPS = 0; };
 
   // lifespan + aligned rate
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
   let decayPerYear = baseDecayPerYear32 * (32 / lifespanYears);
+
+  let phaseYears = clamp(lifespanYears * 0.15, 4, 10);
+  let rateAmplitude = 0.3;
 
   // set uniforms
   function setHSBUniforms() {
@@ -169,6 +197,20 @@ async function init() {
     gl.uniform2f(uResolutionLoc, gl.canvas.width, gl.canvas.height);
   }
 
+  // sample the health track over time (returns 0..1)
+  function sampleHealthMod(totalYears, phaseYears, track) {
+    if (!track || track.length === 0) return 0.5;
+    const t = (totalYears / phaseYears) % 1; // 0..1 over one loop
+    const f = t * (track.length - 1);
+    const i = Math.floor(f);
+    const frac = f - i;
+    const a = track[i];
+    const b = track[Math.min(i + 1, track.length - 1)];
+    // cosine interpolation
+    const mu = (1.0 - Math.cos(frac * Math.PI)) * 0.5;
+    return a * (1 - mu) + b * mu;
+  }
+
   // the draw() call just clears and draws the quad:
   function draw() {
     resizeCanvasToDisplaySize(canvas);
@@ -176,16 +218,44 @@ async function init() {
     setResolutionUniform();
     setHSBUniforms();
     gl.clear(gl.COLOR_BUFFER_BIT);
+
+    const t = performance.now() / 1000;
+    window.__lastT = window.__lastT ?? t;
+    const dt = Math.min(0.1, Math.max(0, t - window.__lastT));
+    window.__lastT = t;
+    
     const nowUnix = Math.floor(Date.now() / 1000);
     //const totalYears = Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
+    const baseYears =
+      Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
 
-    const baseYears = Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
+   if (params.overrideYears !== null && params.previewSpeedYPS > 0) {
+     params.overrideYears += params.previewSpeedYPS * dt;
+   } 
     const totalYears =
-      (params.overrideYears !== null ? params.overrideYears : baseYears) *
-      params.timeWarp;
+     (params.overrideYears !== null ? params.overrideYears : baseYears) *
+     (params.timeWarp || 1);
+    const healthMod01 = sampleHealthMod(totalYears, phaseYears, hiNorm);
+    const rateMul = 1.0 + rateAmplitude * (healthMod01 - 0.5);
+    const effectiveDecayPerYear = decayPerYear * rateMul;
     
-    gl.uniform1f(uDecayPerYearLoc, decayPerYear);
+
+
+    overlay.textContent = [
+      `Dataset: ${currentDataSetIndex}`,
+      `HealthIndex: ${currentDataSet.healthIndex?.toFixed(3) ?? "N/A"}`,
+      `Years: ${totalYears.toFixed(2)}`,
+      `DecayRate(eff): ${effectiveDecayPerYear.toExponential(3)}`,
+      `PhaseYears: ${phaseYears.toFixed(2)}`,
+      params.overrideYears !== null
+        ? `Mode: OVERRIDE (${params.overrideYears}y)`
+        : `Mode: REALTIME`,
+      `Warp: x${params.timeWarp}`,
+    ].join("\n");
+
+    gl.uniform1f(uDecayPerYearLoc, effectiveDecayPerYear);
     gl.uniform1f(uTotalYearsLoc, totalYears);
+    
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(draw);
   }
@@ -193,7 +263,7 @@ async function init() {
   gl.clearColor(0, 0, 0, 1);
   draw();
 
-  // if you want to “manually switch” datasets, e.g. enter a new index in the console:
+  // manually switch datasets in the console
   window.changeDataset = (newIndex) => {
     if (
       Number.isInteger(newIndex) &&
@@ -202,10 +272,28 @@ async function init() {
     ) {
       currentDataSetIndex = newIndex;
       currentDataSet = healthDataSets[currentDataSetIndex];
+
+      // recompute dataset dependent values
+      baseDecayPerYear32 = currentDataSet.decayRate;
+      lifespanYears      = lifespanYearsFromHashDigits(lastTwoHashDigits);
+      decayPerYear       = baseDecayPerYear32 * (32 / lifespanYears);
+      phaseYears         = clamp(lifespanYears * 0.15, 4, 10);
+      
       draw();
     } else {
       console.warn("Invalid dataset index:", newIndex);
     }
+  };
+
+  window.nextDataset = () => {
+    const newIndex = (currentDataSetIndex + 1) % healthDataSets.length;
+    changeDataset(newIndex);
+  };
+
+  window.prevDataset = () => {
+    const newIndex =
+      (currentDataSetIndex - 1 + healthDataSets.length) % healthDataSets.length;
+    changeDataset(newIndex);
   };
 }
 
@@ -229,5 +317,19 @@ function computeHSBFromStats(dataSet, healthDataSets) {
 
   return { hue, sat, bri };
 }
+
+// overlay element
+const overlay = document.createElement('div');
+overlay.style.position = 'fixed';
+overlay.style.top = '10px';
+overlay.style.left = '10px';
+overlay.style.padding = '6px 10px';
+overlay.style.background = 'rgba(0,0,0,0.6)';
+overlay.style.color = 'lime';
+overlay.style.whiteSpace = 'pre';
+overlay.style.fontFamily = 'monospace';
+overlay.style.fontSize = '12px';
+overlay.style.zIndex = '9999';
+document.body.appendChild(overlay);
 
 init();
