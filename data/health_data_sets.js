@@ -623,6 +623,30 @@ let healthDataSets = [
       calcium: 8.8,
     },
   },
+{
+    date: "2025-09-12",
+    ecg: {
+      ventRate: 58,
+      prInterval: 157,
+      qrsInterval: 89,
+      qtInterval: 419,
+      qtcInterval: 417,
+      pAxis: 84,
+      rAxis: 95,
+      tAxis: 75,
+    },
+    labs: {
+      glucose: 108,
+      nitrogen: 11,
+      creatinine: 0.54,
+      eGFR: 116,
+      sodium: 137,
+      potassium: 4.0,
+      chloride: 106,
+      carbonDioxide: 22,
+      calcium: 9.0,
+    },
+  },
 ];
 
 healthDataSets.sort((a, b) => {
@@ -893,8 +917,8 @@ function updateDecayRates() {
     // Feel free to swap in your exact formula from decay_logic.js later.
     const shaped = BASE_DECAY_PER_YEAR_32 * (1 + Math.pow(1 - hi, 2));
 
-    dataSet.healthIndex = hi;          // persist for movement/color if needed
-    dataSet.decayRate   = shaped;      // per year, assuming 32-year baseline
+    dataSet.healthIndex = hi; // persist for movement/color if needed
+    dataSet.decayRate = shaped; // per year, assuming 32-year baseline
   });
 }
 
@@ -904,7 +928,11 @@ updateDecayRates();
 healthDataSets.forEach((dataSet, index) => {
   let healthIndex = calculateHealthIndex(dataSet);
   console.log(
-    `Dataset ${index} (${dataSet.date}): Health Index = ${dataSet.healthIndex.toFixed(4)}, Decay/yr = ${dataSet.decayRate.toFixed(4)}`
+    `Dataset ${index} (${
+      dataSet.date
+    }): Health Index = ${dataSet.healthIndex.toFixed(
+      4
+    )}, Decay/yr = ${dataSet.decayRate.toFixed(4)}`
   );
 });
 
