@@ -8,9 +8,12 @@ in vec2 v_uv;
 out vec4 fragColor;
 
 // Uniforms for dataset metrics
-uniform float u_glucose;// normalized [0..1]
-uniform float u_potassium;// normalized [0..1]
-uniform float u_eGFR;// normalized [0..1]
+uniform float u_glucose;
+uniform float u_potassium;
+uniform float u_eGFR;
+
+uniform float u_nitrogenStrength;
+uniform float u_nitrogenHueDeg;
 
 uniform float u_decayPerYear;
 uniform float u_totalYears;

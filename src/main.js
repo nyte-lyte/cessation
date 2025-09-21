@@ -318,6 +318,106 @@ function computeHSBFromStats(dataSet, healthDataSets) {
   return { hue, sat, bri };
 }
 
+// ──────────────────────────────────────────────────────────────
+// BEAM SCAFFOLD (no-ops for now) — safe to paste today
+// ──────────────────────────────────────────────────────────────
+
+// 0) Beam IDs (fixed order; we’ll use indices later for arrays)
+const BEAM = Object.freeze({
+  NITROGEN: 0,      // BUN (direct)
+  CREATININE: 1,    // direct
+  SODIUM: 2,        // lifespan @ ~20%
+  CHLORIDE: 3,      // lifespan @ ~60%
+  CO2: 4,           // ripple
+  CALCIUM: 5        // ripple
+});
+const BEAM_COUNT = 6;
+
+// 1) Winsorized percentile helper for any lab key (5–95%)
+function winsorizedPercentileForLab(dataSet, labKey, datasets = healthDataSets) {
+  const values = datasets.map(d => d.labs[labKey]).slice().sort((a,b)=>a-b);
+  if (values.length < 2) return 0.5;
+  const p05 = values[Math.floor(0.05 * (values.length - 1))];
+  const p95 = values[Math.ceil(0.95 * (values.length - 1))];
+  const v = dataSet.labs[labKey];
+  const clamped = Math.max(p05, Math.min(p95, v));
+  // rank within clamped range
+  return (clamped - p05) / Math.max(1e-9, (p95 - p05)); // 0..1
+}
+
+// 2) Breathing amplitude from ECG variability (ventRate + qtcInterval)
+// Returns fraction (e.g., 0.05..0.12; up to 0.18 for extremes)
+function getBreathingAmplitude(dataSet) {
+  const pv = normalize(dataSet.ecg.ventRate, minMaxValues.ventRate.min, minMaxValues.ventRate.max); // 0..1
+  const pq = normalize(dataSet.ecg.qtcInterval, minMaxValues.qtcInterval.min, minMaxValues.qtcInterval.max); // 0..1
+  const uv = Math.abs(pv - 0.5);
+  const uq = Math.abs(pq - 0.5);
+  const V = 2 * Math.max(uv, uq); // 0..1
+  let amp = 0.05 + 0.07 * V;      // 5–12%
+  const extreme = (pv < 0.10 || pv > 0.90 || pq < 0.10 || pq > 0.90);
+  if (extreme) amp = Math.min(0.18, amp + 0.03); // up to 18%
+  return amp;
+}
+
+// 3) Tempo mapper stub — returns seconds per cycle for a beam (we’ll flesh per beam)
+function getBeamTempoSeconds(dataSet, beamId) {
+  switch (beamId) {
+    case BEAM.NITROGEN:   /* PR-driven (7–14s target) */ return 10.0;
+    case BEAM.CREATININE: /* QTc-driven (9–18s)        */ return 12.0;
+    case BEAM.SODIUM:     /* ventRate-scaled (4–9s)    */ return 7.0;
+    case BEAM.CHLORIDE:   /* QRS-driven (6–12s)        */ return 9.0;
+    case BEAM.CO2:        /* P-axis (12–24s)           */ return 16.0;
+    case BEAM.CALCIUM:    /* T-axis (18–36s)           */ return 24.0;
+    default: return 12.0;
+  }
+}
+
+// 4) Hue anchor + drift stubs (per-beam personalities will replace these)
+function getBeamHueAnchorDeg(dataSet, beamId) {
+  // For now: anchor near the base hue derived from glucose percentile
+  const { hue } = computeHSBFromStats(dataSet, healthDataSets);
+  return hue * 360.0; // degrees
+}
+function getBeamHueDriftDeg(dataSet, beamId) {
+  // Default gentle drift; we’ll specialize per beam later
+  return 12.0; // degrees
+}
+
+// 5) Assertiveness band stub (maps winsorized percentile → band top/bottom)
+function getBeamAssertiveness(dataSet, beamId) {
+  // Return a nominal center for now; real bands come when we wire each beam
+  return 0.50; // fraction 0..1 (pre-budget), placeholder
+}
+
+// 6) Lifespan-proportional total cap (+ soft decay dimmer)
+function getTotalIntensityCap(lifespanYears, decayProgress /*0..1*/) {
+  // Map lifespan 10→64y to 0.28→0.38 linearly (clamped)
+  const L = Math.max(10, Math.min(64, lifespanYears));
+  const base = 0.28 + ( (L - 10) / (64 - 10) ) * (0.38 - 0.28);
+  const dimmer = Math.max(0.3, 1.0 - decayProgress); // never below 30%
+  return base * dimmer;
+}
+const PER_BEAM_CAP = 0.30;    // with +0.05 grace for lifespan entrances (applied later)
+
+// 7) Beam state container (we’ll fill Nitrogen first next session)
+const beamState = Array.from({ length: BEAM_COUNT }, (_, id) => ({
+  id,
+  active: false,            // will flip true as beams enter (Nitrogen true next session)
+  assertiveness: 0.0,       // 0..1 pre-budget
+  hueAnchorDeg: 0.0,        // degrees
+  hueDriftDeg: 0.0,         // degrees
+  tempoSec: 12.0,           // seconds per breathing cycle
+  phase: 0.0,               // radians, updated over time
+  baseline: 0.0,            // for ripple accumulation (CO2/Ca later)
+  strength: 0.0             // current, post-envelope, pre-budget (will be scaled)
+}));
+
+// 8) Overlay toggle (handy during dev)
+window.toggleOverlay = () => {
+  overlay.style.display = (overlay.style.display === 'none' ? 'block' : 'none');
+};
+
+
 // overlay element
 const overlay = document.createElement('div');
 overlay.style.position = 'fixed';
