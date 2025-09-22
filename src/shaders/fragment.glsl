@@ -46,22 +46,25 @@ vec3 hsb2rgb(float H,float S,float B){
 
 void main(){
 // 1) Sample a tiny bit of noise so our field isn’t totally flat
-float n=rand(v_uv*u_resolution.xy*.1)*.02;
+float n = rand(v_uv * u_resolution.xy * .1) * .02;
 // We multiply resolution to decorrelate noise per pixel; tweak “0.1” for scale
 
 // 2) Hue = glucose * 360°, then add subtle spatial variation (like a gentle “ripple”)
-float pixelHue=mod(u_glucose*360.+(v_uv.x*50.+v_uv.y*50.)*n,360.);
+float pixelHue = mod(u_glucose * 360. + (v_uv.x * 50. + v_uv.y * 50.) * n, 360.);
 
 
 // 3) Saturation = 0.3 → 1.0 based on potassium, plus a bit of noise
-float pixelSat=clamp(.3+u_potassium*.7+n*2.,0.,1.);
+float pixelSat = clamp(.3 + u_potassium * .7 + n * 2., 0., 1.);
 
 // 4) Brightness = 0.2 → 1.0 based on eGFR, plus noise
-float pixelBri=clamp(.2+u_eGFR*.8+n*1.5,0.,1.);
+float pixelBri = clamp(.2 + u_eGFR * .8 + n * 1.5, 0., 1.);
 
-vec3 rgbColor=hsb2rgb(pixelHue,pixelSat,pixelBri);
+vec3 rgbColor = hsb2rgb(pixelHue, pixelSat, pixelBri);
+
+vec3 nitrogenRGB = hsb2rgb(u_nitrogenHueDeg, 0.8, 0.8);
+rgbColor = clamp(rgbColor + nitrogenRGB * u_nitrogenStrength, 0.0, 1.0);
 
 float decay = exp(-u_decayPerYear * u_totalYears);
 
-fragColor=vec4(rgbColor * decay, 1.0);
+fragColor = vec4(rgbColor * decay, 1.0);
 }

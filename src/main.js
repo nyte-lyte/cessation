@@ -34,6 +34,7 @@ function compileShader(gl, source, type) {
   return shader;
 }
 
+// utility helpers
 function lifespanYearsFromHashDigits(x /* 0..99 */) {
   const n = x / 99;
   const offset = Math.pow(n, 2.5);
@@ -49,8 +50,12 @@ function lifespanYearsFromHashDigits(x /* 0..99 */) {
   return lifespan;
 }
 
-// clamp helper
 function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+function normalize(value, min, max) {
+  if (max - min === 0) return 0;
+  return (value - min) / (max / min);
+}
 
 // Link vertex + fragment into a program
 function createProgram(gl, vertexSrc, fragmentSrc) {
@@ -129,6 +134,9 @@ async function init() {
   const uEgfrLoc = gl.getUniformLocation(program, "u_eGFR");
   const uDecayPerYearLoc = gl.getUniformLocation(program, "u_decayPerYear");
   const uTotalYearsLoc = gl.getUniformLocation(program, "u_totalYears");
+
+  const uNitrogenStrengthLoc = gl.getUniformLocation(program, "u_nitrogenStrength");
+  const uNitrogenHueDegLoc = gl.getUniformLocation(program, "u_nitrogenHueDeg");
 
   let currentDataSetIndex = 0;
   let currentDataSet = healthDataSets[currentDataSetIndex];
@@ -223,23 +231,49 @@ async function init() {
     window.__lastT = window.__lastT ?? t;
     const dt = Math.min(0.1, Math.max(0, t - window.__lastT));
     window.__lastT = t;
-    
+
     const nowUnix = Math.floor(Date.now() / 1000);
     //const totalYears = Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
     const baseYears =
       Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
 
-   if (params.overrideYears !== null && params.previewSpeedYPS > 0) {
-     params.overrideYears += params.previewSpeedYPS * dt;
-   } 
+    if (params.overrideYears !== null && params.previewSpeedYPS > 0) {
+      params.overrideYears += params.previewSpeedYPS * dt;
+    }
     const totalYears =
-     (params.overrideYears !== null ? params.overrideYears : baseYears) *
-     (params.timeWarp || 1);
+      (params.overrideYears !== null ? params.overrideYears : baseYears) *
+      (params.timeWarp || 1);
     const healthMod01 = sampleHealthMod(totalYears, phaseYears, hiNorm);
     const rateMul = 1.0 + rateAmplitude * (healthMod01 - 0.5);
     const effectiveDecayPerYear = decayPerYear * rateMul;
-    
 
+    gl.uniform1f(uDecayPerYearLoc, effectiveDecayPerYear);
+    gl.uniform1f(uTotalYearsLoc, totalYears); 
+
+    // ── NITROGEN (debug wiring for visibility) ──
+    const ampN = getBreathingAmplitude(currentDataSet); // ~0.05..0.12 (up to 0.18)
+    const tempoN = getBeamTempoSeconds(currentDataSet, BEAM.NITROGEN); // stub returns ~10s
+    // keep a phase accumulator on window so it persists:
+    window.__phaseN =
+      (window.__phaseN || 0) + (dt * (2 * Math.PI)) / Math.max(1e-3, tempoN);
+
+    // simple assertiveness placeholder (we’ll replace with data-driven soon)
+    const assertN = 0.5;
+
+    // strength breathes with amplitude (bounded 0..1)
+    const strN = Math.min(
+      1.0,
+      Math.max(0.0, assertN * (0.5 + 0.5 * Math.sin(window.__phaseN) * ampN))
+    );
+
+    // hue anchor + drift (scaffold stubs for now)
+    const hueAnchorN = getBeamHueAnchorDeg(currentDataSet, BEAM.NITROGEN); // near base hue
+    const hueDriftN = getBeamHueDriftDeg(currentDataSet, BEAM.NITROGEN); // default 12°
+    const hueDegN = hueAnchorN + hueDriftN * Math.sin(window.__phaseN);
+
+    // push uniforms (guard against null if optimized out)
+    if (uNitrogenStrengthLoc) gl.uniform1f(uNitrogenStrengthLoc, strN);
+    if (uNitrogenHueDegLoc) gl.uniform1f(uNitrogenHueDegLoc, hueDegN); 
 
     overlay.textContent = [
       `Dataset: ${currentDataSetIndex}`,
@@ -253,9 +287,10 @@ async function init() {
       `Warp: x${params.timeWarp}`,
     ].join("\n");
 
-    gl.uniform1f(uDecayPerYearLoc, effectiveDecayPerYear);
-    gl.uniform1f(uTotalYearsLoc, totalYears);
-    
+    beamOverlay.textContent = `N (BUN): str=${strN.toFixed(2)} hue=${(
+      hueDegN % 360
+    ).toFixed(0)}°`;
+
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(draw);
   }
@@ -421,15 +456,32 @@ window.toggleOverlay = () => {
 // overlay element
 const overlay = document.createElement('div');
 overlay.style.position = 'fixed';
-overlay.style.top = '10px';
+overlay.style.top = '5px';
 overlay.style.left = '10px';
 overlay.style.padding = '6px 10px';
-overlay.style.background = 'rgba(0, 0, 0, 0.36)';
+overlay.style.background = 'rgba(0, 0, 0, 0.6)';
 overlay.style.color = 'lime';
 overlay.style.whiteSpace = 'pre';
 overlay.style.fontFamily = 'monospace';
 overlay.style.fontSize = '12px';
+overlay.style.textAlign = 'left'
 overlay.style.zIndex = '9999';
 document.body.appendChild(overlay);
+
+const beamOverlay = document.createElement("div");
+beamOverlay.style.position = "fixed";
+beamOverlay.style.top = "5px";
+beamOverlay.style.left = "auto";
+beamOverlay.style.right = "10px"
+beamOverlay.style.padding = "6px 10px";
+beamOverlay.style.background = "rgba(0, 0, 0, 0.6)";
+beamOverlay.style.color = "lime";
+beamOverlay.style.whiteSpace = "pre";
+beamOverlay.style.fontFamily = "monospace";
+beamOverlay.style.fontSize = "12px";
+beamOverlay.style.textAlign = "right"
+beamOverlay.style.zIndex = "9999";
+beamOverlay.style.pointerEvents = "none"
+document.body.appendChild(beamOverlay);
 
 init();
