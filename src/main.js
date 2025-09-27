@@ -138,6 +138,12 @@ async function init() {
   const uNitrogenStrengthLoc = gl.getUniformLocation(program, "u_nitrogenStrength");
   const uNitrogenHueDegLoc = gl.getUniformLocation(program, "u_nitrogenHueDeg");
 
+  const uCreatinineStrengthLoc = gl.getUniformLocation(program, "u_creatinineStrength");
+  const uCreatinineHueDegLoc  = gl.getUniformLocation(program, "u_creatinineHueDeg");
+
+  const uSodiumStrengthLoc = gl.getUniformLocation(program, "u_sodiumStrength");
+  const uSodiumHueDegLoc   = gl.getUniformLocation(program, "u_sodiumHueDeg");
+
   let currentDataSetIndex = 0;
   let currentDataSet = healthDataSets[currentDataSetIndex];
 
@@ -248,9 +254,9 @@ async function init() {
     const effectiveDecayPerYear = decayPerYear * rateMul;
 
     gl.uniform1f(uDecayPerYearLoc, effectiveDecayPerYear);
-    gl.uniform1f(uTotalYearsLoc, totalYears); 
+    gl.uniform1f(uTotalYearsLoc, totalYears);
 
-    // ── NITROGEN (debug wiring for visibility) ──
+    // ── NITROGEN (debug wiring for visibility; direct beam #1) ──
     const ampN = getBreathingAmplitude(currentDataSet); // ~0.05..0.12 (up to 0.18)
     const tempoN = getBeamTempoSeconds(currentDataSet, BEAM.NITROGEN); // stub returns ~10s
     // keep a phase accumulator on window so it persists:
@@ -273,7 +279,75 @@ async function init() {
 
     // push uniforms (guard against null if optimized out)
     if (uNitrogenStrengthLoc) gl.uniform1f(uNitrogenStrengthLoc, strN);
-    if (uNitrogenHueDegLoc) gl.uniform1f(uNitrogenHueDegLoc, hueDegN); 
+    if (uNitrogenHueDegLoc) gl.uniform1f(uNitrogenHueDegLoc, hueDegN);
+
+    // ── CREATININE (debug wiring; direct beam #2) ──
+    const ampC = getBreathingAmplitude(currentDataSet); // ~0.05..0.12 (up to 0.18)
+    const tempoC = getBeamTempoSeconds(currentDataSet, BEAM.CREATININE); // stub ~12s
+    window.__phaseC =
+      (window.__phaseC || 0) + (dt * (2 * Math.PI)) / Math.max(1e-3, tempoC);
+
+    // data-driven assertiveness from winsorized percentile (no randomness)
+    const pCreat = winsorizedPercentileForLab(
+      currentDataSet,
+      "creatinine",
+      healthDataSets
+    );
+    // Map to a moderate band (feels different from Nitrogen’s 0.50 placeholder):
+    const assertC = 0.35 + 0.3 * pCreat; // 0.35..0.65
+
+    // Strength breathes with amplitude
+    const strC = Math.min(
+      1.0,
+      Math.max(0.0, assertC * (0.5 + 0.5 * Math.sin(window.__phaseC) * ampC))
+    );
+
+    // Hue anchor + (slightly tighter) drift for creatinine
+    const hueAnchorC = getBeamHueAnchorDeg(currentDataSet, BEAM.CREATININE);
+    const hueDriftC = Math.max(
+      6.0,
+      getBeamHueDriftDeg(currentDataSet, BEAM.CREATININE) - 4.0
+    ); // a bit calmer
+    const hueDegC = hueAnchorC + hueDriftC * Math.sin(window.__phaseC);
+
+    // Push uniforms (guard if optimized out)
+    if (uCreatinineStrengthLoc) gl.uniform1f(uCreatinineStrengthLoc, strC);
+    if (uCreatinineHueDegLoc) gl.uniform1f(uCreatinineHueDegLoc, hueDegC);
+
+    // ── SODIUM (lifespan-bound hybrid @ ~20%) ──
+
+    // Arrival schedule
+    const arrivalAt = 0.2 * lifespanYears; // 20% of lifespan
+    const rampWindow = Math.max(0.1 * lifespanYears, 0.25); // 10% of lifespan (min 0.25y) for visible entrance
+    const arrivalProgress = clamp((totalYears - arrivalAt) / rampWindow, 0, 1);
+
+    // Tempo & phase (same breathing style as others)
+    const ampNa = getBreathingAmplitude(currentDataSet);
+    const tempoNa = getBeamTempoSeconds(currentDataSet, BEAM.SODIUM); // your scaffold helper
+    window.__phaseNa =
+      (window.__phaseNa || 0) + (dt * (2 * Math.PI)) / Math.max(1e-3, tempoNa);
+
+    // Assertiveness from Sodium’s percentile (winsorized)
+    const pSodium = winsorizedPercentileForLab(
+      currentDataSet,
+      "sodium",
+      healthDataSets
+    );
+    // Map to a moderate band so it’s visible but not overpowering
+    const assertNa = 0.3 + 0.4 * pSodium; // 0.30..0.70
+
+    // Breathing strength gated by arrival
+    const baseNa = assertNa * (0.5 + 0.5 * Math.sin(window.__phaseNa) * ampNa);
+    const strNa = arrivalProgress * clamp(baseNa, 0, 1);
+
+    // Hue anchor + drift
+    const hueAnchorNa = getBeamHueAnchorDeg(currentDataSet, BEAM.SODIUM);
+    const hueDriftNa = getBeamHueDriftDeg(currentDataSet, BEAM.SODIUM);
+    const hueDegNa = hueAnchorNa + hueDriftNa * Math.sin(window.__phaseNa);
+
+    // Push uniforms (guard in case optimized out)
+    if (uSodiumStrengthLoc) gl.uniform1f(uSodiumStrengthLoc, strNa);
+    if (uSodiumHueDegLoc) gl.uniform1f(uSodiumHueDegLoc, hueDegNa);
 
     overlay.textContent = [
       `Dataset: ${currentDataSetIndex}`,
@@ -287,9 +361,23 @@ async function init() {
       `Warp: x${params.timeWarp}`,
     ].join("\n");
 
-    beamOverlay.textContent = `N (BUN): str=${strN.toFixed(2)} hue=${(
-      hueDegN % 360
-    ).toFixed(0)}°`;
+    beamOverlay.textContent = [
+      `N (BUN): str=${strN.toFixed(2)} hue=${(
+        ((hueDegN % 360) + 360) %
+        360
+      ).toFixed(0)}°`,
+      `C (Cr ): str=${strC.toFixed(2)} hue=${(
+        ((hueDegC % 360) + 360) %
+        360
+      ).toFixed(0)}°`,
+      `Na : str=${strNa.toFixed(2)} hue=${(
+        ((hueDegNa % 360) + 360) %
+        360
+      ).toFixed(0)}°` +
+        (arrivalProgress < 1
+          ? `  (arriving ${Math.round(arrivalProgress * 100)}%)`
+          : ``),
+    ].join("\n");
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(draw);
@@ -354,7 +442,7 @@ function computeHSBFromStats(dataSet, healthDataSets) {
 }
 
 // ──────────────────────────────────────────────────────────────
-// BEAM SCAFFOLD (no-ops for now) — safe to paste today
+// BEAM SCAFFOLD (no-ops for now) 
 // ──────────────────────────────────────────────────────────────
 
 // 0) Beam IDs (fixed order; we’ll use indices later for arrays)

@@ -1,70 +1,91 @@
 #version 300 es
 precision highp float;
 
-// passed from vertex shader
 in vec2 v_uv;
-
-// the final color we write
 out vec4 fragColor;
 
-// Uniforms for dataset metrics
+// Base uniforms
 uniform float u_glucose;
 uniform float u_potassium;
 uniform float u_eGFR;
+uniform vec2 u_resolution;
 
-uniform float u_nitrogenStrength;
-uniform float u_nitrogenHueDeg;
-
+// Decay uniforms
 uniform float u_decayPerYear;
 uniform float u_totalYears;
 
-// The resolution of the canvas (width, height)
-uniform vec2 u_resolution;
+// Beam uniforms
+uniform float u_nitrogenStrength;
+uniform float u_nitrogenHueDeg;
+uniform float u_creatinineStrength;
+uniform float u_creatinineHueDeg;
+uniform float u_sodiumStrength;
+uniform float u_sodiumHueDeg;
 
-// Simple pseudorandom noise based on UV:
+// --- helpers ---
 float rand(vec2 co){
     return fract(sin(dot(co,vec2(12.9898,78.233)))*43758.5453);
 }
-
-// Convert HSB (Hue [0..360], Sat [0..1], Bright [0..1]) to RGB
 vec3 hsb2rgb(float H,float S,float B){
     float c=B*S;
-    float Hprime=mod(H/60.,6.);
-    float X=c*(1.-abs(mod(Hprime,2.)-1.));
+    float Hp=mod(H/60.,6.);
+    float X=c*(1.-abs(mod(Hp,2.)-1.));
     vec3 rgb=vec3(0.);
-    
-    if(0.<=Hprime&&Hprime<1.)rgb=vec3(c,X,0.);
-    else if(1.<=Hprime&&Hprime<2.)rgb=vec3(X,c,0.);
-    else if(2.<=Hprime&&Hprime<3.)rgb=vec3(0.,c,X);
-    else if(3.<=Hprime&&Hprime<4.)rgb=vec3(0.,X,c);
-    else if(4.<=Hprime&&Hprime<5.)rgb=vec3(X,0.,c);
-    else if(5.<=Hprime&&Hprime<6.)rgb=vec3(c,0.,X);
-    
+    if(0.<=Hp&&Hp<1.)rgb=vec3(c,X,0.);
+    else if(1.<=Hp&&Hp<2.)rgb=vec3(X,c,0.);
+    else if(2.<=Hp&&Hp<3.)rgb=vec3(0.,c,X);
+    else if(3.<=Hp&&Hp<4.)rgb=vec3(0.,X,c);
+    else if(4.<=Hp&&Hp<5.)rgb=vec3(X,0.,c);
+    else if(5.<=Hp&&Hp<6.)rgb=vec3(c,0.,X);
     float m=B-c;
     return rgb+vec3(m);
 }
 
 void main(){
-// 1) Sample a tiny bit of noise so our field isn’t totally flat
-float n = rand(v_uv * u_resolution.xy * .1) * .02;
-// We multiply resolution to decorrelate noise per pixel; tweak “0.1” for scale
+    float n=rand(v_uv*u_resolution.xy*.1)*.02;
+    
+    float pixelHue=mod(u_glucose*360.+(v_uv.x*50.+v_uv.y*50.)*n,360.);
+    float pixelSat=clamp(.3+u_potassium*.7+n*2.,0.,1.);
+    float pixelBri=clamp(.2+u_eGFR*.8+n*1.5,0.,1.);
+    
+    vec3 rgbColor=hsb2rgb(pixelHue,pixelSat,pixelBri);
 
-// 2) Hue = glucose * 360°, then add subtle spatial variation (like a gentle “ripple”)
-float pixelHue = mod(u_glucose * 360. + (v_uv.x * 50. + v_uv.y * 50.) * n, 360.);
+    // --- minimal spatial masks (drift uses u_totalYears) ---
+    float t=u_totalYears;
 
+// Nitrogen: soft radial blob drifting slightly
+vec2 cN=vec2(.28+.08*sin(t*.6),.32+.06*cos(t*.5));
+float dN=distance(v_uv,cN);
+float mN=1.-smoothstep(.28,.46,dN);// 1 inside ~0.28 radius, soft edge to 0
 
-// 3) Saturation = 0.3 → 1.0 based on potassium, plus a bit of noise
-float pixelSat = clamp(.3 + u_potassium * .7 + n * 2., 0., 1.);
+// Creatinine: diagonal band that slowly shifts
+float ang=.8;// ~46°
+vec2 dir=normalize(vec2(cos(ang),sin(ang)));
+float coord=dot(v_uv+vec2(.15*sin(t*.25),-.12*cos(t*.22)),dir);
+float band=abs(sin(coord*6.+t*.4));// ~6 waves across the canvas
+float mC=smoothstep(.9,.3,band);// thick bright band
 
-// 4) Brightness = 0.2 → 1.0 based on eGFR, plus noise
-float pixelBri = clamp(.2 + u_eGFR * .8 + n * 1.5, 0., 1.);
+// Sodium: two large blobs, take the max (either one can glow)
+    vec2 cA=vec2(.72+.06*cos(t*.33),.42+.05*sin(t*.27));
+    vec2 cB=vec2(.38+.07*sin(t*.21),.78+.06*cos(t*.19));
+    float dA=distance(v_uv,cA);
+    float dB=distance(v_uv,cB);
+    float mA=1.-smoothstep(.22,.40,dA);
+    float mB=1.-smoothstep(.18,.34,dB);
+    float mNa=max(mA,mB);
+    
+    // Nitrogen (test)
+    vec3 nitrogenRGB=hsb2rgb(u_nitrogenHueDeg,.8,.8);
+    rgbColor=clamp(rgbColor+nitrogenRGB*u_nitrogenStrength*mN,0.,1.);
+    
+    // Creatinine (test)
+    vec3 creatRGB=hsb2rgb(u_creatinineHueDeg,.75,.8);
+    rgbColor=clamp(rgbColor+creatRGB*u_creatinineStrength*mC,0.,1.);
 
-vec3 rgbColor = hsb2rgb(pixelHue, pixelSat, pixelBri);
+    // Sodium (test)
+    vec3 sodiumRGB=hsb2rgb(u_sodiumHueDeg,.80,.85);
+    rgbColor=clamp(rgbColor+sodiumRGB*u_sodiumStrength*mNa,0.,1.);
 
-vec3 nitrogenRGB = hsb2rgb(u_nitrogenHueDeg, 0.8, 0.8);
-rgbColor = clamp(rgbColor + nitrogenRGB * u_nitrogenStrength, 0.0, 1.0);
-
-float decay = exp(-u_decayPerYear * u_totalYears);
-
-fragColor = vec4(rgbColor * decay, 1.0);
+    float decay=exp(-u_decayPerYear*u_totalYears);
+    fragColor=vec4(rgbColor*decay,1.);
 }
