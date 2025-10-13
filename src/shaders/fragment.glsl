@@ -70,7 +70,7 @@ cN+=.05*vec2(
 );
 
 float dN=distance(v_uv,cN);
-float mN=1.-smoothstep(.30,.60,dN);// inner/outer radii = size/softness
+float mN=1.-smoothstep(.26,.52,dN);// inner/outer radii = size/softness
 
 // Creatinine: two localized blobs (replaces diagonal band)
 float hC1=fract(sin(u_potassium*19641.1231)*1e4);
@@ -83,8 +83,8 @@ vec2 cC2=vec2(.35+.55*hC2,.18+.60*hC1)
 +.03*vec2(sin(u_totalYears*.25+6.2831*hC2),
 cos(u_totalYears*.21+6.2831*hC1));
 
-float mC1=1.-smoothstep(.20,.40,distance(v_uv,cC1));
-float mC2=1.-smoothstep(.16,.34,distance(v_uv,cC2));
+float mC1=1.-smoothstep(.18,.38,distance(v_uv,cC1));
+float mC2=1.-smoothstep(.16,.36,distance(v_uv,cC2));
 float mC=max(mC1,mC2);
 
 // Sodium: two large, gentle washes (dataset-seeded), very soft edges
@@ -98,14 +98,14 @@ vec2 cB=vec2(.12+.75*hNa2,.30+.60*hNa1)
 +.04*vec2(sin(u_totalYears*.21+6.2831*hNa2),
 cos(u_totalYears*.19+6.2831*hNa1));
 
-float mA=1.-smoothstep(.26,.50,distance(v_uv,cA));
-float mB=1.-smoothstep(.24,.48,distance(v_uv,cB));
+float mA=1.-smoothstep(.24,.40,distance(v_uv,cA));
+float mB=1.-smoothstep(.22,.46,distance(v_uv,cB));
 float mNa=max(mA,mB);
 
 // Chloride: "breath" + subtle warble
 vec2 cCl=vec2(.62+.05*sin(t*.27),.28+.04*cos(t*.31));
 float dCl=distance(v_uv,cCl);
-float mCl=1.-smoothstep(.25,.45,dCl);
+float mCl=1.-smoothstep(.23,.43,dCl);
 
 // arrival progression (~60% lifespan milestone)
 float arrivalCl=smoothstep(.55,.65,u_totalYears/64.);
@@ -125,24 +125,24 @@ vec2 c1=vec2(.62+.05*sin(t*.11),.28+.05*cos(t*.09));
 vec2 c2=vec2(.26+.06*cos(t*.07),.68+.05*sin(t*.08));
 float d1=distance(v_uv,c1);
 float d2=distance(v_uv,c2);
-float m1=1.-smoothstep(.30,.52,d1);
-float m2=1.-smoothstep(.26,.48,d2);
+float m1=1.-smoothstep(.28,.50,d1);
+float m2=1.-smoothstep(.25,.47,d2);
 float mCa=max(m1,m2);// two slow drifting lobes
     
     // Nitrogen (test)
-    vec3 nitrogenRGB=hsb2rgb(u_nitrogenHueDeg,.8,.8);
+    vec3 nitrogenRGB=hsb2rgb(u_nitrogenHueDeg,.90,.78);
     rgbColor=clamp(rgbColor+nitrogenRGB*u_nitrogenStrength*mN,0.,1.);
     
     // Creatinine (test)
-    vec3 creatRGB=hsb2rgb(u_creatinineHueDeg,.75,.8);
+    vec3 creatRGB=hsb2rgb(u_creatinineHueDeg,.90,.78);
     rgbColor=clamp(rgbColor+creatRGB*u_creatinineStrength*mC,0.,1.);
 
     // Sodium (test)
-    vec3 sodiumRGB=hsb2rgb(u_sodiumHueDeg,.80,.85);
+    vec3 sodiumRGB=hsb2rgb(u_sodiumHueDeg,.94,.80);
     rgbColor=clamp(rgbColor+sodiumRGB*u_sodiumStrength*mNa,0.,1.);
 
     // Chloride (test)
-    vec3 chlorideRGB=hsb2rgb(u_chlorideHueDeg + 100.,.75,.85);
+    vec3 chlorideRGB=hsb2rgb(u_chlorideHueDeg,.90,.78);
     rgbColor=clamp(rgbColor+chlorideRGB*strengthCl*mCl,0.,1.);
 
     // CO2 (test)
@@ -150,7 +150,7 @@ float mCa=max(m1,m2);// two slow drifting lobes
     rgbColor=clamp(rgbColor+co2Tint*haloW,0.,1.);
 
     // Calcium (test)
-    vec3 caTint=hsb2rgb(u_calciumHueDeg,.65,.95);
+    vec3 caTint=hsb2rgb(u_calciumHueDeg,.88,.82);
     rgbColor=clamp(rgbColor+caTint*(u_calciumStrength*mCa),0.,1.);
 
     float decay=exp(-u_decayPerYear*u_totalYears);
