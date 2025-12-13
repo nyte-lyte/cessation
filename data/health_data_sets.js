@@ -623,7 +623,7 @@ let healthDataSets = [
       calcium: 8.8,
     },
   },
-{
+  {
     date: "2025-09-12",
     ecg: {
       ventRate: 58,
@@ -645,6 +645,30 @@ let healthDataSets = [
       chloride: 106,
       carbonDioxide: 22,
       calcium: 9.0,
+    },
+  },
+  {
+    date: "2025-12-11",
+    ecg: {
+      ventRate: 60,
+      prInterval: 164,
+      qrsInterval: 86,
+      qtInterval: 415,
+      qtcInterval: 416,
+      pAxis: 64,
+      rAxis: 87,
+      tAxis: 74,
+    },
+    labs: {
+      glucose: 119,
+      nitrogen: 17,
+      creatinine: 0.66,
+      eGFR: 111,
+      sodium: 141,
+      potassium: 4.3,
+      chloride: 106,
+      carbonDioxide: 25,
+      calcium: 9.3,
     },
   },
 ];

@@ -137,7 +137,7 @@ function sodiumAmplitude(ds, healthIndex, arrivalProgress, pNa /* 0..1 */) {
 
 // 7) Hue anchor with guardrail against base hue (min 28° gap)
 function sodiumHueDeg(baseHueDeg, ds, pNa /* 0..1 */) {
-  const targetOffset = -18 + 36 * clamp(pNa, 0, 1); // -18°..+18°
+  const targetOffset = -25 + 50 * clamp(pNa, 0, 1); // -18°..+18°
   let hue = baseHueDeg + targetOffset;
 
   const wrap = (h) => ((h % 360) + 360) % 360;
@@ -145,7 +145,7 @@ function sodiumHueDeg(baseHueDeg, ds, pNa /* 0..1 */) {
   let cand = wrap(hue);
   let diff = Math.abs(((cand - base + 540) % 360) - 180); // shortest arc
 
-  if (diff < 32) {
+  if (diff < 36) {
     const push = (32 - diff) * Math.sign(targetOffset || 1);
     cand = wrap(cand + push);
   }
@@ -193,7 +193,7 @@ function chlorideTriWithWarble(phase01, ds) {
 
 // Amplitude from Chloride percentile, gated by arrival and slightly by health
 function chlorideAmplitude(ds, healthIndex, arrCl, pCl /* 0..1 */) {
-  const base = 0.07 + 0.11 * clamp(pCl, 0, 1); // 0.07..0.18
+  const base = 0.09 + 0.13 * clamp(pCl, 0, 1); // 0.07..0.18
   const healthMul = 0.9 + 0.1 * (1 - (healthIndex ?? 0.5));
   return arrCl * base * healthMul;
 }
@@ -202,11 +202,11 @@ function chlorideAmplitude(ds, healthIndex, arrCl, pCl /* 0..1 */) {
 function chlorideHueDeg(baseHueDeg, pCl /* 0..1 */) {
   const wrap = (h) => ((h % 360) + 360) % 360;
   const base = wrap(baseHueDeg);
-  const targetOffset = -16 + 32 * clamp(pCl, 0, 1); // -16°..+16°
+  const targetOffset = -20 + 40 * clamp(pCl, 0, 1); // -16°..+16°
   let cand = wrap(base + targetOffset);
   const diff = Math.abs(((cand - base + 540) % 360) - 180);
-  if (diff < 28) {
-    const push = 28 - diff;
+  if (diff < 32) {
+    const push = 32 - diff;
     cand = wrap(cand + Math.sign(targetOffset || 1) * push);
   }
   return cand;
@@ -336,10 +336,10 @@ async function init() {
   const signed = (hash01 - 0.5) * 2; // -1..+1
 
   // Tuned per-beam ranges (degrees)
-  const nudgeNa = 12 * signed; // ±8°
-  const nudgeCl = 14 * signed; // ±7°
-  const nudgeCO2 = 18 * signed; // ±9° 
-  const nudgeCa = 10 * signed; // ±7°
+  const nudgeNa = 12 * signed; 
+  const nudgeCl = 14 * signed; 
+  const nudgeCO2 = 18 * signed;  
+  const nudgeCa = 12 * signed; 
 
   // decay test helpers
   const params = {
@@ -455,7 +455,7 @@ async function init() {
     const tempoN = getBeamTempoSeconds(currentDataSet, BEAM.NITROGEN);
     window.__phaseN =
       (window.__phaseN || 0) + (dt * (2 * Math.PI)) / Math.max(1e-3, tempoN);
-    const assertN = 0.5;
+    const assertN = 0.58;
     let strN = clamp(
       assertN * (0.5 + 0.5 * Math.sin(window.__phaseN) * ampN),
       0,
@@ -464,13 +464,13 @@ async function init() {
     strN = 0.35 + (0.55 - 0.35) * strN;
     const hueAnchorN = getBeamHueAnchorDeg(currentDataSet, BEAM.NITROGEN);
     const seedN = winsorizedPercentileForLab(
-     currentDataSet,
-     "nitrogen",
-     healthDataSets
-   ); // 0..1
-   const driftAmpN = 10 + 8 * seedN; // 10°..18°
-   const hueDegN =
-     hueAnchorN + driftAmpN * Math.sin(window.__phaseN * 0.95 + 0.12);
+      currentDataSet,
+      "nitrogen",
+      healthDataSets
+    ); // 0..1
+    const driftAmpN = 10 + 8 * seedN;
+    const hueDegN =
+      hueAnchorN + driftAmpN * Math.sin(window.__phaseN * 0.93 + 0.14);
 
     if (uNitrogenStrengthLoc) gl.uniform1f(uNitrogenStrengthLoc, strN);
     if (uNitrogenHueDegLoc) gl.uniform1f(uNitrogenHueDegLoc, hueDegN);
@@ -485,22 +485,22 @@ async function init() {
       "creatinine",
       healthDataSets
     );
-    const assertC = 0.35 + 0.3 * pCreat; // 0.35..0.65
+    const assertC = 0.4 + 0.3 * pCreat;
     let strC = clamp(
       assertC * (0.5 + 0.5 * Math.sin(window.__phaseC) * ampC),
       0,
       1
     );
-    strC = 0.30 + (0.50 - 0.30) * strC;
+    strC = 0.3 + (0.5 - 0.3) * strC;
     const hueAnchorC = getBeamHueAnchorDeg(currentDataSet, BEAM.CREATININE);
     const seedC = winsorizedPercentileForLab(
       currentDataSet,
       "creatinine",
       healthDataSets
     ); // 0..1
-    const driftAmpC = 8 + 5 * seedC; // 8°..13° 
+    const driftAmpC = 8 + 5 * seedC;
     const hueDegC =
-      hueAnchorC + driftAmpC * Math.sin(window.__phaseC * 1.05 + 0.07);
+      hueAnchorC + driftAmpC * Math.sin(window.__phaseC * 1.07 + 0.08);
 
     if (uCreatinineStrengthLoc) gl.uniform1f(uCreatinineStrengthLoc, strC);
     if (uCreatinineHueDegLoc) gl.uniform1f(uCreatinineHueDegLoc, hueDegC);
@@ -524,12 +524,16 @@ async function init() {
       arrNa,
       pNa
     );
-    let hueDegNa = sodiumHueDeg(baseHueDeg, currentDataSet, pNa) + nudgeNa; 
-    const driftAmpNa = 10 + 6 * pNa; // 10°..16° 
-    hueDegNa += driftAmpNa * Math.sin(window.__phaseNa * 0.85 + 0.3);
+    let hueDegNa = sodiumHueDeg(baseHueDeg, currentDataSet, pNa) + nudgeNa;
+    const driftAmpNa = 16 + 4 * pNa;
+    hueDegNa += driftAmpNa * Math.sin(window.__phaseNa * 0.82 + 0.32);
 
-    let strNa = clamp(ampNa * pulseNa, 0, 1);
-    strNa = 0.28 + (0.45 - 0.28) * strNa;
+    // --- Sodium strength with pre-arrival floor ---
+    const floorNa = 0.14; // ~14% visible from early years
+    const targetNa = clamp(ampNa * pulseNa, 0, 1);
+    // blend from floor → target as arrival progresses
+    const strNa = clamp(floorNa * (1.0 - arrNa) + targetNa, 0, 1);
+
     if (uSodiumStrengthLoc) gl.uniform1f(uSodiumStrengthLoc, strNa);
     if (uSodiumHueDegLoc) gl.uniform1f(uSodiumHueDegLoc, hueDegNa);
 
@@ -551,11 +555,13 @@ async function init() {
       arrCl,
       pCl
     );
-    let hueDegCl = chlorideHueDeg(baseHueDeg, pCl) + nudgeCl; 
-    const driftAmpCl = 8 + 6 * pCl; // 8°..14°
-    hueDegCl += driftAmpCl * Math.sin(window.__phaseCl * 0.9 - 0.2);
-    let strCl = clamp(ampCl * shapeCl, 0, 1);
-    strCl = 0.24 + (0.40 - 0.24) * strCl;
+    let hueDegCl = chlorideHueDeg(baseHueDeg, pCl) + nudgeCl;
+    const driftAmpCl = 12 + 6 * pCl;
+    hueDegCl += driftAmpCl * Math.sin(window.__phaseCl * 0.88 - 0.24);
+    // --- Chloride strength with pre-arrival floor ---
+    const floorCl = 0.12; // ~12% visible before full arrival
+    const targetCl = clamp(ampCl * shapeCl, 0, 1);
+    const strCl = clamp(floorCl * (1.0 - arrCl) + targetCl, 0, 1);
 
     if (uChlorideStrength) gl.uniform1f(uChlorideStrength, strCl);
     if (uChlorideHueDeg) gl.uniform1f(uChlorideHueDeg, hueDegCl);
@@ -570,19 +576,19 @@ async function init() {
       computeHSBFromStats(currentDataSet, healthDataSets).hue * 360.0;
 
     // Hue: base −18°..−36° (higher CO2 → cooler), keep ≥26° from base (push cooler)
-    let hueDegCO2 = baseHueDeg5 + (-18 - 18 * pCO2) + nudgeCO2;
+    let hueDegCO2 = baseHueDeg5 - (24 + 12 * pCO2) + nudgeCO2;
     hueDegCO2 = guardHueGap(baseHueDeg5, hueDegCO2, 30, -1);
-    const driftAmpCO2 = 8 + 8 * pCO2; // 8°..16°
+    const driftAmpCO2 = 12 + 6 * pCO2;
     window.__phaseCO2 =
       (window.__phaseCO2 || 0) +
       (dt * (2 * Math.PI)) /
         Math.max(1e-3, getBeamTempoSeconds(currentDataSet, BEAM.CO2));
-    hueDegCO2 += driftAmpCO2 * Math.sin(window.__phaseCO2);
+    hueDegCO2 += driftAmpCO2 * Math.sin(window.__phaseCO2 * 1.0 + 0.2);
 
     // Strength: baseline from health (worse health → a bit more halo), plus ripple pulse that decays
-    const baseCO2 = 0.06 + 0.06 * (1 - pCO2); // 2%..10%
-    co2Pulse *= Math.exp(-dt / 18.0); // ~18s decay in preview time
-    const strCO2 = clamp(baseCO2 + 0.12 * co2Pulse, 0, 0.28); // cap ~28%
+    const baseCO2 = 0.06 + 0.10 * (1 - pCO2);
+    co2Pulse *= Math.exp(-dt / 18.0);
+    const strCO2 = clamp(baseCO2 + 0.18 * co2Pulse, 0, 0.34); // cap ~28%
 
     if (uCo2StrengthLoc) gl.uniform1f(uCo2StrengthLoc, strCO2);
     if (uCo2HueDegLoc) gl.uniform1f(uCo2HueDegLoc, hueDegCO2);
@@ -596,8 +602,8 @@ async function init() {
     const baseHueDeg6 = baseHueDeg5;
 
     // Hue: base +18°..+36° (higher Ca → warmer), keep ≥24° from base (push warmer)
-    let hueDegCa = baseHueDeg6 + (18 + 18 * pCa) + nudgeCa;
-    hueDegCa = guardHueGap(baseHueDeg6, hueDegCa, 28, +1);
+    let hueDegCa = baseHueDeg6 + (45 + 25 * pCa) + nudgeCa;
+    hueDegCa = guardHueGap(baseHueDeg6, hueDegCa, 32, +1);
 
     // Drift: calmer than CO2; seed from PR interval percentile for variety
     const prMin = minMaxValues.prInterval.min,
@@ -607,23 +613,23 @@ async function init() {
       0,
       1
     );
-    const driftAmpCa = 6 + 6 * pPR; // 6°..12°
+    const driftAmpCa = 10 + 6 * pPR;
 
     window.__phaseCa =
       (window.__phaseCa || 0) +
       (dt * (2 * Math.PI)) /
         Math.max(1e-3, getBeamTempoSeconds(currentDataSet, BEAM.CALCIUM));
 
-    hueDegCa += driftAmpCa * Math.sin(window.__phaseCa);
+    hueDegCa += driftAmpCa * Math.sin(window.__phaseCa * 0.92 - 0.13);
 
     // --- Calcium strength (baseline + ripple) ---
-  
-    const hiCO2 = typeof pCO2 !== "undefined" ? pCO2 : 0.5; // fallback
+
+    const hiCO2 = typeof pCO2 !== "undefined" ? pCO2 : 0.5;
 
     caPulse *= Math.exp(-dt / 26.0);
 
-    const baseCa = 0.02 + 0.04 * (1.0 - hiCO2); // cooler CO₂ → warmer Ca baseline
-    const strCa = clamp(baseCa + 0.10 * caPulse, 0.0, 0.24);
+    const baseCa = 0.06 + 0.08 * (1.0 - hiCO2); // cooler CO₂ → warmer Ca baseline
+    const strCa = clamp(baseCa + 0.16 * caPulse, 0.0, 0.30);
 
     if (uCalciumStrengthLoc) gl.uniform1f(uCalciumStrengthLoc, strCa);
     if (uCalciumHueDegLoc) gl.uniform1f(uCalciumHueDegLoc, hueDegCa);
@@ -641,7 +647,7 @@ async function init() {
       `Warp: x${params.timeWarp}`,
     ].join("\n");
 
-    // Right overlay 
+    // Right overlay
     beamOverlay.textContent = [
       `N (BUN): str=${strN.toFixed(2)} hue=${(
         ((hueDegN % 360) + 360) %
