@@ -397,6 +397,40 @@ async function init() {
     gl.uniform1f(uEgfrLoc, bri);
   }
 
+  function hsb01ToRgb255(h, s, b) {
+    // h,s,b are 0..1
+    const H = (h * 360) % 360;
+    const C = b * s;
+    const Hp = H / 60;
+    const X = C * (1 - Math.abs((Hp % 2) - 1));
+
+    let r1 = 0,
+      g1 = 0,
+      b1 = 0;
+    if (0 <= Hp && Hp < 1) [r1, g1, b1] = [C, X, 0];
+    else if (1 <= Hp && Hp < 2) [r1, g1, b1] = [X, C, 0];
+    else if (2 <= Hp && Hp < 3) [r1, g1, b1] = [0, C, X];
+    else if (3 <= Hp && Hp < 4) [r1, g1, b1] = [0, X, C];
+    else if (4 <= Hp && Hp < 5) [r1, g1, b1] = [X, 0, C];
+    else if (5 <= Hp && Hp < 6) [r1, g1, b1] = [C, 0, X];
+
+    const m = b - C;
+    const r = Math.round((r1 + m) * 255);
+    const g = Math.round((g1 + m) * 255);
+    const bl = Math.round((b1 + m) * 255);
+
+    return {
+      r: Math.max(0, Math.min(255, r)),
+      g: Math.max(0, Math.min(255, g)),
+      b: Math.max(0, Math.min(255, bl)),
+    };
+  }
+
+  function rgb255ToHex({ r, g, b }) {
+    const to2 = (n) => n.toString(16).padStart(2, "0");
+    return `#${to2(r)}${to2(g)}${to2(b)}`.toUpperCase();
+  }
+
   function setResolutionUniform() {
     gl.uniform2f(uResolutionLoc, gl.canvas.width, gl.canvas.height);
   }
@@ -447,8 +481,11 @@ async function init() {
     gl.uniform1f(uTotalYearsLoc, totalYears);
 
     // Compute base hue
-    let baseHueDeg =
-      computeHSBFromStats(currentDataSet, healthDataSets).hue * 360.0;
+    const baseHSB = computeHSBFromStats(currentDataSet, healthDataSets); // 0..1
+    let baseHueDeg = baseHSB.hue * 360.0;
+
+    const baseRgb255 = hsb01ToRgb255(baseHSB.hue, baseHSB.sat, baseHSB.bri);
+    const baseHex = rgb255ToHex(baseRgb255);
 
     // ── NITROGEN (direct beam #1) ──
     const ampN = getBreathingAmplitude(currentDataSet);
@@ -669,6 +706,7 @@ async function init() {
         (arrCl < 1 ? `  (arriving ${Math.round(arrCl * 100)}%)` : ``),
       `CO2: str=${strCO2.toFixed(2)} hue=${wrapDeg(hueDegCO2).toFixed(0)}°`,
       `Ca: str=${strCa.toFixed(2)} hue=${wrapDeg(hueDegCa).toFixed(0)}°`,
+      `BaseHex: ${baseHex}`,
     ].join("\n");
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
