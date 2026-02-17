@@ -1,3 +1,5 @@
+import { calculateDynamicDecayRate } from "./decay_logic.js";
+
 let healthDataSets = [
   {
     date: "2018-07-16",
@@ -933,16 +935,10 @@ function calculateHealthIndex(data) {
 
 // ---- Decay enrichment (baseline tuned for a 32-year piece) ----
 function updateDecayRates() {
-  const BASE_DECAY_PER_YEAR_32 = 0.01; // keep as your reference; adjust if needed
-
   healthDataSets.forEach((dataSet) => {
-    const hi = calculateHealthIndex(dataSet); // 0..1
-    // Example shaping: worse health (lower HI) => faster decay
-    // Feel free to swap in your exact formula from decay_logic.js later.
-    const shaped = BASE_DECAY_PER_YEAR_32 * (1 + Math.pow(1 - hi, 2));
-
-    dataSet.healthIndex = hi; // persist for movement/color if needed
-    dataSet.decayRate = shaped; // per year, assuming 32-year baseline
+    const hi = calculateHealthIndex(dataSet);
+    dataSet.healthIndex = hi;
+    dataSet.decayRate = calculateDynamicDecayRate(dataSet, minMaxValues, hi);
   });
 }
 
@@ -950,7 +946,6 @@ function updateDecayRates() {
 updateDecayRates();
 
 healthDataSets.forEach((dataSet, index) => {
-  let healthIndex = calculateHealthIndex(dataSet);
   console.log(
     `Dataset ${index} (${
       dataSet.date

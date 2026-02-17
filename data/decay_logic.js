@@ -1,71 +1,51 @@
-let baseDecayRate = 0.01;
+// decay_logic.js
+// Computes a per-dataset decay rate from health markers.
+//
+// BASE_DECAY_PER_YEAR_32 = 0.01 is the reference rate for a 32-year piece with
+// average health. main.js scales dataset.decayRate by (32 / lifespanYears),
+// where lifespanYears is derived from the BTC block hash at mint.
 
-function calculateDynamicBaseDecayRate(dataSet) {
-  let normalizedQTc = normalize(
+const BASE_DECAY_PER_YEAR_32 = 0.01;
+
+function calculateDynamicDecayRate(dataSet, minMaxValues, healthIndex) {
+  function norm(val, min, max) {
+    if (max - min === 0) return 0;
+    return (val - min) / (max - min);
+  }
+
+  const nQTc = norm(
     dataSet.ecg.qtcInterval,
     minMaxValues.qtcInterval.min,
     minMaxValues.qtcInterval.max
   );
-  let normalizedCreatinine = normalize(
+  const nCreatinine = norm(
     dataSet.labs.creatinine,
     minMaxValues.creatinine.min,
     minMaxValues.creatinine.max
   );
-  let normalizedEGFR = normalize(
+  const nEGFR = norm(
     dataSet.labs.eGFR,
     minMaxValues.eGFR.min,
     minMaxValues.eGFR.max
   );
-  let normalizedGlucose = normalize(
+  const nGlucose = norm(
     dataSet.labs.glucose,
     minMaxValues.glucose.min,
     minMaxValues.glucose.max
   );
 
-  let weightQTc = 0.4;
-  let weightCreatinine = 0.3;
-  let weightEGFR = 0.2;
-  let weightGlucose = 0.1;
+  // 0..1 score: higher = worse health markers = faster decay
+  // Higher QTc, higher creatinine, lower eGFR, higher glucose → faster decay
+  const score =
+    nQTc * 0.4 +
+    nCreatinine * 0.3 +
+    (1 - nEGFR) * 0.2 +
+    nGlucose * 0.1;
 
-  let dynamicBaseDecayRate =
-    normalizedQTc * weightQTc +
-    normalizedCreatinine * weightCreatinine +
-    (1 - normalizedEGFR) * weightEGFR +
-    normalizedGlucose * weightGlucose;
+  // Health index further amplifies decay for worse overall health
+  const shaped = score * (1 + Math.pow(1 - healthIndex, 2));
 
-  return dynamicBaseDecayRate;
+  return BASE_DECAY_PER_YEAR_32 * shaped;
 }
 
-function updateDecayRate(dataSet) {
-  let dynamicBaseDecayRate = calculateDynamicBaseDecayRate(dataSet);
-
-  let healthIndex = calculateHealthIndex(dataSet);
-
-  let adjustedDecayRate = dynamicBaseDecayRate * (1 + Math.pow(1 - healthIndex, 2));
-
-  if (adjustedDecayRate < dynamicBaseDecayRate) {
-    adjustedDecayRate = constrain(adjustedDecayRate, 0.0001, dynamicBaseDecayRate * 2);
-  }
-
-  dataSet.decayRate = adjustedDecayRate;
-
-  console.log(
-    `Date: ${dataSet.date}, Health Index: ${healthIndex}, Decay Rate: ${adjustedDecayRate}`
-  );
-
-  applyDecay(adjustedDecayRate);
-}
-
-function applyDecay(cell, rate) {
-  cell.health -= rate;
-  if (cell.health < 0) {
-    cell.health = 0;
-  }
- 
-}
-
-healthDataSets.forEach((dataSet) => {
-  updateDecayRate(dataSet);
-});
-
- console.log("Updated healthDataSets with decay rates:", healthDataSets);
+export { calculateDynamicDecayRate, BASE_DECAY_PER_YEAR_32 };
