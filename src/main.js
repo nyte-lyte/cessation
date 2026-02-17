@@ -799,7 +799,6 @@ const BEAM = Object.freeze({
   CO2: 4, // ripple
   CALCIUM: 5, // ripple
 });
-const BEAM_COUNT = 6;
 
 // Winsorized percentile helper for any lab key (5–95%)
 function winsorizedPercentileForLab(
@@ -867,11 +866,7 @@ function getBeamHueAnchorDeg(dataSet, _beamId) {
 }
 
 // Overlay toggle
-window.toggleOverlay = () => {
-  overlay.style.display = overlay.style.display === "none" ? "block" : "none";
-};
-
-// overlays
+// overlays — hidden by default, toggle with window.toggleOverlay()
 const overlay = document.createElement("div");
 overlay.style.position = "fixed";
 overlay.style.top = "5px";
@@ -884,6 +879,7 @@ overlay.style.fontFamily = "monospace";
 overlay.style.fontSize = "12px";
 overlay.style.textAlign = "left";
 overlay.style.zIndex = "9999";
+overlay.style.display = "none";
 document.body.appendChild(overlay);
 
 const beamOverlay = document.createElement("div");
@@ -900,6 +896,13 @@ beamOverlay.style.fontSize = "12px";
 beamOverlay.style.textAlign = "right";
 beamOverlay.style.zIndex = "9999";
 beamOverlay.style.pointerEvents = "none";
+beamOverlay.style.display = "none";
 document.body.appendChild(beamOverlay);
+
+window.toggleOverlay = () => {
+  const show = overlay.style.display === "none";
+  overlay.style.display = show ? "block" : "none";
+  beamOverlay.style.display = show ? "block" : "none";
+};
 
 init();
