@@ -308,6 +308,8 @@ async function init() {
     "u_calciumStrength"
   );
   const uCalciumHueDegLoc = gl.getUniformLocation(program, "u_calciumHueDeg");
+  const uPAxisNormLoc = gl.getUniformLocation(program, "u_pAxisNorm");
+  const uRAxisNormLoc = gl.getUniformLocation(program, "u_rAxisNorm");
 
   let currentDataSetIndex = 0;
   let currentDataSet = healthDataSets[currentDataSetIndex];
@@ -479,6 +481,18 @@ async function init() {
 
     gl.uniform1f(uDecayPerYearLoc, effectiveDecayPerYear);
     gl.uniform1f(uTotalYearsLoc, totalYears);
+
+    // ECG axis uniforms — pAxis and rAxis normalized over dataset min/max
+    const pAxisNorm = clamp(
+      normalize(currentDataSet.ecg.pAxis, minMaxValues.pAxis.min, minMaxValues.pAxis.max),
+      0, 1
+    );
+    const rAxisNorm = clamp(
+      normalize(currentDataSet.ecg.rAxis, minMaxValues.rAxis.min, minMaxValues.rAxis.max),
+      0, 1
+    );
+    if (uPAxisNormLoc) gl.uniform1f(uPAxisNormLoc, pAxisNorm);
+    if (uRAxisNormLoc) gl.uniform1f(uRAxisNormLoc, rAxisNorm);
 
     // Compute base hue
     const baseHSB = computeHSBFromStats(currentDataSet, healthDataSets); // 0..1
@@ -686,6 +700,8 @@ async function init() {
 
     // Right overlay
     beamOverlay.textContent = [
+      `pAxis: ${currentDataSet.ecg.pAxis}° (norm=${pAxisNorm.toFixed(2)})`,
+      `rAxis: ${currentDataSet.ecg.rAxis}° (norm=${rAxisNorm.toFixed(2)})`,
       `N (BUN): str=${strN.toFixed(2)} hue=${(
         ((hueDegN % 360) + 360) %
         360
@@ -825,7 +841,7 @@ function getBreathingAmplitude(dataSet) {
 }
 
 // Tempo mapper stub
-function getBeamTempoSeconds(dataSet, beamId) {
+function getBeamTempoSeconds(_dataSet, beamId) {
   switch (beamId) {
     case BEAM.NITROGEN:
       return 10.0;
@@ -844,36 +860,11 @@ function getBeamTempoSeconds(dataSet, beamId) {
   }
 }
 
-// Hue anchor + drift stubs
-function getBeamHueAnchorDeg(dataSet, beamId) {
+// Hue anchor stub
+function getBeamHueAnchorDeg(dataSet, _beamId) {
   const { hue } = computeHSBFromStats(dataSet, healthDataSets);
   return hue * 360.0; // degrees
 }
-function getBeamHueDriftDeg(dataSet, beamId) {
-  return 12.0; // degrees
-}
-
-// Lifespan-proportional total cap (unused cap helper for now)
-function getTotalIntensityCap(lifespanYears, decayProgress /*0..1*/) {
-  const L = Math.max(10, Math.min(64, lifespanYears));
-  const base = 0.28 + ((L - 10) / (64 - 10)) * (0.38 - 0.28);
-  const dimmer = Math.max(0.3, 1.0 - decayProgress);
-  return base * dimmer;
-}
-const PER_BEAM_CAP = 0.3;
-
-// Beam state container (reserved)
-const beamState = Array.from({ length: BEAM_COUNT }, (_, id) => ({
-  id,
-  active: false,
-  assertiveness: 0.0,
-  hueAnchorDeg: 0.0,
-  hueDriftDeg: 0.0,
-  tempoSec: 12.0,
-  phase: 0.0,
-  baseline: 0.0,
-  strength: 0.0,
-}));
 
 // Overlay toggle
 window.toggleOverlay = () => {

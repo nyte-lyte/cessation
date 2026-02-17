@@ -28,6 +28,10 @@ uniform float u_co2HueDeg;
 uniform float u_calciumStrength;
 uniform float u_calciumHueDeg;
 
+// ECG axis uniforms — drive beam spatial positioning
+uniform float u_pAxisNorm;   // P wave axis, normalized 0..1 over dataset range
+uniform float u_rAxisNorm;   // R wave (QRS) axis, normalized 0..1 over dataset range
+
 // --- helpers ---
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -67,51 +71,49 @@ void main(){
     // --- minimal spatial masks (drift uses u_totalYears) ---
     float t = u_totalYears;
 
-// Nitrogen: dataset-seeded center + gentle drift
-float hN1 = fract(sin(u_glucose * 43758.5453) * 1e4);
-float hN2 = fract(sin(u_potassium * 24693.9753) * 1e4);
+// ECG axis deviation from dataset midpoint: -0.5..+0.5
+// Outlier datasets (e.g. March 2025, pAxis=148, rAxis=143) push toward +0.5;
+// healthy normal-axis datasets cluster in the negative range.
+float pS = u_pAxisNorm - 0.5;
+float rS = u_rAxisNorm - 0.5;
 
-vec2 cN = vec2(.15+ .70 * hN1, .20 + .65 * hN2);
-cN += .05 * vec2(
-    sin(u_totalYears * .33+ 6.2831 * hN1),
-    cos(u_totalYears * .27+ 6.2831 * hN2)
+// Nitrogen: pAxis drives position; rAxis drives secondary axis
+vec2 cN = vec2(0.35 + 0.35 * pS, 0.45 + 0.30 * rS);
+cN += 0.05 * vec2(
+    sin(t * .33 + 6.2831 * u_pAxisNorm),
+    cos(t * .27 + 6.2831 * u_rAxisNorm)
 );
 
 float dN = distance(v_uv, cN);
-float mN = 1.0 - smoothstep(.30, .60, dN);// inner/outer radii = size/softness
+float mN = 1.0 - smoothstep(.30, .60, dN);
 
-// Creatinine: two localized blobs
-float hC1 = fract(sin(u_potassium*19641.1231) * 1e4);
-float hC2 = fract(sin(u_eGFR*15431.7311) * 1e4);
-
-vec2 cC1 = vec2(.20 + .60 * hC1, .25 + .55 * hC2)
-+.04 * vec2(sin(u_totalYears * .29 + 6.2831 * hC1),
-cos(u_totalYears * .31 + 6.2831 * hC2));
-vec2 cC2=vec2(.35 + .55 * hC2, .18 + .60 * hC1)
-+.03 * vec2(sin(u_totalYears * .25 + 6.2831 * hC2),
-cos(u_totalYears *.21 + 6.2831 * hC1));
+// Creatinine: two blobs, pAxis inverted so they mirror Nitrogen
+vec2 cC1 = vec2(0.65 - 0.30 * pS, 0.55 + 0.25 * rS)
+    + 0.04 * vec2(sin(t * .29 + 6.2831 * (1.0 - u_pAxisNorm)),
+                  cos(t * .31 + 6.2831 * u_rAxisNorm));
+vec2 cC2 = vec2(0.50 + 0.25 * pS, 0.28 - 0.25 * rS)
+    + 0.03 * vec2(sin(t * .25 + 6.2831 * u_pAxisNorm),
+                  cos(t * .21 + 6.2831 * (1.0 - u_rAxisNorm)));
 
 float mC1 = 1.0 - smoothstep(.20, .40, distance(v_uv, cC1));
 float mC2 = 1.0 - smoothstep(.16, .34, distance(v_uv, cC2));
 float mC = max(mC1, mC2);
 
-// Sodium: two large, gentle washes (dataset-seeded), very soft edges
-float hNa1 = fract(sin(u_eGFR * 17321.5521) * 1e4);
-float hNa2 = fract(sin(u_glucose * 21391.3459) * 1e4);
-
-vec2 cA = vec2(.25 + .65 * hNa1, .22 + .65 * hNa2)
-+ .04 * vec2(cos(u_totalYears * .33+ 6.2831 * hNa1),
-sin(u_totalYears * .27 + 6.2831 * hNa2));
-vec2 cB = vec2(.12 + .75 * hNa2,.30 + .60 * hNa1)
-+ .04 * vec2(sin(u_totalYears * .21 + 6.2831 * hNa2),
-cos(u_totalYears * .19 + 6.2831 * hNa1));
+// Sodium: rAxis primary, pAxis secondary (axes swapped from Nitrogen)
+vec2 cA = vec2(0.28 + 0.32 * rS, 0.62 + 0.28 * pS)
+    + 0.04 * vec2(cos(t * .33 + 6.2831 * u_rAxisNorm),
+                  sin(t * .27 + 6.2831 * u_pAxisNorm));
+vec2 cB = vec2(0.62 - 0.28 * rS, 0.32 - 0.28 * pS)
+    + 0.04 * vec2(sin(t * .21 + 6.2831 * (1.0 - u_rAxisNorm)),
+                  cos(t * .19 + 6.2831 * (1.0 - u_pAxisNorm)));
 
 float mA = 1. - smoothstep(.26, .50, distance(v_uv, cA));
 float mB = 1. - smoothstep(.24, .48, distance(v_uv, cB));
 float mNa = max(mA, mB);
 
-// Chloride: "breath" + subtle warble
-vec2 cCl = vec2(.62 + .05 * sin(t * .27), .28+ .04 * cos(t * .31));
+// Chloride: rAxis drives position
+vec2 cCl = vec2(0.55 + 0.22 * rS + .05 * sin(t * .27),
+               0.45 - 0.20 * pS + .04 * cos(t * .31));
 float dCl = distance(v_uv, cCl);
 float mCl = 1.0 - smoothstep(.25, .45, dCl);
 
@@ -120,7 +122,7 @@ float arrivalCl = smoothstep(.55, .65, u_totalYears/64.);
 float breathCl = .6 + .4 * sin(t * .4);
 float strengthCl = u_sodiumStrength * arrivalCl * breathCl;
 
-// CO2: HALO (cool, edge-biased ambient blend) 
+// CO2: HALO (cool, edge-biased ambient blend)
 float lum = dot(rgbColor, vec3(.299, .587, .114));
 float edge = length(vec2(dFdx(lum), dFdy(lum)));
 float edgeW = smoothstep(.004, .050, edge);// stronger where colors meet
@@ -128,9 +130,11 @@ float ambW = .35 + .65 * rand(v_uv + vec2(t * .02, - t * .017));// soft presence
 float localGain = smoothstep(.06, .72, lum);// avoid dark wash
 float haloW = u_co2Strength * mix(ambW, edgeW, .70) * localGain;
 
-// CALCIUM: field(warm, broad low-frequency glow) 
-vec2 c1 = vec2(.62 + .05 * sin(t * .11), .28 + .05 * cos(t * .09));
-vec2 c2 = vec2(.26 + .06 * cos(t * .07), .68 + .05 * sin(t * .08));
+// CALCIUM: both axes; lobes are pushed in opposite directions
+vec2 c1 = vec2(0.62 + 0.22 * pS + .05 * sin(t * .11),
+              0.32 + 0.18 * rS + .05 * cos(t * .09));
+vec2 c2 = vec2(0.32 - 0.18 * rS + .06 * cos(t * .07),
+              0.65 - 0.22 * pS + .05 * sin(t * .08));
 float d1 = distance(v_uv, c1);
 float d2 = distance(v_uv, c2);
 float m1 = 1. - smoothstep(.30, .52, d1);
