@@ -13,6 +13,7 @@ uniform vec2 u_resolution;
 // Decay uniforms
 uniform float u_decayPerYear;
 uniform float u_totalYears;
+uniform float u_lifespanYears;
 
 // Beam uniforms
 uniform float u_nitrogenStrength;
@@ -64,34 +65,46 @@ void main(){
     float n = rand(v_uv * u_resolution.xy * .1) * .02;
     float t = u_totalYears;
 
+    // Life fraction and drift growth — the piece moves more as it ages
+    float lifeFraction = clamp(u_totalYears / max(u_lifespanYears, 0.001), 0.0, 1.0);
+    float driftMul = 0.5 + 0.8 * lifeFraction; // grows from 0.5 at birth to 1.3 at death
+
     // ECG axis deviation: -0.5..+0.5 from dataset midpoint
     float pS = u_pAxisNorm - 0.5;
     float rS = u_rAxisNorm - 0.5;
+
+    // Slow hue evolution — each field drifts at a unique rate seeded by ECG axes.
+    // At 2-3 degrees/year these are imperceptible day-to-day but shift the palette
+    // meaningfully over decades, like a body's chemistry slowly changing.
+    float hDrift1 = t * 2.5 + 180.0 * u_pAxisNorm;
+    float hDrift2 = -t * 1.8 + 120.0 * u_rAxisNorm;
+    float hDrift3 = t * 3.1 + 90.0 * (1.0 - u_pAxisNorm);
 
     // --- Base layer: three color fields blending across the canvas ---
     // Metabolic values drive each field's color; ECG axes drive their positions.
     // Fields overlap and mix at their boundaries — different regions of the
     // canvas have genuinely different dominant colors, like paint on canvas.
+    // Drift amplitude grows with lifeFraction so composition shifts more with age.
 
-    // Field centers: axis-displaced base positions with slow independent drift
+    // Field centers: axis-displaced base positions with age-growing drift
     vec2 cf1 = vec2(0.35 + 0.35 * pS, 0.45 + 0.30 * rS)
-        + 0.06 * vec2(sin(t * 0.11 + 6.2831 * u_pAxisNorm),
-                      cos(t * 0.09 + 6.2831 * u_rAxisNorm));
+        + 0.12 * driftMul * vec2(sin(t * 0.11 + 6.2831 * u_pAxisNorm),
+                                  cos(t * 0.09 + 6.2831 * u_rAxisNorm));
 
     vec2 cf2 = vec2(0.70 - 0.28 * pS, 0.30 + 0.22 * rS)
-        + 0.05 * vec2(cos(t * 0.07 + 6.2831 * u_rAxisNorm),
-                      sin(t * 0.13 + 6.2831 * u_pAxisNorm));
+        + 0.11 * driftMul * vec2(cos(t * 0.07 + 6.2831 * u_rAxisNorm),
+                                  sin(t * 0.13 + 6.2831 * u_pAxisNorm));
 
     vec2 cf3 = vec2(0.42 + 0.22 * rS, 0.68 - 0.25 * pS)
-        + 0.05 * vec2(sin(t * 0.09 + 6.2831 * (1.0 - u_pAxisNorm)),
-                      cos(t * 0.07 + 6.2831 * (1.0 - u_rAxisNorm)));
+        + 0.11 * driftMul * vec2(sin(t * 0.09 + 6.2831 * (1.0 - u_pAxisNorm)),
+                                  cos(t * 0.07 + 6.2831 * (1.0 - u_rAxisNorm)));
 
     // Inherited field — 4th color field from ancestor piece, fades over lifespan.
     // Positioned in a different quadrant from cf1 so both coexist spatially.
     // Drift is π-offset from cf1 so they move somewhat out of phase.
     vec2 cf4 = vec2(0.65 - 0.20 * pS, 0.58 + 0.20 * rS)
-        + 0.06 * vec2(cos(t * 0.11 + 3.1416 * u_pAxisNorm),
-                      sin(t * 0.09 + 3.1416 * u_rAxisNorm));
+        + 0.12 * driftMul * vec2(cos(t * 0.11 + 3.1416 * u_pAxisNorm),
+                                  sin(t * 0.09 + 3.1416 * u_rAxisNorm));
 
     // Gaussian weights: soft falloff so colors blend smoothly at boundaries
     float sigma2 = 0.20;
@@ -101,11 +114,11 @@ void main(){
     float w4 = exp(-dot(v_uv - cf4, v_uv - cf4) / sigma2) * u_inheritedStrength;
     float wSum = w1 + w2 + w3 + w4 + 1e-6;
 
-    // Field colors: metabolic values drive hue, sat, bri
-    vec3 col1 = hsb2rgb(u_glucose * 360., 0.55 + 0.35 * u_potassium, 0.35 + 0.55 * u_eGFR);
-    vec3 col2 = hsb2rgb(u_co2HueDeg,       0.55,                     0.50 + 0.30 * u_eGFR);
-    vec3 col3 = hsb2rgb(u_calciumHueDeg,   0.62,                     0.48 + 0.30 * u_eGFR);
-    vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.58,                     0.52 + 0.28 * u_eGFR);
+    // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
+    vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.55 + 0.35 * u_potassium, 0.35 + 0.55 * u_eGFR);
+    vec3 col2 = hsb2rgb(mod(u_co2HueDeg      + hDrift2, 360.), 0.55,                      0.50 + 0.30 * u_eGFR);
+    vec3 col3 = hsb2rgb(mod(u_calciumHueDeg  + hDrift3, 360.), 0.62,                      0.48 + 0.30 * u_eGFR);
+    vec3 col4 = hsb2rgb(u_inheritedHueDeg,                     0.58,                      0.52 + 0.28 * u_eGFR);
 
     vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum;
     rgbColor = clamp(rgbColor + n * 0.4, 0., 1.);
@@ -199,6 +212,9 @@ float mCa = max(m1, m2);// two slow drifting lobes
     vec3 caTint = hsb2rgb(u_calciumHueDeg, 0.70, 0.95);
     rgbColor = screenBlend(rgbColor, caTint, u_calciumStrength * mCa * darkW);
 
-    float decay = exp(-u_decayPerYear * u_totalYears);
+    // Decay: stays near full brightness until ~70% of lifespan, then drops steeply.
+    // Models how a body stays vital most of its life and deteriorates near the end.
+    float latePhase = smoothstep(0.70, 1.00, lifeFraction);
+    float decay = exp(-u_decayPerYear * u_totalYears) * (1.0 - 0.90 * latePhase * latePhase);
     fragColor = vec4(rgbColor * decay, 1.0);
 }
