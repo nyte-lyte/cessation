@@ -32,6 +32,10 @@ uniform float u_calciumHueDeg;
 uniform float u_pAxisNorm;   // P wave axis, normalized 0..1 over dataset range
 uniform float u_rAxisNorm;   // R wave (QRS) axis, normalized 0..1 over dataset range
 
+// Inheritance uniforms — color field carried in from previous piece at mint
+uniform float u_inheritedHueDeg;  // hue in degrees, frozen at mint from ancestor
+uniform float u_inheritedStrength; // 0..1, fades toward 0 over piece lifespan
+
 // --- helpers ---
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -82,19 +86,28 @@ void main(){
         + 0.05 * vec2(sin(t * 0.09 + 6.2831 * (1.0 - u_pAxisNorm)),
                       cos(t * 0.07 + 6.2831 * (1.0 - u_rAxisNorm)));
 
+    // Inherited field — 4th color field from ancestor piece, fades over lifespan.
+    // Positioned in a different quadrant from cf1 so both coexist spatially.
+    // Drift is π-offset from cf1 so they move somewhat out of phase.
+    vec2 cf4 = vec2(0.65 - 0.20 * pS, 0.58 + 0.20 * rS)
+        + 0.06 * vec2(cos(t * 0.11 + 3.1416 * u_pAxisNorm),
+                      sin(t * 0.09 + 3.1416 * u_rAxisNorm));
+
     // Gaussian weights: soft falloff so colors blend smoothly at boundaries
     float sigma2 = 0.20;
     float w1 = exp(-dot(v_uv - cf1, v_uv - cf1) / sigma2);
     float w2 = exp(-dot(v_uv - cf2, v_uv - cf2) / sigma2);
     float w3 = exp(-dot(v_uv - cf3, v_uv - cf3) / sigma2);
-    float wSum = w1 + w2 + w3 + 1e-6;
+    float w4 = exp(-dot(v_uv - cf4, v_uv - cf4) / sigma2) * u_inheritedStrength;
+    float wSum = w1 + w2 + w3 + w4 + 1e-6;
 
     // Field colors: metabolic values drive hue, sat, bri
     vec3 col1 = hsb2rgb(u_glucose * 360., 0.55 + 0.35 * u_potassium, 0.35 + 0.55 * u_eGFR);
-    vec3 col2 = hsb2rgb(u_co2HueDeg,      0.55,                      0.50 + 0.30 * u_eGFR);
-    vec3 col3 = hsb2rgb(u_calciumHueDeg,  0.62,                      0.48 + 0.30 * u_eGFR);
+    vec3 col2 = hsb2rgb(u_co2HueDeg,       0.55,                     0.50 + 0.30 * u_eGFR);
+    vec3 col3 = hsb2rgb(u_calciumHueDeg,   0.62,                     0.48 + 0.30 * u_eGFR);
+    vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.58,                     0.52 + 0.28 * u_eGFR);
 
-    vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3) / wSum;
+    vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum;
     rgbColor = clamp(rgbColor + n * 0.4, 0., 1.);
 
 // Nitrogen: pAxis drives position; rAxis drives secondary axis

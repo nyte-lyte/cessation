@@ -310,6 +310,8 @@ async function init() {
   const uCalciumHueDegLoc = gl.getUniformLocation(program, "u_calciumHueDeg");
   const uPAxisNormLoc = gl.getUniformLocation(program, "u_pAxisNorm");
   const uRAxisNormLoc = gl.getUniformLocation(program, "u_rAxisNorm");
+  const uInheritedHueDegLoc = gl.getUniformLocation(program, "u_inheritedHueDeg");
+  const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
 
   let currentDataSetIndex = 0;
   let currentDataSet = healthDataSets[currentDataSetIndex];
@@ -333,6 +335,15 @@ async function init() {
   const lastTwoHashDigits = 88;
   const inscriptionUnixSeconds = 1704067200;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
+
+  // Inherited hue — stub: piece 0's primary (glucose) hue in degrees.
+  // TODO: replace with the ancestor piece's hue read from chain at mint time.
+  const ancestorHueDeg = computeHSBFromStats(healthDataSets[0], healthDataSets).hue * 360;
+  let inheritedHueDeg = ancestorHueDeg;
+
+  // Console override for tuning the inherited hue visually before chain integration
+  window.setInheritedHue = (deg) => { inheritedHueDeg = ((deg % 360) + 360) % 360; };
+  window.resetInheritedHue = () => { inheritedHueDeg = ancestorHueDeg; };
 
   const hash01 = lastTwoHashDigits / 99; // 0..1
   const signed = (hash01 - 0.5) * 2; // -1..+1
@@ -493,6 +504,12 @@ async function init() {
     );
     if (uPAxisNormLoc) gl.uniform1f(uPAxisNormLoc, pAxisNorm);
     if (uRAxisNormLoc) gl.uniform1f(uRAxisNormLoc, rAxisNorm);
+
+    // Inherited color field — fades from full presence at birth toward 0 at end of life
+    const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
+    const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
+    if (uInheritedHueDegLoc) gl.uniform1f(uInheritedHueDegLoc, inheritedHueDeg);
+    if (uInheritedStrengthLoc) gl.uniform1f(uInheritedStrengthLoc, inheritedStrength);
 
     // Compute base hue
     const baseHSB = computeHSBFromStats(currentDataSet, healthDataSets); // 0..1
@@ -696,6 +713,7 @@ async function init() {
         ? `Mode: OVERRIDE (${params.overrideYears}y)`
         : `Mode: REALTIME`,
       `Warp: x${params.timeWarp}`,
+      `Inherited: ${inheritedHueDeg.toFixed(0)}° str=${inheritedStrength.toFixed(2)}`,
     ].join("\n");
 
     // Right overlay
