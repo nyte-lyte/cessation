@@ -58,24 +58,44 @@ vec3 screenBlend(vec3 base,vec3 tint,float k){
 
 void main(){
     float n = rand(v_uv * u_resolution.xy * .1) * .02;
-    
-    float pixelHue = mod(u_glucose * 360. + (v_uv.x * 120. + v_uv.y * 120.) * n, 360.);
-    float pixelSat = clamp(.45 + u_potassium * .55 + n * 2., 0., 1.);
-    float pixelBri = clamp(.15 + u_eGFR * .9 + n * 2., 0., 1.);
-    
-    vec3 rgbColor = hsb2rgb(pixelHue, pixelSat, pixelBri);
-
-    //fragColor = vec4(rgbColor, 1.0);
-    //return;
-
-    // --- minimal spatial masks (drift uses u_totalYears) ---
     float t = u_totalYears;
 
-// ECG axis deviation from dataset midpoint: -0.5..+0.5
-// Outlier datasets (e.g. March 2025, pAxis=148, rAxis=143) push toward +0.5;
-// healthy normal-axis datasets cluster in the negative range.
-float pS = u_pAxisNorm - 0.5;
-float rS = u_rAxisNorm - 0.5;
+    // ECG axis deviation: -0.5..+0.5 from dataset midpoint
+    float pS = u_pAxisNorm - 0.5;
+    float rS = u_rAxisNorm - 0.5;
+
+    // --- Base layer: three color fields blending across the canvas ---
+    // Metabolic values drive each field's color; ECG axes drive their positions.
+    // Fields overlap and mix at their boundaries — different regions of the
+    // canvas have genuinely different dominant colors, like paint on canvas.
+
+    // Field centers: axis-displaced base positions with slow independent drift
+    vec2 cf1 = vec2(0.35 + 0.35 * pS, 0.45 + 0.30 * rS)
+        + 0.06 * vec2(sin(t * 0.11 + 6.2831 * u_pAxisNorm),
+                      cos(t * 0.09 + 6.2831 * u_rAxisNorm));
+
+    vec2 cf2 = vec2(0.70 - 0.28 * pS, 0.30 + 0.22 * rS)
+        + 0.05 * vec2(cos(t * 0.07 + 6.2831 * u_rAxisNorm),
+                      sin(t * 0.13 + 6.2831 * u_pAxisNorm));
+
+    vec2 cf3 = vec2(0.42 + 0.22 * rS, 0.68 - 0.25 * pS)
+        + 0.05 * vec2(sin(t * 0.09 + 6.2831 * (1.0 - u_pAxisNorm)),
+                      cos(t * 0.07 + 6.2831 * (1.0 - u_rAxisNorm)));
+
+    // Gaussian weights: soft falloff so colors blend smoothly at boundaries
+    float sigma2 = 0.20;
+    float w1 = exp(-dot(v_uv - cf1, v_uv - cf1) / sigma2);
+    float w2 = exp(-dot(v_uv - cf2, v_uv - cf2) / sigma2);
+    float w3 = exp(-dot(v_uv - cf3, v_uv - cf3) / sigma2);
+    float wSum = w1 + w2 + w3 + 1e-6;
+
+    // Field colors: metabolic values drive hue, sat, bri
+    vec3 col1 = hsb2rgb(u_glucose * 360., 0.55 + 0.35 * u_potassium, 0.35 + 0.55 * u_eGFR);
+    vec3 col2 = hsb2rgb(u_co2HueDeg,      0.55,                      0.50 + 0.30 * u_eGFR);
+    vec3 col3 = hsb2rgb(u_calciumHueDeg,  0.62,                      0.48 + 0.30 * u_eGFR);
+
+    vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3) / wSum;
+    rgbColor = clamp(rgbColor + n * 0.4, 0., 1.);
 
 // Nitrogen: pAxis drives position; rAxis drives secondary axis
 vec2 cN = vec2(0.35 + 0.35 * pS, 0.45 + 0.30 * rS);
@@ -141,29 +161,29 @@ float m1 = 1. - smoothstep(.30, .52, d1);
 float m2 = 1. - smoothstep(.26, .48, d2);
 float mCa = max(m1, m2);// two slow drifting lobes
     
-    // Nitrogen (test)
+    // Nitrogen
     vec3 nitrogenRGB = hsb2rgb(u_nitrogenHueDeg, .90, .78);
     rgbColor = clamp(rgbColor + nitrogenRGB * u_nitrogenStrength * mN, 0., 1.0);
-    
-    // Creatinine (test)
+
+    // Creatinine
     vec3 creatRGB = hsb2rgb(u_creatinineHueDeg, .90, .78);
     rgbColor = clamp(rgbColor + creatRGB * u_creatinineStrength * mC, 0., 1.0);
 
-    // Sodium (test)
+    // Sodium
     vec3 sodiumRGB = hsb2rgb(u_sodiumHueDeg, .94, .80);
     rgbColor = clamp(rgbColor + sodiumRGB * u_sodiumStrength * mNa, 0., 1.0);
 
-    // Chloride (test)
+    // Chloride
     vec3 chlorideRGB = hsb2rgb(u_chlorideHueDeg, .75, .85);
     rgbColor = clamp(rgbColor + chlorideRGB * strengthCl * mCl, 0., 1.0);
 
-    // CO2 (test)
+    // CO2
     vec3 co2Tint = hsb2rgb(u_co2HueDeg, .65, 1.00);
     rgbColor = clamp(rgbColor + co2Tint * haloW, 0., 1.);
 
-    // Calcium (test)
-    float darkW = smoothstep(.65, .25, lum);// more effect in darker zones
-    vec3 caTint = hsb2rgb(u_calciumHueDeg, 0.70, 0.95);// glaze-ish
+    // Calcium
+    float darkW = smoothstep(.65, .25, lum);
+    vec3 caTint = hsb2rgb(u_calciumHueDeg, 0.70, 0.95);
     rgbColor = screenBlend(rgbColor, caTint, u_calciumStrength * mCa * darkW);
 
     float decay = exp(-u_decayPerYear * u_totalYears);
