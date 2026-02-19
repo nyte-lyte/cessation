@@ -29,9 +29,11 @@ uniform float u_co2HueDeg;
 uniform float u_calciumStrength;
 uniform float u_calciumHueDeg;
 
-// ECG axis uniforms — drive beam spatial positioning
+// ECG axis uniforms — drive beam spatial positioning and field drift tempo
 uniform float u_pAxisNorm;   // P wave axis, normalized 0..1 over dataset range
 uniform float u_rAxisNorm;   // R wave (QRS) axis, normalized 0..1 over dataset range
+uniform float u_qtcNorm;     // QTc interval, normalized 0..1 — drives identity field tempo
+uniform float u_prNorm;      // PR interval, normalized 0..1 — drives acid-base field tempo
 
 // Inheritance uniforms — color field carried in from previous piece at mint
 uniform float u_inheritedHueDeg;  // hue in degrees, frozen at mint from ancestor
@@ -81,37 +83,62 @@ void main(){
     float hDrift3 = t * 3.1 + 90.0 * (1.0 - u_pAxisNorm);
 
     // --- Base layer: three color fields blending across the canvas ---
-    // Metabolic values drive each field's color; ECG axes drive their positions.
+    // Each field is anchored to specific metabolic values so its position,
+    // size, and movement tempo are genuinely unique per dataset.
     // Fields overlap and mix at their boundaries — different regions of the
     // canvas have genuinely different dominant colors, like paint on canvas.
+
+    // --- Lab-driven field base positions ---
+    // cf1 (identity/glucose field): primary energy + electrolyte balance
+    vec2 fieldBase1 = vec2(0.15 + 0.55 * u_glucose, 0.15 + 0.55 * u_potassium);
+    // cf2 (acid-base/kidney field): eGFR inverted so it naturally opposes cf1
+    vec2 fieldBase2 = vec2(0.85 - 0.55 * u_eGFR, 0.20 + 0.50 * u_pAxisNorm);
+    // cf3 (cardiac/electrolyte field): R axis + potassium inversion
+    vec2 fieldBase3 = vec2(0.20 + 0.50 * u_rAxisNorm, 0.80 - 0.55 * u_potassium);
+    // cf4 (inherited field): antipodal to cf1 so ancestor color occupies opposite space
+    vec2 fieldBase4 = clamp(vec2(1.0) - fieldBase1, vec2(0.15), vec2(0.85));
+
+    // --- Per-field sigma from health data ---
+    // eGFR (kidney function) determines spread: high eGFR = wide diffuse zones,
+    // low eGFR = tight concentrated pools. Each field responds to a different axis.
+    float s1 = 0.09 + 0.20 * u_eGFR;          // identity field: kidney health = spread
+    float s2 = 0.10 + 0.16 * (1.0 - u_eGFR);  // acid-base field: inverted kidney
+    float s3 = 0.08 + 0.18 * u_glucose;         // electrolyte field: energy level = spread
+    float s4 = 0.10 + 0.14 * u_eGFR;           // inherited field: moderate
+
+    // --- ECG-driven drift frequencies ---
+    // The heart's electrical timing becomes the movement tempo of each field.
+    // QTc (repolarization) drives the identity field; PR (conduction) drives acid-base.
+    float freqA = 0.06 + 0.10 * u_qtcNorm;     // cf1: QTc interval → identity field tempo
+    float freqB = 0.04 + 0.07 * u_prNorm;      // cf2: PR interval → acid-base field tempo
+    float freqC = 0.05 + 0.08 * u_rAxisNorm;   // cf3: R axis → electrolyte field tempo
+    float freqD = 0.05 + 0.06 * u_pAxisNorm;   // cf4: P axis → inherited field tempo
+
+    // --- Field centers: lab anchor + ECG displacement + time drift ---
+    // ECG axes add additional spatial character on top of the lab-derived base.
     // Drift amplitude grows with lifeFraction so composition shifts more with age.
+    vec2 cf1 = fieldBase1 + vec2(0.12 * pS, 0.10 * rS)
+        + 0.12 * driftMul * vec2(sin(t * freqA        + 6.2831 * u_pAxisNorm),
+                                  cos(t * freqA * 0.82 + 6.2831 * u_rAxisNorm));
 
-    // Field centers: axis-displaced base positions with age-growing drift
-    vec2 cf1 = vec2(0.35 + 0.35 * pS, 0.45 + 0.30 * rS)
-        + 0.12 * driftMul * vec2(sin(t * 0.11 + 6.2831 * u_pAxisNorm),
-                                  cos(t * 0.09 + 6.2831 * u_rAxisNorm));
+    vec2 cf2 = fieldBase2 + vec2(-0.10 * pS, 0.09 * rS)
+        + 0.11 * driftMul * vec2(cos(t * freqB        + 6.2831 * u_rAxisNorm),
+                                  sin(t * freqB * 1.18 + 6.2831 * u_pAxisNorm));
 
-    vec2 cf2 = vec2(0.70 - 0.28 * pS, 0.30 + 0.22 * rS)
-        + 0.11 * driftMul * vec2(cos(t * 0.07 + 6.2831 * u_rAxisNorm),
-                                  sin(t * 0.13 + 6.2831 * u_pAxisNorm));
+    vec2 cf3 = fieldBase3 + vec2(0.09 * rS, -0.10 * pS)
+        + 0.11 * driftMul * vec2(sin(t * freqC        + 6.2831 * (1.0 - u_pAxisNorm)),
+                                  cos(t * freqC * 0.91 + 6.2831 * (1.0 - u_rAxisNorm)));
 
-    vec2 cf3 = vec2(0.42 + 0.22 * rS, 0.68 - 0.25 * pS)
-        + 0.11 * driftMul * vec2(sin(t * 0.09 + 6.2831 * (1.0 - u_pAxisNorm)),
-                                  cos(t * 0.07 + 6.2831 * (1.0 - u_rAxisNorm)));
+    // Inherited field: antipodal to cf1, π-offset drift so it moves in counterpoint
+    vec2 cf4 = fieldBase4 + vec2(-0.08 * pS, -0.08 * rS)
+        + 0.12 * driftMul * vec2(cos(t * freqD        + 3.1416 * u_pAxisNorm),
+                                  sin(t * freqD * 0.88 + 3.1416 * u_rAxisNorm));
 
-    // Inherited field — 4th color field from ancestor piece, fades over lifespan.
-    // Positioned in a different quadrant from cf1 so both coexist spatially.
-    // Drift is π-offset from cf1 so they move somewhat out of phase.
-    vec2 cf4 = vec2(0.65 - 0.20 * pS, 0.58 + 0.20 * rS)
-        + 0.12 * driftMul * vec2(cos(t * 0.11 + 3.1416 * u_pAxisNorm),
-                                  sin(t * 0.09 + 3.1416 * u_rAxisNorm));
-
-    // Gaussian weights: soft falloff so colors blend smoothly at boundaries
-    float sigma2 = 0.20;
-    float w1 = exp(-dot(v_uv - cf1, v_uv - cf1) / sigma2);
-    float w2 = exp(-dot(v_uv - cf2, v_uv - cf2) / sigma2);
-    float w3 = exp(-dot(v_uv - cf3, v_uv - cf3) / sigma2);
-    float w4 = exp(-dot(v_uv - cf4, v_uv - cf4) / sigma2) * u_inheritedStrength;
+    // Gaussian weights: per-field sigma makes each zone uniquely sized
+    float w1 = exp(-dot(v_uv - cf1, v_uv - cf1) / s1);
+    float w2 = exp(-dot(v_uv - cf2, v_uv - cf2) / s2);
+    float w3 = exp(-dot(v_uv - cf3, v_uv - cf3) / s3);
+    float w4 = exp(-dot(v_uv - cf4, v_uv - cf4) / s4) * u_inheritedStrength;
     float wSum = w1 + w2 + w3 + w4 + 1e-6;
 
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years

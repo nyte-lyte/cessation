@@ -311,6 +311,8 @@ async function init() {
   const uCalciumHueDegLoc = gl.getUniformLocation(program, "u_calciumHueDeg");
   const uPAxisNormLoc = gl.getUniformLocation(program, "u_pAxisNorm");
   const uRAxisNormLoc = gl.getUniformLocation(program, "u_rAxisNorm");
+  const uQtcNormLoc = gl.getUniformLocation(program, "u_qtcNorm");
+  const uPrNormLoc = gl.getUniformLocation(program, "u_prNorm");
   const uInheritedHueDegLoc = gl.getUniformLocation(program, "u_inheritedHueDeg");
   const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
 
@@ -506,6 +508,17 @@ async function init() {
     );
     if (uPAxisNormLoc) gl.uniform1f(uPAxisNormLoc, pAxisNorm);
     if (uRAxisNormLoc) gl.uniform1f(uRAxisNormLoc, rAxisNorm);
+
+    const qtcNorm = clamp(
+      normalize(currentDataSet.ecg.qtcInterval, minMaxValues.qtcInterval.min, minMaxValues.qtcInterval.max),
+      0, 1
+    );
+    const prNorm = clamp(
+      normalize(currentDataSet.ecg.prInterval, minMaxValues.prInterval.min, minMaxValues.prInterval.max),
+      0, 1
+    );
+    if (uQtcNormLoc) gl.uniform1f(uQtcNormLoc, qtcNorm);
+    if (uPrNormLoc) gl.uniform1f(uPrNormLoc, prNorm);
 
     // Inherited color field — fades from full presence at birth toward 0 at end of life
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
