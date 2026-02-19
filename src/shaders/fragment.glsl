@@ -199,7 +199,7 @@ float strengthCl = u_sodiumStrength * arrivalCl * breathCl;
 float lum = dot(rgbColor, vec3(.299, .587, .114));
 float edge = length(vec2(dFdx(lum), dFdy(lum)));
 float edgeW = smoothstep(.004, .050, edge);// stronger where colors meet
-float ambW = .35 + .65 * rand(v_uv + vec2(t * .02, - t * .017));// soft presence
+float ambW = .35 + .65 * rand(v_uv + vec2(u_pAxisNorm * 6.28, u_rAxisNorm * 4.71));// soft presence, unique per dataset
 float localGain = smoothstep(.06, .72, lum);// avoid dark wash
 float haloW = u_co2Strength * mix(ambW, edgeW, .70) * localGain;
 
