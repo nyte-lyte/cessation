@@ -671,7 +671,7 @@ async function init() {
     hueDegCO2 += driftAmpCO2 * Math.sin(window.__phaseCO2 * 1.0 + 0.2);
 
     // Strength: baseline from health (worse health → a bit more halo), plus ripple pulse that decays
-    const baseCO2 = 0.06 + 0.10 * (1 - pCO2);
+    const baseCO2 = 0.12 + 0.14 * (1 - pCO2);
     co2Pulse *= Math.exp(-dt / 18.0);
     const strCO2 = clamp(baseCO2 + 0.18 * co2Pulse, 0, 0.34); // cap ~28%
 
