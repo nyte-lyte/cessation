@@ -200,7 +200,7 @@ float lum = dot(rgbColor, vec3(.299, .587, .114));
 float edge = length(vec2(dFdx(lum), dFdy(lum)));
 float edgeW = smoothstep(.004, .050, edge);// stronger where colors meet
 float ambW = .55 + .45 * rand(v_uv + vec2(u_pAxisNorm * 6.28, u_rAxisNorm * 4.71));// soft presence, unique per dataset
-float localGain = smoothstep(.06, .72, lum);// avoid dark wash
+float localGain = smoothstep(.02, .65, lum);// avoid dark wash, allow into midtones
 float haloW = u_co2Strength * mix(ambW, edgeW, .50) * localGain;
 
 // CALCIUM: both axes; lobes are pushed in opposite directions
