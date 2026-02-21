@@ -190,10 +190,8 @@ vec2 cCl = vec2(0.55 + 0.22 * rS + .05 * sin(t * .27),
 float dCl = distance(v_uv, cCl);
 float mCl = 1.0 - smoothstep(.25, .45, dCl);
 
-// arrival progression (~60% lifespan milestone)
-float arrivalCl = smoothstep(.55, .65, u_totalYears/64.);
-float breathCl = .6 + .4 * sin(t * .4);
-float strengthCl = u_sodiumStrength * arrivalCl * breathCl;
+// Chloride strength comes from JS (handles arrival gate + lifespan correctly)
+float strengthCl = u_chlorideStrength;
 
 // CO2: HALO (cool, edge-biased ambient blend)
 float lum = dot(rgbColor, vec3(.299, .587, .114));
