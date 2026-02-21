@@ -671,9 +671,9 @@ async function init() {
     hueDegCO2 += driftAmpCO2 * Math.sin(window.__phaseCO2 * 1.0 + 0.2);
 
     // Strength: baseline from health (worse health → a bit more halo), plus ripple pulse that decays
-    const baseCO2 = 0.20 + 0.18 * (1 - pCO2);
+    const baseCO2 = 0.26 + 0.18 * (1 - pCO2);
     co2Pulse *= Math.exp(-dt / 18.0);
-    const strCO2 = clamp(baseCO2 + 0.22 * co2Pulse, 0, 0.55);
+    const strCO2 = clamp(baseCO2 + 0.22 * co2Pulse, 0, 0.62);
 
     if (uCo2StrengthLoc) gl.uniform1f(uCo2StrengthLoc, strCO2);
     if (uCo2HueDegLoc) gl.uniform1f(uCo2HueDegLoc, hueDegCO2);

@@ -199,8 +199,8 @@ float strengthCl = u_sodiumStrength * arrivalCl * breathCl;
 float lum = dot(rgbColor, vec3(.299, .587, .114));
 float edge = length(vec2(dFdx(lum), dFdy(lum)));
 float edgeW = smoothstep(.004, .050, edge);// stronger where colors meet
-float ambW = .78 + .22 * rand(v_uv + vec2(u_pAxisNorm * 6.28, u_rAxisNorm * 4.71));// near-uniform atmospheric presence, slight texture per dataset
-float localGain = smoothstep(.02, .60, lum);// avoid dark wash
+float ambW = .88 + .12 * rand(v_uv + vec2(u_pAxisNorm * 6.28, u_rAxisNorm * 4.71));// near-uniform atmospheric presence, slight texture per dataset
+float localGain = smoothstep(.01, .55, lum);// avoid dark wash
 float haloW = u_co2Strength * mix(ambW, edgeW, .55) * localGain;
 
 // CALCIUM: both axes; lobes are pushed in opposite directions
