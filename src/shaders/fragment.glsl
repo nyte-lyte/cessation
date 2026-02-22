@@ -91,7 +91,7 @@ float ellipseDist(vec2 p, vec2 center, float aspect, float angle){
 
 void main(){
     // Grain scales with QRS-T dissonance: aligned repolarization = smooth, discordant = textured
-    float n = rand(v_uv * u_resolution.xy * .1) * (0.02 + 0.03 * u_qrsTAngle);
+    float n = rand(v_uv * u_resolution.xy * .1) * (0.02 + 0.01 * u_qrsTAngle);
     float t = u_totalYears;
 
     // Life fraction and drift growth — the piece moves more as it ages
