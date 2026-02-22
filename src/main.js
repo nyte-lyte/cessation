@@ -337,6 +337,16 @@ async function init() {
 
   let baseDecayPerYear32 = currentDataSet.decayRate;
 
+  // build normalized health track (0..1) once, used for decay modulation
+  const hiTrack = healthDataSets.map((d) => d.healthIndex ?? 0.5);
+  const hiMin = Math.min(...hiTrack), hiMax = Math.max(...hiTrack);
+  const hiNorm = hiTrack.map((h) =>
+    hiMax > hiMin ? (h - hiMin) / (hiMax - hiMin) : 0.5
+  );
+  for (let i = 1; i < hiNorm.length - 1; i++) {
+    hiNorm[i] = (hiNorm[i - 1] + 2 * hiNorm[i] + hiNorm[i + 1]) / 4;
+  }
+
   // TODO: replace with real chain values
   const lastTwoHashDigits = 88;
   const inscriptionUnixSeconds = 1704067200;
