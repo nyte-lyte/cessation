@@ -316,23 +316,26 @@ async function init() {
   const uInheritedHueDegLoc = gl.getUniformLocation(program, "u_inheritedHueDeg");
   const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
 
+  // Blob size + BUN/Cr ratio uniforms
+  const uNitrogenRadiusLoc   = gl.getUniformLocation(program, "u_nitrogenRadius");
+  const uCreatinineRadiusLoc = gl.getUniformLocation(program, "u_creatinineRadius");
+  const uSodiumRadiusLoc     = gl.getUniformLocation(program, "u_sodiumRadius");
+  const uChlorideRadiusLoc   = gl.getUniformLocation(program, "u_chlorideRadius");
+  const uCalciumRadiusLoc    = gl.getUniformLocation(program, "u_calciumRadius");
+  const uBunCreatRatioNormLoc = gl.getUniformLocation(program, "u_bunCreatRatioNorm");
+
+  // Pre-compute BUN/Creatinine ratio winsorized range across all datasets (once)
+  const allBunCreatRatios = healthDataSets
+    .map((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine))
+    .slice()
+    .sort((a, b) => a - b);
+  const bunCreatP05 = allBunCreatRatios[Math.floor(0.05 * (allBunCreatRatios.length - 1))];
+  const bunCreatP95 = allBunCreatRatios[Math.ceil(0.95 * (allBunCreatRatios.length - 1))];
+
   let currentDataSetIndex = 0;
   let currentDataSet = healthDataSets[currentDataSetIndex];
 
   let baseDecayPerYear32 = currentDataSet.decayRate;
-
-  // --- build normalized health track (0..1) once ---
-  const hiTrack = healthDataSets.map((d) => d.healthIndex ?? 0.5);
-  const hiMin = Math.min(...hiTrack),
-    hiMax = Math.max(...hiTrack);
-  const hiNorm = hiTrack.map((h) =>
-    hiMax > hiMin ? (h - hiMin) / (hiMax - hiMin) : 0.5
-  );
-
-  // optional light smoothing
-  for (let i = 1; i < hiNorm.length - 1; i++) {
-    hiNorm[i] = (hiNorm[i - 1] + 2 * hiNorm[i] + hiNorm[i + 1]) / 4;
-  }
 
   // TODO: replace with real chain values
   const lastTwoHashDigits = 88;
@@ -399,9 +402,6 @@ async function init() {
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
   let decayPerYear = baseDecayPerYear32 * (32 / lifespanYears);
 
-  let phaseYears = clamp(lifespanYears * 0.15, 4, 10);
-  let rateAmplitude = 0.3;
-
   // set uniforms
   function setHSBUniforms() {
     const { hue, sat, bri } = computeHSBFromStats(
@@ -451,19 +451,6 @@ async function init() {
     gl.uniform2f(uResolutionLoc, gl.canvas.width, gl.canvas.height);
   }
 
-  // sample the health track over time (returns 0..1)
-  function sampleHealthMod(totalYears, phaseYears, track) {
-    if (!track || track.length === 0) return 0.5;
-    const t = (totalYears / phaseYears) % 1; // 0..1 over one loop
-    const f = t * (track.length - 1);
-    const i = Math.floor(f);
-    const frac = f - i;
-    const a = track[i];
-    const b = track[Math.min(i + 1, track.length - 1)];
-    const mu = (1.0 - Math.cos(frac * Math.PI)) * 0.5;
-    return a * (1 - mu) + b * mu;
-  }
-
   // the draw() call just clears and draws the quad:
   function draw() {
     resizeCanvasToDisplaySize(canvas);
@@ -489,11 +476,7 @@ async function init() {
       (params.overrideYears !== null ? params.overrideYears : baseYears) *
       (params.timeWarp || 1);
 
-    const healthMod01 = sampleHealthMod(totalYears, phaseYears, hiNorm);
-    const rateMul = 1.0 + rateAmplitude * (healthMod01 - 0.5);
-    const effectiveDecayPerYear = decayPerYear * rateMul;
-
-    gl.uniform1f(uDecayPerYearLoc, effectiveDecayPerYear);
+    gl.uniform1f(uDecayPerYearLoc, decayPerYear);
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);
 
@@ -717,13 +700,27 @@ async function init() {
     if (uCalciumStrengthLoc) gl.uniform1f(uCalciumStrengthLoc, strCa);
     if (uCalciumHueDegLoc) gl.uniform1f(uCalciumHueDegLoc, hueDegCa);
 
+    // Blob size: each beam's winsorized lab percentile drives spatial dominance
+    if (uNitrogenRadiusLoc)   gl.uniform1f(uNitrogenRadiusLoc,   seedN);
+    if (uCreatinineRadiusLoc) gl.uniform1f(uCreatinineRadiusLoc, pCreat);
+    if (uSodiumRadiusLoc)     gl.uniform1f(uSodiumRadiusLoc,     pNa);
+    if (uChlorideRadiusLoc)   gl.uniform1f(uChlorideRadiusLoc,   pCl);
+    if (uCalciumRadiusLoc)    gl.uniform1f(uCalciumRadiusLoc,    pCa);
+
+    // BUN/Creatinine ratio: spatial coupling between nitrogen and creatinine blobs
+    const bunCreatRatio = currentDataSet.labs.nitrogen / Math.max(0.1, currentDataSet.labs.creatinine);
+    const bunCreatRatioNorm = clamp(
+      (bunCreatRatio - bunCreatP05) / Math.max(1e-9, bunCreatP95 - bunCreatP05),
+      0, 1
+    );
+    if (uBunCreatRatioNormLoc) gl.uniform1f(uBunCreatRatioNormLoc, bunCreatRatioNorm);
+
     // Left overlay
     overlay.textContent = [
       `Dataset: ${currentDataSetIndex}`,
       `HealthIndex: ${currentDataSet.healthIndex?.toFixed(3) ?? "N/A"}`,
       `Years: ${totalYears.toFixed(2)}`,
-      `DecayRate(eff): ${effectiveDecayPerYear.toExponential(3)}`,
-      `PhaseYears: ${phaseYears.toFixed(2)}`,
+      `DecayRate: ${decayPerYear.toExponential(3)}`,
       params.overrideYears !== null
         ? `Mode: OVERRIDE (${params.overrideYears}y)`
         : `Mode: REALTIME`,
@@ -755,6 +752,7 @@ async function init() {
         (arrCl < 1 ? `  (arriving ${Math.round(arrCl * 100)}%)` : ``),
       `CO2: str=${strCO2.toFixed(2)} hue=${wrapDeg(hueDegCO2).toFixed(0)}°`,
       `Ca: str=${strCa.toFixed(2)} hue=${wrapDeg(hueDegCa).toFixed(0)}°`,
+      `BUN/Cr ratio: ${bunCreatRatioNorm.toFixed(2)} (${(currentDataSet.labs.nitrogen / Math.max(0.1, currentDataSet.labs.creatinine)).toFixed(1)})`,
       `BaseHex: ${baseHex}`,
     ].join("\n");
 
@@ -779,7 +777,6 @@ async function init() {
       baseDecayPerYear32 = currentDataSet.decayRate;
       lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
       decayPerYear = baseDecayPerYear32 * (32 / lifespanYears);
-      phaseYears = clamp(lifespanYears * 0.15, 4, 10);
 
       draw();
     } else {

@@ -29,6 +29,19 @@ uniform float u_co2HueDeg;
 uniform float u_calciumStrength;
 uniform float u_calciumHueDeg;
 
+// Blob size uniforms — winsorized lab percentile (0..1)
+// Higher value → larger, more spatially dominant blob
+uniform float u_nitrogenRadius;
+uniform float u_creatinineRadius;
+uniform float u_sodiumRadius;
+uniform float u_chlorideRadius;
+uniform float u_calciumRadius;
+
+// BUN/Creatinine ratio — spatial coupling between nitrogen and creatinine blobs
+// 0 = low/normal ratio (kidney-intrinsic), blobs independent
+// 1 = elevated ratio (pre-renal), blobs pulled together and overlapping
+uniform float u_bunCreatRatioNorm;
+
 // ECG axis uniforms — drive beam spatial positioning and field drift tempo
 uniform float u_pAxisNorm;   // P wave axis, normalized 0..1 over dataset range
 uniform float u_rAxisNorm;   // R wave (QRS) axis, normalized 0..1 over dataset range
@@ -61,6 +74,16 @@ vec3 hsb2rgb(float H, float S, float B){
 vec3 screenBlend(vec3 base,vec3 tint,float k){
     vec3 t = clamp(tint * k, 0., 1.);
     return 1.-(1.- base)*(1.- t);
+}
+
+// Ellipse distance: rotates offset by `angle`, then scales major axis by `aspect`.
+// aspect > 1 stretches the blob along the major axis (ECG-driven direction).
+float ellipseDist(vec2 p, vec2 center, float aspect, float angle){
+    vec2 d = p - center;
+    float cosA = cos(angle);
+    float sinA = sin(angle);
+    vec2 r = vec2(cosA * d.x + sinA * d.y, -sinA * d.x + cosA * d.y);
+    return length(vec2(r.x / max(aspect, 0.1), r.y));
 }
 
 void main(){
@@ -150,15 +173,61 @@ void main(){
     vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum;
     rgbColor = clamp(rgbColor + n * 0.4, 0., 1.);
 
+// --- ECG-driven blob shape ---
+// Axis extremity (distance from dataset midpoint) drives elongation.
+// Axis sign drives tilt. Different drivers per beam give each a distinct gesture.
+float extremeP = abs(pS) * 2.0; // 0..1
+float extremeR = abs(rS) * 2.0; // 0..1
+
+// Nitrogen: pAxis drives elongation, rAxis drives tilt
+float nAspect  = 1.0 + 1.0 * extremeP;
+float nAngle   = rS * 3.14159;
+
+// Creatinine: rAxis drives elongation, pAxis drives tilt (perpendicular character to N)
+float crAspect = 1.0 + 0.9 * extremeR;
+float crAngle  = -pS * 2.356;
+
+// Sodium: combined axes for two-blob group
+float naAspect = 1.0 + 0.7 * (extremeP * 0.5 + extremeR * 0.5);
+float naAngle  = (pS + rS) * 1.047;
+
+// Chloride: rAxis drives elongation, pAxis drives tilt
+float clAspect = 1.0 + 0.8 * extremeR;
+float clAngle  = pS * 1.571;
+
+// Calcium: pAxis drives elongation, rAxis drives tilt (contrast with nitrogen)
+float caAspect = 1.0 + 0.8 * extremeP;
+float caAngle  = -rS * 2.094;
+
+// --- Lab-driven blob radii ---
+// Healthy (low percentile) → small, receding. Elevated → large, assertive.
+float nInner  = 0.15 + 0.15 * u_nitrogenRadius;   // 0.15..0.30
+float nOuter  = 0.30 + 0.25 * u_nitrogenRadius;   // 0.30..0.55
+
+float cInner1 = 0.12 + 0.12 * u_creatinineRadius; // 0.12..0.24
+float cOuter1 = 0.24 + 0.18 * u_creatinineRadius; // 0.24..0.42
+float cInner2 = 0.09 + 0.09 * u_creatinineRadius; // 0.09..0.18
+float cOuter2 = 0.20 + 0.16 * u_creatinineRadius; // 0.20..0.36
+
+float naInner1 = 0.16 + 0.14 * u_sodiumRadius;    // 0.16..0.30
+float naOuter1 = 0.32 + 0.20 * u_sodiumRadius;    // 0.32..0.52
+float naInner2 = 0.14 + 0.12 * u_sodiumRadius;    // 0.14..0.26
+float naOuter2 = 0.28 + 0.18 * u_sodiumRadius;    // 0.28..0.46
+
+float clInner = 0.15 + 0.14 * u_chlorideRadius;   // 0.15..0.29
+float clOuter = 0.30 + 0.18 * u_chlorideRadius;   // 0.30..0.48
+
+float caInner1 = 0.18 + 0.16 * u_calciumRadius;   // 0.18..0.34
+float caOuter1 = 0.36 + 0.20 * u_calciumRadius;   // 0.36..0.56
+float caInner2 = 0.15 + 0.14 * u_calciumRadius;   // 0.15..0.29
+float caOuter2 = 0.30 + 0.18 * u_calciumRadius;   // 0.30..0.48
+
 // Nitrogen: pAxis drives position; rAxis drives secondary axis
 vec2 cN = vec2(0.35 + 0.35 * pS, 0.45 + 0.30 * rS);
 cN += 0.05 * vec2(
     sin(t * .33 + 6.2831 * u_pAxisNorm),
     cos(t * .27 + 6.2831 * u_rAxisNorm)
 );
-
-float dN = distance(v_uv, cN);
-float mN = 1.0 - smoothstep(.30, .60, dN);
 
 // Creatinine: two blobs, pAxis inverted so they mirror Nitrogen
 vec2 cC1 = vec2(0.65 - 0.30 * pS, 0.55 + 0.25 * rS)
@@ -168,9 +237,18 @@ vec2 cC2 = vec2(0.50 + 0.25 * pS, 0.28 - 0.25 * rS)
     + 0.03 * vec2(sin(t * .25 + 6.2831 * u_pAxisNorm),
                   cos(t * .21 + 6.2831 * (1.0 - u_rAxisNorm)));
 
-float mC1 = 1.0 - smoothstep(.20, .40, distance(v_uv, cC1));
-float mC2 = 1.0 - smoothstep(.16, .34, distance(v_uv, cC2));
-float mC = max(mC1, mC2);
+// BUN/Creatinine ratio coupling: elevated ratio (pre-renal) pulls both markers together,
+// creating overlap and a brighter combined region. Normal ratio keeps them independent.
+float pull = u_bunCreatRatioNorm * 0.10;
+vec2 pullVec = cC1 - cN;
+vec2 pullDir = pullVec / max(length(pullVec), 0.001);
+cN  += pullDir * pull;
+cC1 -= pullDir * pull * 0.5;
+
+float mN  = 1.0 - smoothstep(nInner,  nOuter,  ellipseDist(v_uv, cN,  nAspect,  nAngle));
+float mC1 = 1.0 - smoothstep(cInner1, cOuter1, ellipseDist(v_uv, cC1, crAspect, crAngle));
+float mC2 = 1.0 - smoothstep(cInner2, cOuter2, ellipseDist(v_uv, cC2, crAspect * 0.85, crAngle));
+float mC  = max(mC1, mC2);
 
 // Sodium: rAxis primary, pAxis secondary (axes swapped from Nitrogen)
 vec2 cA = vec2(0.28 + 0.32 * rS, 0.62 + 0.28 * pS)
@@ -180,15 +258,14 @@ vec2 cB = vec2(0.62 - 0.28 * rS, 0.32 - 0.28 * pS)
     + 0.04 * vec2(sin(t * .21 + 6.2831 * (1.0 - u_rAxisNorm)),
                   cos(t * .19 + 6.2831 * (1.0 - u_pAxisNorm)));
 
-float mA = 1. - smoothstep(.26, .50, distance(v_uv, cA));
-float mB = 1. - smoothstep(.24, .48, distance(v_uv, cB));
+float mA  = 1. - smoothstep(naInner1, naOuter1, ellipseDist(v_uv, cA, naAspect, naAngle));
+float mB  = 1. - smoothstep(naInner2, naOuter2, ellipseDist(v_uv, cB, naAspect * 0.9, naAngle));
 float mNa = max(mA, mB);
 
 // Chloride: rAxis drives position
 vec2 cCl = vec2(0.55 + 0.22 * rS + .05 * sin(t * .27),
                0.45 - 0.20 * pS + .04 * cos(t * .31));
-float dCl = distance(v_uv, cCl);
-float mCl = 1.0 - smoothstep(.25, .45, dCl);
+float mCl = 1.0 - smoothstep(clInner, clOuter, ellipseDist(v_uv, cCl, clAspect, clAngle));
 
 // Chloride strength comes from JS (handles arrival gate + lifespan correctly)
 float strengthCl = u_chlorideStrength;
@@ -206,11 +283,9 @@ vec2 c1 = vec2(0.62 + 0.22 * pS + .05 * sin(t * .11),
               0.32 + 0.18 * rS + .05 * cos(t * .09));
 vec2 c2 = vec2(0.32 - 0.18 * rS + .06 * cos(t * .07),
               0.65 - 0.22 * pS + .05 * sin(t * .08));
-float d1 = distance(v_uv, c1);
-float d2 = distance(v_uv, c2);
-float m1 = 1. - smoothstep(.30, .52, d1);
-float m2 = 1. - smoothstep(.26, .48, d2);
-float mCa = max(m1, m2);// two slow drifting lobes
+float m1  = 1. - smoothstep(caInner1, caOuter1, ellipseDist(v_uv, c1, caAspect, caAngle));
+float m2  = 1. - smoothstep(caInner2, caOuter2, ellipseDist(v_uv, c2, caAspect * 0.88, caAngle));
+float mCa = max(m1, m2);
     
     // Nitrogen
     vec3 nitrogenRGB = hsb2rgb(u_nitrogenHueDeg, .90, .78);
