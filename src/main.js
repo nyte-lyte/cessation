@@ -4,6 +4,8 @@
 import { healthDataSets, minMaxValues } from "../data/health_data_sets.js";
 import { normalize } from "../data/decay_logic.js";
 
+const TAU = 2 * Math.PI;
+
 const canvas = document.getElementById("canvas");
 const gl = canvas.getContext("webgl2");
 if (!gl) {
@@ -80,20 +82,7 @@ function sodiumArrivalProgress(totalYears, lifespanYears) {
   return clamp((totalYears - start) / ramp, 0, 1);
 }
 
-// 2) Tempo (seconds per cycle) from ventRate normalization (slower HR → slower T)
-function sodiumTempoSeconds(ds) {
-  const vMin = minMaxValues.ventRate.min;
-  const vMax = minMaxValues.ventRate.max;
-  const nVR = clamp(
-    (ds.ecg.ventRate - vMin) / Math.max(1e-6, vMax - vMin),
-    0,
-    1
-  );
-  // map 0..1 → 10..4.5 seconds
-  return 10 - 5.5 * nVR;
-}
-
-// 3) Pulse count per cycle from QRS width (narrow QRS → more pulses)
+// Pulse count per cycle from QRS width (narrow QRS → more pulses)
 function sodiumPulseCount(ds) {
   const qMin = minMaxValues.qrsInterval.min;
   const qMax = minMaxValues.qrsInterval.max;
@@ -106,12 +95,7 @@ function sodiumPulseCount(ds) {
   return Math.max(3, Math.min(6, k));
 }
 
-// 4) Deterministic per-piece phase seed from hash tail (0..1)
-function sodiumPhaseSeed(hashTail /* 0..99 */) {
-  return hashTail / 99 + 0.57; // 0..~1.57 cycles; we’ll mod 1 later
-}
-
-// 5) Pulsed Gaussian “grouped bursts” (phase01 in [0..1])
+// Pulsed Gaussian “grouped bursts” (phase01 in [0..1])
 function sodiumPulseShape(phase01, k, width = 0.12) {
   let acc = 0.0;
   for (let i = 0; i < k; i++) {
@@ -124,46 +108,11 @@ function sodiumPulseShape(phase01, k, width = 0.12) {
   return 0.25 + 0.75 * acc; // 0.25..1.0
 }
 
-// 6) Amplitude from Sodium percentile, gated by arrival and healthIndex
-function sodiumAmplitude(ds, healthIndex, arrivalProgress, pNa /* 0..1 */) {
-  const base = 0.08 + 0.12 * clamp(pNa, 0, 1); // 0.08..0.20
-  const healthMul = 0.85 + 0.15 * (1 - clamp(healthIndex ?? 0.5, 0, 1));
-  return arrivalProgress * base * healthMul;
-}
-
-// 7) Hue anchor with guardrail against base hue (min 32° gap)
-function sodiumHueDeg(baseHueDeg, ds, pNa /* 0..1 */) {
-  const targetOffset = -25 + 50 * clamp(pNa, 0, 1);
-  const pushSign = Math.sign(targetOffset || 1);
-  return guardHueGap(baseHueDeg, baseHueDeg + targetOffset, 32, pushSign);
-}
-
-// ─────────────────────────────────────────────────────────────
-// Beam 4 — Chloride (beam helper)
-// ─────────────────────────────────────────────────────────────
-
 // Arrival gate (~60% lifespan, soft ramp ≈8% lifespan, min ~0.2y)
 function chlorideArrivalProgress(totalYears, lifespanYears) {
   const start = 0.6 * lifespanYears;
   const ramp = Math.max(0.08 * lifespanYears, 0.2);
   return clamp((totalYears - start) / ramp, 0, 1);
-}
-
-// Tempo (seconds per cycle) from QT interval (normalized)
-function chlorideTempoSeconds(ds) {
-  const qMin = minMaxValues.qtInterval.min,
-    qMax = minMaxValues.qtInterval.max;
-  const nQT = clamp(
-    (ds.ecg.qtInterval - qMin) / Math.max(1e-6, qMax - qMin),
-    0,
-    1
-  );
-  return 11 - 5.5 * nQT; // 11..5.5 seconds
-}
-
-// Per-piece phase seed from hash tail (0..1 cycles, offset to avoid sync)
-function chloridePhaseSeed(hashTail /* 0..99 */) {
-  return (hashTail / 99 + 0.11) % 1;
 }
 
 // Triangle wave with subtle warble overlay
@@ -175,20 +124,6 @@ function chlorideTriWithWarble(phase01, ds) {
   const wf = 1.6 + 2.2 * nT; // 1.6 .. 3.8
   const war = 0.92 + 0.08 * Math.sin(2 * Math.PI * (phase01 * wf));
   return clamp(tri * war, 0, 1);
-}
-
-// Amplitude from Chloride percentile, gated by arrival and slightly by health
-function chlorideAmplitude(ds, healthIndex, arrCl, pCl /* 0..1 */) {
-  const base = 0.09 + 0.13 * clamp(pCl, 0, 1); // 0.07..0.18
-  const healthMul = 0.9 + 0.1 * (1 - (healthIndex ?? 0.5));
-  return arrCl * base * healthMul;
-}
-
-// Hue for Chloride with ≥32° separation from base hue
-function chlorideHueDeg(baseHueDeg, pCl /* 0..1 */) {
-  const targetOffset = -20 + 40 * clamp(pCl, 0, 1);
-  const pushSign = Math.sign(targetOffset || 1);
-  return guardHueGap(baseHueDeg, baseHueDeg + targetOffset, 32, pushSign);
 }
 
 // Link vertex + fragment into a program
@@ -261,33 +196,6 @@ async function init() {
   const uTotalYearsLoc = gl.getUniformLocation(program, "u_totalYears");
   const uLifespanYearsLoc = gl.getUniformLocation(program, "u_lifespanYears");
 
-  const uNitrogenStrengthLoc = gl.getUniformLocation(
-    program,
-    "u_nitrogenStrength"
-  );
-  const uNitrogenHueDegLoc = gl.getUniformLocation(program, "u_nitrogenHueDeg");
-  const uCreatinineStrengthLoc = gl.getUniformLocation(
-    program,
-    "u_creatinineStrength"
-  );
-  const uCreatinineHueDegLoc = gl.getUniformLocation(
-    program,
-    "u_creatinineHueDeg"
-  );
-  const uSodiumStrengthLoc = gl.getUniformLocation(program, "u_sodiumStrength");
-  const uSodiumHueDegLoc = gl.getUniformLocation(program, "u_sodiumHueDeg");
-  const uChlorideStrength = gl.getUniformLocation(
-    program,
-    "u_chlorideStrength"
-  );
-  const uChlorideHueDeg = gl.getUniformLocation(program, "u_chlorideHueDeg");
-  const uCo2StrengthLoc = gl.getUniformLocation(program, "u_co2Strength");
-  const uCo2HueDegLoc = gl.getUniformLocation(program, "u_co2HueDeg");
-  const uCalciumStrengthLoc = gl.getUniformLocation(
-    program,
-    "u_calciumStrength"
-  );
-  const uCalciumHueDegLoc = gl.getUniformLocation(program, "u_calciumHueDeg");
   const uPAxisNormLoc = gl.getUniformLocation(program, "u_pAxisNorm");
   const uRAxisNormLoc = gl.getUniformLocation(program, "u_rAxisNorm");
   const uQtcNormLoc = gl.getUniformLocation(program, "u_qtcNorm");
@@ -330,11 +238,113 @@ async function init() {
   const hash01 = lastTwoHashDigits / 99; // 0..1
   const signed = (hash01 - 0.5) * 2; // -1..+1
 
-  // Tuned per-beam ranges (degrees)
-  const nudgeNa = 12 * signed; 
-  const nudgeCl = 14 * signed; 
-  const nudgeCO2 = 18 * signed;  
-  const nudgeCa = 12 * signed; 
+  const beamConfigs = [
+    {
+      label: 'N (BUN)', labKey: 'nitrogen', phaseKey: 'phaseN', nudgeMag: 0,
+      strengthLoc: gl.getUniformLocation(program, 'u_nitrogenStrength'),
+      hueLoc:      gl.getUniformLocation(program, 'u_nitrogenHueDeg'),
+      phaseSeed: (h) => h / 99,
+      tempoFn: (_ds) => 10.0,
+      update({ ph, p, baseHueDeg }) {
+        const amp = getBreathingAmplitude(currentDataSet);
+        let str = clamp(0.58 * (0.5 + 0.5 * Math.sin(ph * TAU) * amp), 0, 1);
+        str = 0.35 + 0.20 * str;
+        const hue = baseHueDeg + (10 + 8 * p) * Math.sin(ph * TAU * 0.93 + 0.14);
+        return { str, hue };
+      },
+    },
+    {
+      label: 'C (Cr )', labKey: 'creatinine', phaseKey: 'phaseC', nudgeMag: 0,
+      strengthLoc: gl.getUniformLocation(program, 'u_creatinineStrength'),
+      hueLoc:      gl.getUniformLocation(program, 'u_creatinineHueDeg'),
+      phaseSeed: (h) => (h / 99) * 0.65,
+      tempoFn: (_ds) => 12.0,
+      update({ ph, p, baseHueDeg }) {
+        const amp = getBreathingAmplitude(currentDataSet);
+        let str = clamp((0.4 + 0.3 * p) * (0.5 + 0.5 * Math.sin(ph * TAU) * amp), 0, 1);
+        str = 0.30 + 0.20 * str;
+        const hue = baseHueDeg + (8 + 5 * p) * Math.sin(ph * TAU * 1.07 + 0.08);
+        return { str, hue };
+      },
+    },
+    {
+      label: 'Na', labKey: 'sodium', phaseKey: 'phaseNa', nudgeMag: 12,
+      strengthLoc: gl.getUniformLocation(program, 'u_sodiumStrength'),
+      hueLoc:      gl.getUniformLocation(program, 'u_sodiumHueDeg'),
+      phaseSeed: (h) => (h / 99 + 0.57) % 1,
+      tempoFn: (ds) => {
+        const nVR = clamp(
+          (ds.ecg.ventRate - minMaxValues.ventRate.min) /
+          Math.max(1e-6, minMaxValues.ventRate.max - minMaxValues.ventRate.min), 0, 1);
+        return 10 - 5.5 * nVR;
+      },
+      update({ ph, p, baseHueDeg, totalYears }) {
+        const arr = sodiumArrivalProgress(totalYears, lifespanYears);
+        const k   = sodiumPulseCount(currentDataSet);
+        const pulse = sodiumPulseShape(ph, k, 0.12);
+        const hi = currentDataSet.healthIndex ?? 0.5;
+        const ampNa = arr * (0.08 + 0.12 * p) * (0.85 + 0.15 * (1 - clamp(hi, 0, 1)));
+        const str = clamp(0.14 * (1 - arr) + clamp(ampNa * pulse, 0, 1), 0, 1);
+        const offset = -25 + 50 * p;
+        let hue = guardHueGap(baseHueDeg, baseHueDeg + offset, 32, Math.sign(offset || 1));
+        hue += this.nudgeMag * signed;
+        hue += (16 + 4 * p) * Math.sin(ph * 0.82 + 0.32);
+        return { str, hue, note: arr < 1 ? `  (arriving ${Math.round(arr * 100)}%)` : undefined };
+      },
+    },
+    {
+      label: 'Cl', labKey: 'chloride', phaseKey: 'phaseCl', nudgeMag: 14,
+      strengthLoc: gl.getUniformLocation(program, 'u_chlorideStrength'),
+      hueLoc:      gl.getUniformLocation(program, 'u_chlorideHueDeg'),
+      phaseSeed: (h) => (h / 99 + 0.11) % 1,
+      tempoFn: (ds) => {
+        const nQT = clamp(
+          (ds.ecg.qtInterval - minMaxValues.qtInterval.min) /
+          Math.max(1e-6, minMaxValues.qtInterval.max - minMaxValues.qtInterval.min), 0, 1);
+        return 11 - 5.5 * nQT;
+      },
+      update({ ph, p, baseHueDeg, totalYears }) {
+        const arr   = chlorideArrivalProgress(totalYears, lifespanYears);
+        const shape = chlorideTriWithWarble(ph, currentDataSet);
+        const hi = currentDataSet.healthIndex ?? 0.5;
+        const ampCl = arr * (0.09 + 0.13 * p) * (0.9 + 0.1 * (1 - hi));
+        const str = clamp(0.12 * (1 - arr) + clamp(ampCl * shape, 0, 1), 0, 1);
+        const offset = -20 + 40 * p;
+        let hue = guardHueGap(baseHueDeg, baseHueDeg + offset, 32, Math.sign(offset || 1));
+        hue += this.nudgeMag * signed;
+        hue += (12 + 6 * p) * Math.sin(ph * 0.88 - 0.24);
+        return { str, hue, note: arr < 1 ? `  (arriving ${Math.round(arr * 100)}%)` : undefined };
+      },
+    },
+    {
+      label: 'CO2', labKey: 'carbonDioxide', phaseKey: 'phaseCO2', nudgeMag: 18,
+      strengthLoc: gl.getUniformLocation(program, 'u_co2Strength'),
+      hueLoc:      gl.getUniformLocation(program, 'u_co2HueDeg'),
+      phaseSeed: (_h) => 0,
+      tempoFn: (_ds) => 16.0,
+      update({ ph, p, baseHueDeg, co2Pulse }) {
+        const str = clamp(0.26 + 0.18 * (1 - p) + 0.22 * co2Pulse, 0, 0.62);
+        let hue = baseHueDeg - (24 + 12 * p) + this.nudgeMag * signed;
+        hue = guardHueGap(baseHueDeg, hue, 30, -1);
+        hue += (12 + 6 * p) * Math.sin(ph * TAU + 0.2);
+        return { str, hue };
+      },
+    },
+    {
+      label: 'Ca', labKey: 'calcium', phaseKey: 'phaseCa', nudgeMag: 12,
+      strengthLoc: gl.getUniformLocation(program, 'u_calciumStrength'),
+      hueLoc:      gl.getUniformLocation(program, 'u_calciumHueDeg'),
+      phaseSeed: (_h) => 0,
+      tempoFn: (_ds) => 24.0,
+      update({ ph, p, baseHueDeg, caPulse, pCO2, pPR }) {
+        const str = clamp(0.06 + 0.08 * (1 - pCO2) + 0.16 * caPulse, 0, 0.30);
+        let hue = baseHueDeg + (45 + 25 * p) + this.nudgeMag * signed;
+        hue = guardHueGap(baseHueDeg, hue, 32, +1);
+        hue += (10 + 6 * pPR) * Math.sin(ph * TAU * 0.92 - 0.13);
+        return { str, hue };
+      },
+    },
+  ];
 
   // Internal animation state — phases and timing live here, not on window
   const state = {
@@ -527,226 +537,46 @@ async function init() {
     // how fast totalYears is moving (preview mode, time warp, setYears jumps).
     // Shader-side drift/hue/decay are deterministic from totalYears for time-jumping.
 
-    // ── NITROGEN (direct beam #1) ──
-    const ampN = getBreathingAmplitude(currentDataSet);
-    const tempoN = getBeamTempoSeconds(currentDataSet, BEAM.NITROGEN);
-    state.phaseN = state.phaseN ?? (lastTwoHashDigits / 99) * 2 * Math.PI;
-    state.phaseN += (dt * 2 * Math.PI) / Math.max(1e-3, tempoN);
-    const assertN = 0.58;
-    let strN = clamp(
-      assertN * (0.5 + 0.5 * Math.sin(state.phaseN) * ampN),
-      0,
-      1
-    );
-    strN = 0.35 + (0.55 - 0.35) * strN;
-    const hueAnchorN = getBeamHueAnchorDeg(currentDataSet, BEAM.NITROGEN);
-    const seedN = winsorizedPercentileForLab(
-      currentDataSet,
-      "nitrogen",
-      healthDataSets
-    ); // 0..1
-    const driftAmpN = 10 + 8 * seedN;
-    const hueDegN =
-      hueAnchorN + driftAmpN * Math.sin(state.phaseN * 0.93 + 0.14);
-
-    if (uNitrogenStrengthLoc) gl.uniform1f(uNitrogenStrengthLoc, strN);
-    if (uNitrogenHueDegLoc) gl.uniform1f(uNitrogenHueDegLoc, hueDegN);
-
-    // ── CREATININE (direct beam #2) ──
-    const ampC = getBreathingAmplitude(currentDataSet);
-    const tempoC = getBeamTempoSeconds(currentDataSet, BEAM.CREATININE);
-    state.phaseC = state.phaseC ?? (lastTwoHashDigits / 99) * 1.3 * Math.PI;
-    state.phaseC += (dt * 2 * Math.PI) / Math.max(1e-3, tempoC);
-    const pCreat = winsorizedPercentileForLab(
-      currentDataSet,
-      "creatinine",
-      healthDataSets
-    );
-    const assertC = 0.4 + 0.3 * pCreat;
-    let strC = clamp(
-      assertC * (0.5 + 0.5 * Math.sin(state.phaseC) * ampC),
-      0,
-      1
-    );
-    strC = 0.3 + (0.5 - 0.3) * strC;
-    const hueAnchorC = getBeamHueAnchorDeg(currentDataSet, BEAM.CREATININE);
-    const seedC = winsorizedPercentileForLab(
-      currentDataSet,
-      "creatinine",
-      healthDataSets
-    ); // 0..1
-    const driftAmpC = 8 + 5 * seedC;
-    const hueDegC =
-      hueAnchorC + driftAmpC * Math.sin(state.phaseC * 1.07 + 0.08);
-
-    if (uCreatinineStrengthLoc) gl.uniform1f(uCreatinineStrengthLoc, strC);
-    if (uCreatinineHueDegLoc) gl.uniform1f(uCreatinineHueDegLoc, hueDegC);
-
-    // ---- SODIUM (beam #3) — pulsed Gaussian, arrival @ 20% lifespan ----
-    const pNa = winsorizedPercentileForLab(
-      currentDataSet,
-      "sodium",
-      healthDataSets
-    );
-    const arrNa = sodiumArrivalProgress(totalYears, lifespanYears);
-    const TNa = sodiumTempoSeconds(currentDataSet);
-    const kNa = sodiumPulseCount(currentDataSet);
-    state.phaseNa = state.phaseNa ?? sodiumPhaseSeed(lastTwoHashDigits);
-    state.phaseNa = (state.phaseNa + dt / Math.max(1e-3, TNa)) % 1;
-
-    const pulseNa = sodiumPulseShape(state.phaseNa, kNa, 0.12);
-    const ampNa = sodiumAmplitude(
-      currentDataSet,
-      currentDataSet.healthIndex ?? 0.5,
-      arrNa,
-      pNa
-    );
-    let hueDegNa = sodiumHueDeg(baseHueDeg, currentDataSet, pNa) + nudgeNa;
-    const driftAmpNa = 16 + 4 * pNa;
-    hueDegNa += driftAmpNa * Math.sin(state.phaseNa * 0.82 + 0.32);
-
-    // --- Sodium strength with pre-arrival floor ---
-    const floorNa = 0.14; // ~14% visible from early years
-    const targetNa = clamp(ampNa * pulseNa, 0, 1);
-    // blend from floor → target as arrival progresses
-    const strNa = clamp(floorNa * (1.0 - arrNa) + targetNa, 0, 1);
-
-    if (uSodiumStrengthLoc) gl.uniform1f(uSodiumStrengthLoc, strNa);
-    if (uSodiumHueDegLoc) gl.uniform1f(uSodiumHueDegLoc, hueDegNa);
-
-    // ---- CHLORIDE (beam #4) — triangle + warble, arrival @ 60% lifespan ----
-    const pCl = winsorizedPercentileForLab(
-      currentDataSet,
-      "chloride",
-      healthDataSets
-    );
-    const arrCl = chlorideArrivalProgress(totalYears, lifespanYears);
-    const TCl = chlorideTempoSeconds(currentDataSet);
-    state.phaseCl = state.phaseCl ?? chloridePhaseSeed(lastTwoHashDigits);
-    state.phaseCl = (state.phaseCl + dt / Math.max(1e-3, TCl)) % 1;
-
-    const shapeCl = chlorideTriWithWarble(state.phaseCl, currentDataSet);
-    const ampCl = chlorideAmplitude(
-      currentDataSet,
-      currentDataSet.healthIndex ?? 0.5,
-      arrCl,
-      pCl
-    );
-    let hueDegCl = chlorideHueDeg(baseHueDeg, pCl) + nudgeCl;
-    const driftAmpCl = 12 + 6 * pCl;
-    hueDegCl += driftAmpCl * Math.sin(state.phaseCl * 0.88 - 0.24);
-    // --- Chloride strength with pre-arrival floor ---
-    const floorCl = 0.12; // ~12% visible before full arrival
-    const targetCl = clamp(ampCl * shapeCl, 0, 1);
-    const strCl = clamp(floorCl * (1.0 - arrCl) + targetCl, 0, 1);
-
-    if (uChlorideStrength) gl.uniform1f(uChlorideStrength, strCl);
-    if (uChlorideHueDeg) gl.uniform1f(uChlorideHueDeg, hueDegCl);
-
-    // ---------- CO2 (beam #5) : cool halo ----------
-    const pCO2 = winsorizedPercentileForLab(
-      currentDataSet,
-      "carbonDioxide",
-      healthDataSets
-    );
-    const baseHueDeg5 =
-      computeHSBFromStats(currentDataSet, healthDataSets).hue * 360.0;
-
-    // Hue: base −18°..−36° (higher CO2 → cooler), keep ≥26° from base (push cooler)
-    let hueDegCO2 = baseHueDeg5 - (24 + 12 * pCO2) + nudgeCO2;
-    hueDegCO2 = guardHueGap(baseHueDeg5, hueDegCO2, 30, -1);
-    const driftAmpCO2 = 12 + 6 * pCO2;
-    state.phaseCO2 = state.phaseCO2 ?? 0;
-    state.phaseCO2 += (dt * 2 * Math.PI) / Math.max(1e-3, getBeamTempoSeconds(currentDataSet, BEAM.CO2));
-    hueDegCO2 += driftAmpCO2 * Math.sin(state.phaseCO2 * 1.0 + 0.2);
-
-    // Strength: baseline from health (worse health → a bit more halo), plus ripple pulse that decays
-    const baseCO2 = 0.26 + 0.18 * (1 - pCO2);
+    // Decay ripple pulses once per frame
     co2Pulse *= Math.exp(-dt / 18.0);
-    const strCO2 = clamp(baseCO2 + 0.22 * co2Pulse, 0, 0.62);
+    caPulse  *= Math.exp(-dt / 26.0);
 
-    if (uCo2StrengthLoc) gl.uniform1f(uCo2StrengthLoc, strCO2);
-    if (uCo2HueDegLoc) gl.uniform1f(uCo2HueDegLoc, hueDegCO2);
+    // Pre-compute cross-beam dependencies
+    const pCO2 = winsorizedPercentileForLab(currentDataSet, 'carbonDioxide', healthDataSets);
+    const pPR  = clamp(
+      (currentDataSet.ecg.prInterval - minMaxValues.prInterval.min) /
+      Math.max(1e-6, minMaxValues.prInterval.max - minMaxValues.prInterval.min), 0, 1);
 
-    // ---------- Calcium (beam #6) : warm broad field ----------
-    const pCa = winsorizedPercentileForLab(
-      currentDataSet,
-      "calcium",
-      healthDataSets
-    );
-    const baseHueDeg6 = baseHueDeg5;
+    const beamDisplayLines = [];
+    for (const cfg of beamConfigs) {
+      const p = winsorizedPercentileForLab(currentDataSet, cfg.labKey, healthDataSets);
+      state[cfg.phaseKey] = state[cfg.phaseKey] ?? cfg.phaseSeed(lastTwoHashDigits);
+      state[cfg.phaseKey] = (state[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(currentDataSet))) % 1;
+      const ph = state[cfg.phaseKey];
+      const { str, hue, note } = cfg.update({ ph, p, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
+      if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
+      if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);
+      beamDisplayLines.push(`${cfg.label}: str=${str.toFixed(2)} hue=${wrapDeg(hue).toFixed(0)}°${note ?? ''}`);
+    }
 
-    // Hue: base +18°..+36° (higher Ca → warmer), keep ≥24° from base (push warmer)
-    let hueDegCa = baseHueDeg6 + (45 + 25 * pCa) + nudgeCa;
-    hueDegCa = guardHueGap(baseHueDeg6, hueDegCa, 32, +1);
+    // Overlays — 4 corners
+    overlayTL.textContent = [
+      `DS:${currentDataSetIndex}  yr:${totalYears.toFixed(2)}`,
+      params.overrideYears !== null ? `OVR ${params.overrideYears.toFixed(1)}y` : `REALTIME`,
+      `warp:x${params.timeWarp}`,
+    ].join('\n');
 
-    // Drift: calmer than CO2; seed from PR interval percentile for variety
-    const prMin = minMaxValues.prInterval.min,
-      prMax = minMaxValues.prInterval.max;
-    const pPR = clamp(
-      (currentDataSet.ecg.prInterval - prMin) / Math.max(1e-6, prMax - prMin),
-      0,
-      1
-    );
-    const driftAmpCa = 10 + 6 * pPR;
+    overlayBL.textContent = [
+      `HI:${currentDataSet.healthIndex?.toFixed(3) ?? 'N/A'}  decay:${effectiveDecayPerYear.toExponential(2)}`,
+      `phY:${phaseYears.toFixed(1)}  inh:${inheritedHueDeg.toFixed(0)}deg ${inheritedStrength.toFixed(2)}`,
+    ].join('\n');
 
-    state.phaseCa = state.phaseCa ?? 0;
-    state.phaseCa += (dt * 2 * Math.PI) / Math.max(1e-3, getBeamTempoSeconds(currentDataSet, BEAM.CALCIUM));
+    overlayTR.textContent = [
+      `p:${currentDataSet.ecg.pAxis}(${pAxisNorm.toFixed(2)})  r:${currentDataSet.ecg.rAxis}(${rAxisNorm.toFixed(2)})`,
+      baseHex,
+    ].join('\n');
 
-    hueDegCa += driftAmpCa * Math.sin(state.phaseCa * 0.92 - 0.13);
-
-    // --- Calcium strength (baseline + ripple) ---
-
-    const hiCO2 = typeof pCO2 !== "undefined" ? pCO2 : 0.5;
-
-    caPulse *= Math.exp(-dt / 26.0);
-
-    const baseCa = 0.06 + 0.08 * (1.0 - hiCO2); // cooler CO₂ → warmer Ca baseline
-    const strCa = clamp(baseCa + 0.16 * caPulse, 0.0, 0.30);
-
-    if (uCalciumStrengthLoc) gl.uniform1f(uCalciumStrengthLoc, strCa);
-    if (uCalciumHueDegLoc) gl.uniform1f(uCalciumHueDegLoc, hueDegCa);
-
-    // Left overlay
-    overlay.textContent = [
-      `Dataset: ${currentDataSetIndex}`,
-      `HealthIndex: ${currentDataSet.healthIndex?.toFixed(3) ?? "N/A"}`,
-      `Years: ${totalYears.toFixed(2)}`,
-      `DecayRate(eff): ${effectiveDecayPerYear.toExponential(3)}`,
-      `PhaseYears: ${phaseYears.toFixed(2)}`,
-      params.overrideYears !== null
-        ? `Mode: OVERRIDE (${params.overrideYears}y)`
-        : `Mode: REALTIME`,
-      `Warp: x${params.timeWarp}`,
-      `Inherited: ${inheritedHueDeg.toFixed(0)}° str=${inheritedStrength.toFixed(2)}`,
-    ].join("\n");
-
-    // Right overlay
-    beamOverlay.textContent = [
-      `pAxis: ${currentDataSet.ecg.pAxis}° (norm=${pAxisNorm.toFixed(2)})`,
-      `rAxis: ${currentDataSet.ecg.rAxis}° (norm=${rAxisNorm.toFixed(2)})`,
-      `N (BUN): str=${strN.toFixed(2)} hue=${(
-        ((hueDegN % 360) + 360) %
-        360
-      ).toFixed(0)}°`,
-      `C (Cr ): str=${strC.toFixed(2)} hue=${(
-        ((hueDegC % 360) + 360) %
-        360
-      ).toFixed(0)}°`,
-      `Na: str=${strNa.toFixed(2)} hue=${(
-        ((hueDegNa % 360) + 360) %
-        360
-      ).toFixed(0)}°` +
-        (arrNa < 1 ? `  (arriving ${Math.round(arrNa * 100)}%)` : ``),
-      `Cl: str=${strCl.toFixed(2)} hue=${(
-        ((hueDegCl % 360) + 360) %
-        360
-      ).toFixed(0)}°` +
-        (arrCl < 1 ? `  (arriving ${Math.round(arrCl * 100)}%)` : ``),
-      `CO2: str=${strCO2.toFixed(2)} hue=${wrapDeg(hueDegCO2).toFixed(0)}°`,
-      `Ca: str=${strCa.toFixed(2)} hue=${wrapDeg(hueDegCa).toFixed(0)}°`,
-      `BaseHex: ${baseHex}`,
-    ].join("\n");
+    overlayBR.textContent = beamDisplayLines.join('\n');
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(draw);
@@ -810,19 +640,6 @@ function computeHSBFromStats(dataSet, healthDataSets) {
   return { hue, sat, bri };
 }
 
-// ──────────────────────────────────────────────────────────────
-// BEAM SCAFFOLD (no-ops for now)
-// ──────────────────────────────────────────────────────────────
-
-const BEAM = Object.freeze({
-  NITROGEN: 0, // BUN (direct)
-  CREATININE: 1, // direct
-  SODIUM: 2, // lifespan @ ~20%
-  CHLORIDE: 3, // lifespan @ ~60%
-  CO2: 4, // ripple
-  CALCIUM: 5, // ripple
-});
-
 // Winsorized percentile helper for any lab key (5–95%)
 function winsorizedPercentileForLab(
   dataSet,
@@ -862,70 +679,41 @@ function getBreathingAmplitude(dataSet) {
   return amp;
 }
 
-// Tempo mapper stub
-function getBeamTempoSeconds(_dataSet, beamId) {
-  switch (beamId) {
-    case BEAM.NITROGEN:
-      return 10.0;
-    case BEAM.CREATININE:
-      return 12.0;
-    case BEAM.SODIUM:
-      return 7.0;
-    case BEAM.CHLORIDE:
-      return 9.0;
-    case BEAM.CO2:
-      return 16.0;
-    case BEAM.CALCIUM:
-      return 24.0;
-    default:
-      return 12.0;
-  }
+// Overlays — 4 corners, hidden by default, toggle with window.toggleOverlay()
+function makeCornerOverlay(vert, horiz) {
+  const div = document.createElement('div');
+  Object.assign(div.style, {
+    position: 'fixed',
+    [vert]: '4px',
+    [horiz]: '4px',
+    padding: '2px 5px',
+    background: 'rgba(0,0,0,0.4)',
+    color: 'rgba(0,255,0,0.7)',
+    whiteSpace: 'pre',
+    fontFamily: 'monospace',
+    fontSize: '10px',
+    lineHeight: '1.4',
+    textAlign: horiz === 'left' ? 'left' : 'right',
+    zIndex: '9999',
+    pointerEvents: 'none',
+    display: 'none',
+  });
+  document.body.appendChild(div);
+  return div;
 }
 
-// Hue anchor stub
-function getBeamHueAnchorDeg(dataSet, _beamId) {
-  const { hue } = computeHSBFromStats(dataSet, healthDataSets);
-  return hue * 360.0; // degrees
-}
-
-// Overlay toggle
-// overlays — hidden by default, toggle with window.toggleOverlay()
-const overlay = document.createElement("div");
-overlay.style.position = "fixed";
-overlay.style.top = "5px";
-overlay.style.left = "10px";
-overlay.style.padding = "6px 10px";
-overlay.style.background = "rgba(0, 0, 0, 0.6)";
-overlay.style.color = "lime";
-overlay.style.whiteSpace = "pre";
-overlay.style.fontFamily = "monospace";
-overlay.style.fontSize = "12px";
-overlay.style.textAlign = "left";
-overlay.style.zIndex = "9999";
-overlay.style.display = "none";
-document.body.appendChild(overlay);
-
-const beamOverlay = document.createElement("div");
-beamOverlay.style.position = "fixed";
-beamOverlay.style.top = "5px";
-beamOverlay.style.left = "auto";
-beamOverlay.style.right = "10px";
-beamOverlay.style.padding = "6px 10px";
-beamOverlay.style.background = "rgba(0, 0, 0, 0.6)";
-beamOverlay.style.color = "lime";
-beamOverlay.style.whiteSpace = "pre";
-beamOverlay.style.fontFamily = "monospace";
-beamOverlay.style.fontSize = "12px";
-beamOverlay.style.textAlign = "right";
-beamOverlay.style.zIndex = "9999";
-beamOverlay.style.pointerEvents = "none";
-beamOverlay.style.display = "none";
-document.body.appendChild(beamOverlay);
+const overlayTL = makeCornerOverlay('top', 'left');
+const overlayBL = makeCornerOverlay('bottom', 'left');
+const overlayTR = makeCornerOverlay('top', 'right');
+const overlayBR = makeCornerOverlay('bottom', 'right');
 
 window.toggleOverlay = () => {
-  const show = overlay.style.display === "none";
-  overlay.style.display = show ? "block" : "none";
-  beamOverlay.style.display = show ? "block" : "none";
+  const show = overlayTL.style.display === 'none';
+  const v = show ? 'block' : 'none';
+  overlayTL.style.display = v;
+  overlayBL.style.display = v;
+  overlayTR.style.display = v;
+  overlayBR.style.display = v;
 };
 
 init();
