@@ -43,10 +43,13 @@ uniform float u_calciumRadius;
 uniform float u_bunCreatRatioNorm;
 
 // ECG axis uniforms — drive beam spatial positioning and field drift tempo
-uniform float u_pAxisNorm;   // P wave axis, normalized 0..1 over dataset range
-uniform float u_rAxisNorm;   // R wave (QRS) axis, normalized 0..1 over dataset range
-uniform float u_qtcNorm;     // QTc interval, normalized 0..1 — drives identity field tempo
-uniform float u_prNorm;      // PR interval, normalized 0..1 — drives acid-base field tempo
+uniform float u_pAxisNorm;    // P wave axis, normalized 0..1 over dataset range
+uniform float u_rAxisNorm;    // R wave (QRS) axis, normalized 0..1 over dataset range
+uniform float u_qtcNorm;      // QTc interval, normalized 0..1 — drives identity field tempo
+uniform float u_prNorm;       // PR interval, normalized 0..1 — drives acid-base field tempo
+uniform float u_ventRateNorm; // Heart rate, normalized 0..1 — scales all field drift frequencies
+uniform float u_tAxisNorm;    // T-wave axis, normalized 0..1 — repolarization direction
+uniform float u_qrsTAngle;   // QRS-T angle normalized 0..1 — electrical dissonance (0=aligned, 1=max)
 
 // Inheritance uniforms — color field carried in from previous piece at mint
 uniform float u_inheritedHueDeg;  // hue in degrees, frozen at mint from ancestor
@@ -87,7 +90,8 @@ float ellipseDist(vec2 p, vec2 center, float aspect, float angle){
 }
 
 void main(){
-    float n = rand(v_uv * u_resolution.xy * .1) * .02;
+    // Grain scales with QRS-T dissonance: aligned repolarization = smooth, discordant = textured
+    float n = rand(v_uv * u_resolution.xy * .1) * (0.02 + 0.03 * u_qrsTAngle);
     float t = u_totalYears;
 
     // Life fraction and drift growth — the piece moves more as it ages
@@ -132,10 +136,12 @@ void main(){
     // --- ECG-driven drift frequencies ---
     // The heart's electrical timing becomes the movement tempo of each field.
     // QTc (repolarization) drives the identity field; PR (conduction) drives acid-base.
-    float freqA = 0.06 + 0.10 * u_qtcNorm;     // cf1: QTc interval → identity field tempo
-    float freqB = 0.04 + 0.07 * u_prNorm;      // cf2: PR interval → acid-base field tempo
-    float freqC = 0.05 + 0.08 * u_rAxisNorm;   // cf3: R axis → electrolyte field tempo
-    float freqD = 0.05 + 0.06 * u_pAxisNorm;   // cf4: P axis → inherited field tempo
+    // Heart rate scales all frequencies: bradycardic pieces drift slowly, tachycardic urgently.
+    float heartPace = 0.75 + 0.50 * u_ventRateNorm; // 0.75 (slow HR) → 1.25 (fast HR)
+    float freqA = (0.06 + 0.10 * u_qtcNorm)   * heartPace; // cf1: QTc × HR
+    float freqB = (0.04 + 0.07 * u_prNorm)    * heartPace; // cf2: PR × HR
+    float freqC = (0.05 + 0.08 * u_rAxisNorm) * heartPace; // cf3: R axis × HR
+    float freqD = (0.05 + 0.06 * u_pAxisNorm) * heartPace; // cf4: P axis × HR
 
     // --- Field centers: lab anchor + ECG displacement + time drift ---
     // ECG axes add additional spatial character on top of the lab-derived base.
@@ -148,9 +154,11 @@ void main(){
         + 0.11 * driftMul * vec2(cos(t * freqB        + 6.2831 * u_rAxisNorm),
                                   sin(t * freqB * 1.18 + 6.2831 * u_pAxisNorm));
 
+    // cf3 drift seeded by T-wave axis — repolarization direction gives the cardiac
+    // field an independent trajectory, distinct from depolarization (p/r) axes.
     vec2 cf3 = fieldBase3 + vec2(0.09 * rS, -0.10 * pS)
-        + 0.11 * driftMul * vec2(sin(t * freqC        + 6.2831 * (1.0 - u_pAxisNorm)),
-                                  cos(t * freqC * 0.91 + 6.2831 * (1.0 - u_rAxisNorm)));
+        + 0.11 * driftMul * vec2(sin(t * freqC        + 6.2831 * u_tAxisNorm),
+                                  cos(t * freqC * 0.91 + 6.2831 * (1.0 - u_tAxisNorm)));
 
     // Inherited field: antipodal to cf1, π-offset drift so it moves in counterpoint
     vec2 cf4 = fieldBase4 + vec2(-0.08 * pS, -0.08 * rS)
@@ -275,8 +283,13 @@ float lum = dot(rgbColor, vec3(.299, .587, .114));
 float edge = length(vec2(dFdx(lum), dFdy(lum)));
 float edgeW = smoothstep(.004, .050, edge);// stronger where colors meet
 float ambW = .88 + .12 * rand(v_uv + vec2(u_pAxisNorm * 6.28, u_rAxisNorm * 4.71));// near-uniform atmospheric presence, slight texture per dataset
+// T-axis directional lean: halo is subtly brighter in the repolarization direction
+float tAngle = u_tAxisNorm * 3.14159;
+float tBias = 0.5 + 0.5 * dot(normalize(v_uv - vec2(0.5)), vec2(cos(tAngle), sin(tAngle)));
 float localGain = smoothstep(.01, .55, lum);// avoid dark wash
-float haloW = u_co2Strength * mix(ambW, edgeW, .55) * localGain;
+// QRS-T dissonance shifts halo from diffuse to edge-concentrated: discordant repolarization
+// makes the atmosphere cluster at color boundaries rather than spread uniformly
+float haloW = u_co2Strength * mix(ambW, edgeW, 0.45 + 0.30 * u_qrsTAngle) * localGain * (0.88 + 0.12 * tBias);
 
 // CALCIUM: both axes; lobes are pushed in opposite directions
 vec2 c1 = vec2(0.62 + 0.22 * pS + .05 * sin(t * .11),

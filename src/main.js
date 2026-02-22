@@ -313,6 +313,9 @@ async function init() {
   const uRAxisNormLoc = gl.getUniformLocation(program, "u_rAxisNorm");
   const uQtcNormLoc = gl.getUniformLocation(program, "u_qtcNorm");
   const uPrNormLoc = gl.getUniformLocation(program, "u_prNorm");
+  const uVentRateNormLoc = gl.getUniformLocation(program, "u_ventRateNorm");
+  const uTAxisNormLoc = gl.getUniformLocation(program, "u_tAxisNorm");
+  const uQrsTAngleLoc = gl.getUniformLocation(program, "u_qrsTAngle");
   const uInheritedHueDegLoc = gl.getUniformLocation(program, "u_inheritedHueDeg");
   const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
 
@@ -331,6 +334,11 @@ async function init() {
     .sort((a, b) => a - b);
   const bunCreatP05 = allBunCreatRatios[Math.floor(0.05 * (allBunCreatRatios.length - 1))];
   const bunCreatP95 = allBunCreatRatios[Math.ceil(0.95 * (allBunCreatRatios.length - 1))];
+
+  // QRS-T angle: |rAxis - tAxis|, normalized over dataset range
+  const allQrsTAngles = healthDataSets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
+  const qrsTAngleMin = Math.min(...allQrsTAngles);
+  const qrsTAngleMax = Math.max(...allQrsTAngles);
 
   let currentDataSetIndex = 0;
   let currentDataSet = healthDataSets[currentDataSetIndex];
@@ -618,6 +626,22 @@ async function init() {
     );
     if (uQtcNormLoc) gl.uniform1f(uQtcNormLoc, qtcNorm);
     if (uPrNormLoc) gl.uniform1f(uPrNormLoc, prNorm);
+    const ventRateNorm = clamp(
+      normalize(currentDataSet.ecg.ventRate, minMaxValues.ventRate.min, minMaxValues.ventRate.max),
+      0, 1
+    );
+    if (uVentRateNormLoc) gl.uniform1f(uVentRateNormLoc, ventRateNorm);
+    const tAxisNorm = clamp(
+      normalize(currentDataSet.ecg.tAxis, minMaxValues.tAxis.min, minMaxValues.tAxis.max),
+      0, 1
+    );
+    if (uTAxisNormLoc) gl.uniform1f(uTAxisNormLoc, tAxisNorm);
+    const qrsTAngle = Math.abs(currentDataSet.ecg.rAxis - currentDataSet.ecg.tAxis);
+    const qrsTAngleNorm = clamp(
+      (qrsTAngle - qrsTAngleMin) / Math.max(1e-6, qrsTAngleMax - qrsTAngleMin),
+      0, 1
+    );
+    if (uQrsTAngleLoc) gl.uniform1f(uQrsTAngleLoc, qrsTAngleNorm);
 
     // Inherited color field — fades from full presence at birth toward 0 at end of life
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
