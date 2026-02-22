@@ -401,6 +401,8 @@ async function init() {
   // lifespan + aligned rate
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
   let decayPerYear = baseDecayPerYear32 * (32 / lifespanYears);
+  let phaseYears = clamp(lifespanYears * 0.15, 4, 10);
+  let rateAmplitude = 0.3;
 
   // set uniforms
   function setHSBUniforms() {
@@ -451,6 +453,19 @@ async function init() {
     gl.uniform2f(uResolutionLoc, gl.canvas.width, gl.canvas.height);
   }
 
+  // sample the health track over time (returns 0..1)
+  function sampleHealthMod(totalYears, phaseYears, track) {
+    if (!track || track.length === 0) return 0.5;
+    const t = (totalYears / phaseYears) % 1; // 0..1 over one loop
+    const f = t * (track.length - 1);
+    const i = Math.floor(f);
+    const frac = f - i;
+    const a = track[i];
+    const b = track[Math.min(i + 1, track.length - 1)];
+    const mu = (1.0 - Math.cos(frac * Math.PI)) * 0.5;
+    return a * (1 - mu) + b * mu;
+  }
+
   // the draw() call just clears and draws the quad:
   function draw() {
     resizeCanvasToDisplaySize(canvas);
@@ -476,7 +491,11 @@ async function init() {
       (params.overrideYears !== null ? params.overrideYears : baseYears) *
       (params.timeWarp || 1);
 
-    gl.uniform1f(uDecayPerYearLoc, decayPerYear);
+    const healthMod01 = sampleHealthMod(totalYears, phaseYears, hiNorm);
+    const rateMul = 1.0 + rateAmplitude * (healthMod01 - 0.5);
+    const effectiveDecayPerYear = decayPerYear * rateMul;
+
+    gl.uniform1f(uDecayPerYearLoc, effectiveDecayPerYear);
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);
 
@@ -720,7 +739,8 @@ async function init() {
       `Dataset: ${currentDataSetIndex}`,
       `HealthIndex: ${currentDataSet.healthIndex?.toFixed(3) ?? "N/A"}`,
       `Years: ${totalYears.toFixed(2)}`,
-      `DecayRate: ${decayPerYear.toExponential(3)}`,
+      `DecayRate(eff): ${effectiveDecayPerYear.toExponential(3)}`,
+      `PhaseYears: ${phaseYears.toFixed(2)}`,
       params.overrideYears !== null
         ? `Mode: OVERRIDE (${params.overrideYears}y)`
         : `Mode: REALTIME`,
@@ -777,6 +797,7 @@ async function init() {
       baseDecayPerYear32 = currentDataSet.decayRate;
       lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
       decayPerYear = baseDecayPerYear32 * (32 / lifespanYears);
+      phaseYears = clamp(lifespanYears * 0.15, 4, 10);
 
       draw();
     } else {

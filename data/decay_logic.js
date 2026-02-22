@@ -7,28 +7,28 @@
 
 const BASE_DECAY_PER_YEAR_32 = 0.01;
 
-function calculateDynamicDecayRate(dataSet, minMaxValues, healthIndex) {
-  function norm(val, min, max) {
-    if (max - min === 0) return 0;
-    return (val - min) / (max - min);
-  }
+function normalize(val, min, max) {
+  if (max - min === 0) return 0.5;
+  return (val - min) / (max - min);
+}
 
-  const nQTc = norm(
+function calculateDynamicDecayRate(dataSet, minMaxValues, healthIndex) {
+  const nQTc = normalize(
     dataSet.ecg.qtcInterval,
     minMaxValues.qtcInterval.min,
     minMaxValues.qtcInterval.max
   );
-  const nCreatinine = norm(
+  const nCreatinine = normalize(
     dataSet.labs.creatinine,
     minMaxValues.creatinine.min,
     minMaxValues.creatinine.max
   );
-  const nEGFR = norm(
+  const nEGFR = normalize(
     dataSet.labs.eGFR,
     minMaxValues.eGFR.min,
     minMaxValues.eGFR.max
   );
-  const nGlucose = norm(
+  const nGlucose = normalize(
     dataSet.labs.glucose,
     minMaxValues.glucose.min,
     minMaxValues.glucose.max
@@ -48,4 +48,4 @@ function calculateDynamicDecayRate(dataSet, minMaxValues, healthIndex) {
   return BASE_DECAY_PER_YEAR_32 * shaped;
 }
 
-export { calculateDynamicDecayRate, BASE_DECAY_PER_YEAR_32 };
+export { calculateDynamicDecayRate, BASE_DECAY_PER_YEAR_32, normalize };

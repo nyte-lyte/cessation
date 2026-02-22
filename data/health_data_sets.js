@@ -1,4 +1,4 @@
-import { calculateDynamicDecayRate } from "./decay_logic.js";
+import { calculateDynamicDecayRate, normalize } from "./decay_logic.js";
 
 let healthDataSets = [
   {
@@ -833,13 +833,6 @@ healthDataSets.forEach((dataSet) => {
 });
 
 console.log("Min/Max Values:", minMaxValues);
-
-function normalize(value, min, max) {
-  if (max - min === 0) {
-    return 0;
-  }
-  return (value - min) / (max - min);
-}
 
 function calculateHealthIndex(data) {
   let weightedIndex =
