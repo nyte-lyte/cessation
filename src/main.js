@@ -274,6 +274,7 @@ async function init() {
   gl.vertexAttribPointer(positionAttribLocation, 2, gl.FLOAT, false, 0, 0);
 
   // uniform locations
+  const uTimeLoc = gl.getUniformLocation(program, "u_time");
   const uResolutionLoc = gl.getUniformLocation(program, "u_resolution");
   const uGlucoseLoc = gl.getUniformLocation(program, "u_glucose");
   const uPotassiumLoc = gl.getUniformLocation(program, "u_potassium");
@@ -360,7 +361,7 @@ async function init() {
   const inscriptionUnixSeconds = 1704067200;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
 
-  // Inherited hue — stub: piece 0's primary (glucose) hue in degrees.
+  // Inherited hue — piece 0's primary (glucose) hue in degrees.
   // TODO: replace with the ancestor piece's hue read from chain at mint time.
   const ancestorHueDeg = computeHSBFromStats(healthDataSets[0], healthDataSets).hue * 360;
   let inheritedHueDeg = ancestorHueDeg;
@@ -580,6 +581,7 @@ async function init() {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     const t = performance.now() / 1000;
+    if (uTimeLoc) gl.uniform1f(uTimeLoc, t);
     window.__lastT = window.__lastT ?? t;
     const dt = Math.min(0.1, Math.max(0, t - window.__lastT));
     window.__lastT = t;
@@ -778,6 +780,7 @@ function computeHSBFromStats(dataSet, healthDataSets) {
 
   return { hue, sat, bri };
 }
+
 
 // ──────────────────────────────────────────────────────────────
 // BEAM SCAFFOLD (no-ops for now)
