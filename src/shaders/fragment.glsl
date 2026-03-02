@@ -131,10 +131,10 @@ void main(){
     // --- Per-field sigma from health data ---
     // eGFR (kidney function) determines spread: high eGFR = wide diffuse zones,
     // low eGFR = tight concentrated pools. Each field responds to a different axis.
-    float s1 = 0.09 + 0.20 * u_eGFR;          // identity field: kidney health = spread
-    float s2 = 0.10 + 0.16 * (1.0 - u_eGFR);  // acid-base field: inverted kidney
-    float s3 = 0.08 + 0.18 * u_glucose;         // electrolyte field: energy level = spread
-    float s4 = 0.10 + 0.14 * u_eGFR;            // lineage field: kidney health drives spread
+    float s1 = (0.09 + 0.20 * u_eGFR)         * 0.75;
+    float s2 = (0.10 + 0.16 * (1.0 - u_eGFR)) * 0.75;
+    float s3 = (0.08 + 0.18 * u_glucose)       * 0.75;
+    float s4 = (0.10 + 0.14 * u_eGFR)         * 0.75;
 
     // --- ECG-driven drift frequencies ---
     // The heart's electrical timing becomes the movement tempo of each field.
@@ -169,16 +169,16 @@ void main(){
                                   sin(t * freqD * 0.88 + 3.1416 * u_rAxisNorm));
 
     // Gaussian weights: per-field sigma makes each zone uniquely sized
-    float w1 = exp(-dot(v_uv - cf1, v_uv - cf1) / s1);
-    float w2 = exp(-dot(v_uv - cf2, v_uv - cf2) / s2);
-    float w3 = exp(-dot(v_uv - cf3, v_uv - cf3) / s3);
-    float w4 = exp(-dot(v_uv - cf4, v_uv - cf4) / s4) * u_inheritedStrength;
+    float w1 = exp(-dot(v_uv - cf1, v_uv - cf1) / s1); w1 *= w1;
+    float w2 = exp(-dot(v_uv - cf2, v_uv - cf2) / s2); w2 *= w2;
+    float w3 = exp(-dot(v_uv - cf3, v_uv - cf3) / s3); w3 *= w3;
+    float w4 = exp(-dot(v_uv - cf4, v_uv - cf4) / s4) * u_inheritedStrength; w4 *= w4;
     float wSum = w1 + w2 + w3 + w4 + 1e-6;
 
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
     vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.55 + 0.35 * u_potassium, 0.35 + 0.55 * u_eGFR);
-    vec3 col2 = hsb2rgb(mod(u_co2HueDeg      + hDrift2, 360.), 0.55,                      0.50 + 0.30 * u_eGFR);
-    vec3 col3 = hsb2rgb(mod(u_calciumHueDeg  + hDrift3, 360.), 0.62,                      0.48 + 0.30 * u_eGFR);
+    vec3 col2 = hsb2rgb(mod(u_eGFR    * 360.  + hDrift2, 360.), 0.55,                      0.50 + 0.30 * u_eGFR);
+    vec3 col3 = hsb2rgb(mod(u_qtcNorm * 360.  + hDrift3, 360.), 0.62,                      0.48 + 0.30 * u_eGFR);
     vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.58, 0.52 + 0.28 * u_eGFR);
 
     vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum;
