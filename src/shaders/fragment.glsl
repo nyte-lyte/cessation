@@ -368,6 +368,51 @@ float mCa = max(m1, m2);
     vec3 caTint = hsb2rgb(u_calciumHueDeg, 0.70, 0.95);
     rgbColor = screenBlend(rgbColor, caTint, u_calciumStrength * mCa * darkW);
 
+    // --- Proximity-triggered child blobs ---
+    // When two parent blobs drift close enough to overlap, a child blob tears away
+    // from their intersection with a mixed hue. The child has its own drift phase
+    // so it moves independently after birth. Uses screen blend to avoid clipping white.
+
+    // Child 1: Kidney stress (Nitrogen × Creatinine)
+    // Hue: midpoint of N and Cr hues — a color that exists nowhere else in the piece.
+    float nCrDist  = length(cN - cC1);
+    float nCrProx  = 1.0 - smoothstep(0.08, 0.28, nCrDist);
+    vec2 cKid1 = (cN + cC1) * 0.5
+        + 0.12 * vec2(sin(u_time * 0.031 + 2.1 + 6.2831 * u_qtcNorm),
+                      cos(u_time * 0.027 + 1.4 + 6.2831 * u_pAxisNorm))
+        + 0.10 * driftMul * vec2(sin(t * 0.14 + 3.7 + 6.2831 * u_rAxisNorm),
+                                  cos(t * 0.11 + 2.9 + 6.2831 * u_qtcNorm));
+    float kid1R = 0.08 + 0.10 * u_bunCreatRatioNorm;
+    float mKid1 = nCrProx * (1.0 - smoothstep(kid1R, kid1R * 2.0, length(v_uv - cKid1)));
+    vec3 kid1RGB = hsb2rgb(mod(mix(u_nitrogenHueDeg, u_creatinineHueDeg, 0.5) + 30.0, 360.), 0.92, 0.68);
+    rgbColor = screenBlend(rgbColor, kid1RGB, mKid1 * 0.80);
+
+    // Child 2: Electrolyte balance (Sodium × Chloride — NaCl)
+    float naClDist = length(cA - cCl);
+    float naClProx = 1.0 - smoothstep(0.08, 0.30, naClDist);
+    vec2 cKid2 = (cA + cCl) * 0.5
+        + 0.12 * vec2(cos(u_time * 0.028 + 0.8 + 6.2831 * u_rAxisNorm),
+                      sin(u_time * 0.024 + 3.2 + 6.2831 * u_ventRateNorm))
+        + 0.10 * driftMul * vec2(cos(t * 0.12 + 1.8 + 6.2831 * u_prNorm),
+                                  sin(t * 0.09 + 4.1 + 6.2831 * u_rAxisNorm));
+    float kid2R = 0.07 + 0.09 * u_sodiumRadius;
+    float mKid2 = naClProx * (1.0 - smoothstep(kid2R, kid2R * 2.0, length(v_uv - cKid2)));
+    vec3 kid2RGB = hsb2rgb(mod(mix(u_sodiumHueDeg, u_chlorideHueDeg, 0.5) - 25.0, 360.), 0.90, 0.66);
+    rgbColor = screenBlend(rgbColor, kid2RGB, mKid2 * 0.75);
+
+    // Child 3: Calcium resonance (Ca lobe 1 × lobe 2)
+    float caLobeDist = length(c1 - c2);
+    float caLobeProx = 1.0 - smoothstep(0.10, 0.40, caLobeDist);
+    vec2 cKid3 = (c1 + c2) * 0.5
+        + 0.11 * vec2(sin(u_time * 0.019 + 4.5 + 6.2831 * u_tAxisNorm),
+                      cos(u_time * 0.023 + 1.1 + 6.2831 * u_qtcNorm))
+        + 0.10 * driftMul * vec2(sin(t * 0.10 + 5.2 + 6.2831 * u_tAxisNorm),
+                                  cos(t * 0.13 + 0.7 + 6.2831 * (1.0 - u_qtcNorm)));
+    float kid3R = 0.07 + 0.09 * u_calciumRadius;
+    float mKid3 = caLobeProx * (1.0 - smoothstep(kid3R, kid3R * 2.0, length(v_uv - cKid3)));
+    vec3 kid3RGB = hsb2rgb(mod(u_calciumHueDeg + 120.0, 360.), 0.88, 0.64);
+    rgbColor = screenBlend(rgbColor, kid3RGB, mKid3 * 0.70);
+
     // Decay: stays near full brightness until ~70% of lifespan, then drops steeply.
     // Models how a body stays vital most of its life and deteriorates near the end.
     float latePhase = smoothstep(0.70, 1.00, lifeFraction);
