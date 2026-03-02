@@ -236,8 +236,9 @@ function createProgram(gl, vertexSrc, fragmentSrc) {
 
 // resize‐handling utility, to keep canvas at full window size
 function resizeCanvasToDisplaySize(canvas) {
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.round(canvas.clientWidth * dpr);
+  const height = Math.round(canvas.clientHeight * dpr);
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
@@ -860,7 +861,6 @@ function getBeamHueAnchorDeg(dataSet, _beamId) {
   return hue * 360.0; // degrees
 }
 
-// Overlay toggle
 // overlays — hidden by default, toggle with window.toggleOverlay()
 const overlay = document.createElement("div");
 overlay.style.position = "fixed";
