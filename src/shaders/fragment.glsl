@@ -257,26 +257,26 @@ float caOuter2 = 0.30 + 0.18 * u_calciumRadius;
 
 // Nitrogen: pAxis drives position
 vec2 cN = vec2(0.35 + 0.35 * pS, 0.45 + 0.30 * rS);
-cN += 0.05 * vec2(
+cN += 0.063 * vec2(
     sin(u_time * 0.018 + 6.2831 * u_pAxisNorm),
     cos(u_time * 0.014 + 6.2831 * u_rAxisNorm)
 );
-cN += 0.07 * driftMul * vec2(
+cN += 0.088 * driftMul * vec2(
     sin(t * 0.09 + 6.2831 * u_pAxisNorm),
     cos(t * 0.07 + 6.2831 * u_rAxisNorm)
 );
 
 // Creatinine: pAxis inverted, mirrors Nitrogen
 vec2 cC1 = vec2(0.65 - 0.30 * pS, 0.55 + 0.25 * rS)
-    + 0.04 * vec2(sin(u_time * 0.022 + 6.2831 * (1.0 - u_pAxisNorm)),
+    + 0.05 * vec2(sin(u_time * 0.022 + 6.2831 * (1.0 - u_pAxisNorm)),
                   cos(u_time * 0.019 + 6.2831 * u_rAxisNorm))
-    + 0.06 * driftMul * vec2(sin(t * 0.11 + 6.2831 * (1.0 - u_pAxisNorm)),
-                              cos(t * 0.08 + 6.2831 * u_rAxisNorm));
+    + 0.075 * driftMul * vec2(sin(t * 0.11 + 6.2831 * (1.0 - u_pAxisNorm)),
+                               cos(t * 0.08 + 6.2831 * u_rAxisNorm));
 vec2 cC2 = vec2(0.50 + 0.25 * pS, 0.28 - 0.25 * rS)
-    + 0.03 * vec2(sin(u_time * 0.016 + 6.2831 * u_pAxisNorm),
-                  cos(u_time * 0.013 + 6.2831 * (1.0 - u_rAxisNorm)))
-    + 0.05 * driftMul * vec2(sin(t * 0.08 + 6.2831 * u_pAxisNorm),
-                              cos(t * 0.10 + 6.2831 * (1.0 - u_rAxisNorm)));
+    + 0.038 * vec2(sin(u_time * 0.016 + 6.2831 * u_pAxisNorm),
+                   cos(u_time * 0.013 + 6.2831 * (1.0 - u_rAxisNorm)))
+    + 0.063 * driftMul * vec2(sin(t * 0.08 + 6.2831 * u_pAxisNorm),
+                               cos(t * 0.10 + 6.2831 * (1.0 - u_rAxisNorm)));
 
 // BUN/Creatinine ratio coupling: elevated ratio (pre-renal) pulls both markers together,
 // creating overlap and a brighter combined region. Normal ratio keeps them independent.
@@ -293,25 +293,25 @@ float mC  = max(mC1, mC2);
 
 // Sodium: rAxis primary, pAxis secondary (axes swapped from Nitrogen)
 vec2 cA = vec2(0.28 + 0.32 * rS, 0.62 + 0.28 * pS)
-    + 0.04 * vec2(cos(u_time * 0.020 + 6.2831 * u_rAxisNorm),
+    + 0.05 * vec2(cos(u_time * 0.020 + 6.2831 * u_rAxisNorm),
                   sin(u_time * 0.016 + 6.2831 * u_pAxisNorm))
-    + 0.06 * driftMul * vec2(cos(t * 0.10 + 6.2831 * u_rAxisNorm),
-                              sin(t * 0.07 + 6.2831 * u_pAxisNorm));
+    + 0.075 * driftMul * vec2(cos(t * 0.10 + 6.2831 * u_rAxisNorm),
+                               sin(t * 0.07 + 6.2831 * u_pAxisNorm));
 vec2 cB = vec2(0.62 - 0.28 * rS, 0.32 - 0.28 * pS)
-    + 0.04 * vec2(sin(u_time * 0.013 + 6.2831 * (1.0 - u_rAxisNorm)),
+    + 0.05 * vec2(sin(u_time * 0.013 + 6.2831 * (1.0 - u_rAxisNorm)),
                   cos(u_time * 0.017 + 6.2831 * (1.0 - u_pAxisNorm)))
-    + 0.05 * driftMul * vec2(sin(t * 0.08 + 6.2831 * (1.0 - u_rAxisNorm)),
-                              cos(t * 0.12 + 6.2831 * (1.0 - u_pAxisNorm)));
+    + 0.063 * driftMul * vec2(sin(t * 0.08 + 6.2831 * (1.0 - u_rAxisNorm)),
+                               cos(t * 0.12 + 6.2831 * (1.0 - u_pAxisNorm)));
 
 float mA  = 1. - smoothstep(naInner1, naOuter1, ellipseDist(v_uv, cA, naAspect, naAngle));
 float mB  = 1. - smoothstep(naInner2, naOuter2, ellipseDist(v_uv, cB, naAspect * 0.9, naAngle));
 float mNa = max(mA, mB);
 
 // Chloride: rAxis drives position
-vec2 cCl = vec2(0.55 + 0.22 * rS + 0.05 * sin(u_time * 0.021 + 6.2831 * u_rAxisNorm),
-               0.45 - 0.20 * pS + 0.04 * cos(u_time * 0.015 + 6.2831 * u_pAxisNorm))
-    + 0.06 * driftMul * vec2(sin(t * 0.13 + 6.2831 * u_rAxisNorm),
-                              cos(t * 0.09 + 6.2831 * u_pAxisNorm));
+vec2 cCl = vec2(0.55 + 0.22 * rS + 0.063 * sin(u_time * 0.021 + 6.2831 * u_rAxisNorm),
+               0.45 - 0.20 * pS + 0.05 * cos(u_time * 0.015 + 6.2831 * u_pAxisNorm))
+    + 0.075 * driftMul * vec2(sin(t * 0.13 + 6.2831 * u_rAxisNorm),
+                               cos(t * 0.09 + 6.2831 * u_pAxisNorm));
 float mCl = 1.0 - smoothstep(clInner, clOuter, ellipseDist(v_uv, cCl, clAspect, clAngle));
 
 // Chloride strength comes from JS (handles arrival gate + lifespan correctly)
@@ -331,14 +331,14 @@ float localGain = smoothstep(.01, .55, lum);// avoid dark wash
 float haloW = u_co2Strength * mix(ambW, edgeW, 0.45 + 0.30 * u_qrsTAngle) * localGain * (0.88 + 0.12 * tBias);
 
 // Calcium: pAxis/rAxis, lobes pushed in opposite directions
-vec2 c1 = vec2(0.62 + 0.22 * pS + 0.05 * sin(u_time * 0.011 + 6.2831 * u_pAxisNorm),
-              0.32 + 0.18 * rS  + 0.05 * cos(u_time * 0.009 + 6.2831 * u_rAxisNorm))
-    + 0.05 * driftMul * vec2(sin(t * 0.06 + 6.2831 * u_pAxisNorm),
-                              cos(t * 0.08 + 6.2831 * u_rAxisNorm));
-vec2 c2 = vec2(0.32 - 0.18 * rS + 0.06 * cos(u_time * 0.007 + 6.2831 * (1.0 - u_rAxisNorm)),
-              0.65 - 0.22 * pS  + 0.05 * sin(u_time * 0.010 + 6.2831 * (1.0 - u_pAxisNorm)))
-    + 0.05 * driftMul * vec2(cos(t * 0.07 + 6.2831 * (1.0 - u_rAxisNorm)),
-                              sin(t * 0.06 + 6.2831 * (1.0 - u_pAxisNorm)));
+vec2 c1 = vec2(0.62 + 0.22 * pS + 0.063 * sin(u_time * 0.011 + 6.2831 * u_pAxisNorm),
+              0.32 + 0.18 * rS  + 0.063 * cos(u_time * 0.009 + 6.2831 * u_rAxisNorm))
+    + 0.063 * driftMul * vec2(sin(t * 0.06 + 6.2831 * u_pAxisNorm),
+                               cos(t * 0.08 + 6.2831 * u_rAxisNorm));
+vec2 c2 = vec2(0.32 - 0.18 * rS + 0.075 * cos(u_time * 0.007 + 6.2831 * (1.0 - u_rAxisNorm)),
+              0.65 - 0.22 * pS  + 0.063 * sin(u_time * 0.010 + 6.2831 * (1.0 - u_pAxisNorm)))
+    + 0.063 * driftMul * vec2(cos(t * 0.07 + 6.2831 * (1.0 - u_rAxisNorm)),
+                               sin(t * 0.06 + 6.2831 * (1.0 - u_pAxisNorm)));
 float m1  = 1. - smoothstep(caInner1, caOuter1, ellipseDist(v_uv, c1, caAspect, caAngle));
 float m2  = 1. - smoothstep(caInner2, caOuter2, ellipseDist(v_uv, c2, caAspect * 0.88, caAngle));
 float mCa = max(m1, m2);
@@ -376,7 +376,7 @@ float mCa = max(m1, m2);
     // Child 1: Kidney stress (Nitrogen × Creatinine)
     // Hue: midpoint of N and Cr hues — a color that exists nowhere else in the piece.
     float nCrDist  = length(cN - cC1);
-    float nCrProx  = 1.0 - smoothstep(0.08, 0.28, nCrDist);
+    float nCrProx  = 1.0 - smoothstep(0.08, 0.35, nCrDist);
     vec2 cKid1 = (cN + cC1) * 0.5
         + 0.12 * vec2(sin(u_time * 0.031 + 2.1 + 6.2831 * u_qtcNorm),
                       cos(u_time * 0.027 + 1.4 + 6.2831 * u_pAxisNorm))
@@ -389,7 +389,7 @@ float mCa = max(m1, m2);
 
     // Child 2: Electrolyte balance (Sodium × Chloride — NaCl)
     float naClDist = length(cA - cCl);
-    float naClProx = 1.0 - smoothstep(0.08, 0.30, naClDist);
+    float naClProx = 1.0 - smoothstep(0.08, 0.38, naClDist);
     vec2 cKid2 = (cA + cCl) * 0.5
         + 0.12 * vec2(cos(u_time * 0.028 + 0.8 + 6.2831 * u_rAxisNorm),
                       sin(u_time * 0.024 + 3.2 + 6.2831 * u_ventRateNorm))
@@ -402,7 +402,7 @@ float mCa = max(m1, m2);
 
     // Child 3: Calcium resonance (Ca lobe 1 × lobe 2)
     float caLobeDist = length(c1 - c2);
-    float caLobeProx = 1.0 - smoothstep(0.10, 0.40, caLobeDist);
+    float caLobeProx = 1.0 - smoothstep(0.10, 0.50, caLobeDist);
     vec2 cKid3 = (c1 + c2) * 0.5
         + 0.11 * vec2(sin(u_time * 0.019 + 4.5 + 6.2831 * u_tAxisNorm),
                       cos(u_time * 0.023 + 1.1 + 6.2831 * u_qtcNorm))
