@@ -525,7 +525,10 @@ async function init() {
         const amp = sodiumAmplitude(ds, ds.healthIndex ?? 0.5, arr, p);
         let hue = sodiumHueDeg(baseHueDeg, ds, p) + nudgeNa;
         hue += (16 + 4 * p) * Math.sin(ph * 0.82 + 0.32);
-        const str = clamp(0.14 * (1 - arr) + clamp(amp * sodiumPulseShape(ph, sodiumPulseCount(ds), 0.12), 0, 1), 0, 1);
+        // Always present from day 1 at data-driven floor; arrival gate grows it to full prominence
+        const baseStr = 0.06 + 0.10 * p;
+        const arrivedStr = clamp(amp * sodiumPulseShape(ph, sodiumPulseCount(ds), 0.12), 0, 1);
+        const str = clamp(baseStr + arrivedStr, 0, 1);
         const note = arr < 1 ? `  (arriving ${Math.round(arr * 100)}%)` : '';
         return { str, hue, note };
       },
@@ -540,7 +543,10 @@ async function init() {
         const amp = chlorideAmplitude(ds, ds.healthIndex ?? 0.5, arr, p);
         let hue = chlorideHueDeg(baseHueDeg, p) + nudgeCl;
         hue += (12 + 6 * p) * Math.sin(ph * 0.88 - 0.24);
-        const str = clamp(0.12 * (1 - arr) + clamp(amp * chlorideTriWithWarble(ph, ds), 0, 1), 0, 1);
+        // Always present from day 1 at data-driven floor; arrival gate grows it to full prominence
+        const baseStr = 0.05 + 0.09 * p;
+        const arrivedStr = clamp(amp * chlorideTriWithWarble(ph, ds), 0, 1);
+        const str = clamp(baseStr + arrivedStr, 0, 1);
         const note = arr < 1 ? `  (arriving ${Math.round(arr * 100)}%)` : '';
         return { str, hue, note };
       },
@@ -835,30 +841,71 @@ function getBreathingAmplitude(dataSet) {
   return amp;
 }
 
-// Tempo mapper stub
-function getBeamTempoSeconds(_dataSet, beamId) {
+// Tempo: data-driven per beam
+function getBeamTempoSeconds(dataSet, beamId) {
   switch (beamId) {
-    case BEAM.NITROGEN:
-      return 10.0;
-    case BEAM.CREATININE:
-      return 12.0;
+    case BEAM.NITROGEN: {
+      // High BUN (waste accumulating) → more urgent breathing cycle
+      const vals = healthDataSets.map(d => d.labs.nitrogen).sort((a, b) => a - b);
+      const p = percentile(dataSet.labs.nitrogen, vals);
+      return 10 - 3 * p; // 10s (low BUN) → 7s (high BUN)
+    }
+    case BEAM.CREATININE: {
+      // PR interval: conduction delay reflects kidney-cardiac stress
+      const prNorm = clamp(
+        (dataSet.ecg.prInterval - minMaxValues.prInterval.min) /
+        Math.max(1e-6, minMaxValues.prInterval.max - minMaxValues.prInterval.min),
+        0, 1
+      );
+      return 9 + 6 * prNorm; // 9s (short PR) → 15s (long PR)
+    }
     case BEAM.SODIUM:
       return 7.0;
     case BEAM.CHLORIDE:
       return 9.0;
-    case BEAM.CO2:
-      return 16.0;
-    case BEAM.CALCIUM:
-      return 24.0;
+    case BEAM.CO2: {
+      // Low eGFR → more acidosis pressure → faster CO2 cycling
+      const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
+      const p = percentile(dataSet.labs.eGFR, vals);
+      return 12 + 8 * p; // 12s (low eGFR, stressed) → 20s (high eGFR, calm)
+    }
+    case BEAM.CALCIUM: {
+      // T-axis deviation directly reflects calcium's effect on repolarization
+      const tNorm = clamp(
+        (dataSet.ecg.tAxis - minMaxValues.tAxis.min) /
+        Math.max(1e-6, minMaxValues.tAxis.max - minMaxValues.tAxis.min),
+        0, 1
+      );
+      return 18 + 12 * (1 - tNorm); // 18s (high tAxis) → 30s (low tAxis)
+    }
     default:
       return 12.0;
   }
 }
 
-// Hue anchor stub
-function getBeamHueAnchorDeg(dataSet, _beamId) {
+// Hue anchor: kidney beams offset from base by an independent lab variable.
+// Uses an offset from baseHueDeg (not a full remap) so pieces stay coherent
+// while the kidney markers can still diverge meaningfully under disease.
+function getBeamHueAnchorDeg(dataSet, beamId) {
   const { hue } = computeHSBFromStats(dataSet, healthDataSets);
-  return hue * 360.0; // degrees
+  const baseDeg = hue * 360.0;
+  switch (beamId) {
+    case BEAM.NITROGEN: {
+      // eGFR offsets nitrogen ±80° from base. Low eGFR (failing kidneys) pushes
+      // the blob away from the glucose background — disease creates color tension.
+      const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
+      const p = percentile(dataSet.labs.eGFR, vals);
+      return baseDeg + (p - 0.5) * 160; // ±80° from base
+    }
+    case BEAM.CREATININE: {
+      // Potassium offsets creatinine ±60° from base — K+ varies independently.
+      const vals = healthDataSets.map(d => d.labs.potassium).sort((a, b) => a - b);
+      const p = percentile(dataSet.labs.potassium, vals);
+      return baseDeg + (p - 0.5) * 120; // ±60° from base
+    }
+    default:
+      return baseDeg;
+  }
 }
 
 // overlays — hidden by default, toggle with window.toggleOverlay()
