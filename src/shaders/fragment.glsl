@@ -93,7 +93,11 @@ float ellipseDist(vec2 p, vec2 center, float aspect, float angle){
 }
 
 void main(){
-    // Grain scales with QRS-T dissonance: aligned repolarization = smooth, discordant = textured
+    // Aspect-correct UV: keeps the square composition centered and undistorted.
+    // On a 3:2 canvas the sides show extended background fields — no stretching.
+    float aspect = u_resolution.x / u_resolution.y;
+    vec2 uv = vec2((v_uv.x - 0.5) * aspect + 0.5, v_uv.y);
+
     float n = 0.0;
     float t = u_totalYears;
 
@@ -169,10 +173,10 @@ void main(){
                                   sin(t * freqD * 0.88 + 3.1416 * u_rAxisNorm));
 
     // Gaussian weights: per-field sigma makes each zone uniquely sized
-    float w1 = exp(-dot(v_uv - cf1, v_uv - cf1) / s1); w1 *= w1;
-    float w2 = exp(-dot(v_uv - cf2, v_uv - cf2) / s2); w2 *= w2;
-    float w3 = exp(-dot(v_uv - cf3, v_uv - cf3) / s3); w3 *= w3;
-    float w4 = exp(-dot(v_uv - cf4, v_uv - cf4) / s4) * u_inheritedStrength; w4 *= w4;
+    float w1 = exp(-dot(uv - cf1, uv - cf1) / s1); w1 *= w1;
+    float w2 = exp(-dot(uv - cf2, uv - cf2) / s2); w2 *= w2;
+    float w3 = exp(-dot(uv - cf3, uv - cf3) / s3); w3 *= w3;
+    float w4 = exp(-dot(uv - cf4, uv - cf4) / s4) * u_inheritedStrength; w4 *= w4;
     float wSum = w1 + w2 + w3 + w4 + 1e-6;
 
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
@@ -290,9 +294,9 @@ vec2 pullDir = pullVec / max(length(pullVec), 0.001);
 cN  += pullDir * pull;
 cC1 -= pullDir * pull * 0.5;
 
-float mN  = 1.0 - smoothstep(nInner,  nOuter,  ellipseDist(v_uv, cN,  nAspect,  nAngle));
-float mC1 = 1.0 - smoothstep(cInner1, cOuter1, ellipseDist(v_uv, cC1, crAspect, crAngle));
-float mC2 = 1.0 - smoothstep(cInner2, cOuter2, ellipseDist(v_uv, cC2, crAspect * 0.85, crAngle));
+float mN  = 1.0 - smoothstep(nInner,  nOuter,  ellipseDist(uv, cN,  nAspect,  nAngle));
+float mC1 = 1.0 - smoothstep(cInner1, cOuter1, ellipseDist(uv, cC1, crAspect, crAngle));
+float mC2 = 1.0 - smoothstep(cInner2, cOuter2, ellipseDist(uv, cC2, crAspect * 0.85, crAngle));
 float mC  = max(mC1, mC2);
 
 // Sodium lobe A: rAxis/ventRateNorm seeds
@@ -313,8 +317,8 @@ vec2 cB = vec2(0.50, 0.50)
     + 0.03 * vec2(sin(u_time * 0.010 + 6.2831 * (1.0 - u_rAxisNorm)),
                   cos(u_time * 0.014 + 6.2831 * (1.0 - u_pAxisNorm)));
 
-float mA  = 1. - smoothstep(naInner1, naOuter1, ellipseDist(v_uv, cA, naAspect, naAngle));
-float mB  = 1. - smoothstep(naInner2, naOuter2, ellipseDist(v_uv, cB, naAspect * 0.9, naAngle));
+float mA  = 1. - smoothstep(naInner1, naOuter1, ellipseDist(uv, cA, naAspect, naAngle));
+float mB  = 1. - smoothstep(naInner2, naOuter2, ellipseDist(uv, cB, naAspect * 0.9, naAngle));
 float mNa = max(mA, mB);
 
 // Chloride: rAxis/prNorm/tAxisNorm seeds
@@ -325,7 +329,7 @@ vec2 cCl = vec2(0.50, 0.50)
                               cos(t * 0.057 + 6.2831 * u_tAxisNorm))
     + 0.04 * vec2(sin(u_time * 0.017 + 6.2831 * u_rAxisNorm),
                   cos(u_time * 0.012 + 6.2831 * u_pAxisNorm));
-float mCl = 1.0 - smoothstep(clInner, clOuter, ellipseDist(v_uv, cCl, clAspect, clAngle));
+float mCl = 1.0 - smoothstep(clInner, clOuter, ellipseDist(uv, cCl, clAspect, clAngle));
 
 // Chloride strength comes from JS (handles arrival gate + lifespan correctly)
 float strengthCl = u_chlorideStrength;
@@ -334,10 +338,10 @@ float strengthCl = u_chlorideStrength;
 float lum = dot(rgbColor, vec3(.299, .587, .114));
 float edge = length(vec2(dFdx(lum), dFdy(lum)));
 float edgeW = smoothstep(.004, .050, edge);// stronger where colors meet
-float ambW = .88 + .12 * rand(v_uv + vec2(u_pAxisNorm * 6.28, u_rAxisNorm * 4.71));// near-uniform atmospheric presence, slight texture per dataset
+float ambW = .88 + .12 * rand(uv + vec2(u_pAxisNorm * 6.28, u_rAxisNorm * 4.71));// near-uniform atmospheric presence, slight texture per dataset
 // T-axis directional lean: halo is subtly brighter in the repolarization direction
 float tAngle = u_tAxisNorm * 3.14159;
-float tBias = 0.5 + 0.5 * dot(normalize(v_uv - vec2(0.5)), vec2(cos(tAngle), sin(tAngle)));
+float tBias = 0.5 + 0.5 * dot(normalize(uv - vec2(0.5)), vec2(cos(tAngle), sin(tAngle)));
 float localGain = smoothstep(.01, .55, lum);// avoid dark wash
 // QRS-T dissonance shifts halo from diffuse to edge-concentrated: discordant repolarization
 // makes the atmosphere cluster at color boundaries rather than spread uniformly
@@ -358,8 +362,8 @@ vec2 c2 = vec2(0.50, 0.50)
                               sin(t * 0.041 + 6.2831 * (1.0 - u_qtcNorm)))
     + 0.04 * vec2(cos(u_time * 0.007 + 6.2831 * (1.0 - u_rAxisNorm)),
                   sin(u_time * 0.010 + 6.2831 * (1.0 - u_pAxisNorm)));
-float m1  = 1. - smoothstep(caInner1, caOuter1, ellipseDist(v_uv, c1, caAspect, caAngle));
-float m2  = 1. - smoothstep(caInner2, caOuter2, ellipseDist(v_uv, c2, caAspect * 0.88, caAngle));
+float m1  = 1. - smoothstep(caInner1, caOuter1, ellipseDist(uv, c1, caAspect, caAngle));
+float m2  = 1. - smoothstep(caInner2, caOuter2, ellipseDist(uv, c2, caAspect * 0.88, caAngle));
 float mCa = max(m1, m2);
     
     // Nitrogen
