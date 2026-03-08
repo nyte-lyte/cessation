@@ -179,10 +179,10 @@ void main(){
     float wSum = w1 + w2 + w3 + w4 + 1e-6;
 
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
-    vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.55 + 0.35 * u_potassium, 0.35 + 0.55 * u_eGFR);
-    vec3 col2 = hsb2rgb(mod(u_eGFR    * 360.  + hDrift2, 360.), 0.55,                      0.50 + 0.30 * u_eGFR);
-    vec3 col3 = hsb2rgb(mod(u_qtcNorm * 360.  + hDrift3, 360.), 0.62,                      0.48 + 0.30 * u_eGFR);
-    vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.58, 0.52 + 0.28 * u_eGFR);
+    vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.65 + 0.30 * u_potassium, 0.45 + 0.50 * u_eGFR);
+    vec3 col2 = hsb2rgb(mod(u_eGFR    * 360.  + hDrift2, 360.), 0.74,                      0.50 + 0.30 * u_eGFR);
+    vec3 col3 = hsb2rgb(mod(u_qtcNorm * 360.  + hDrift3, 360.), 0.76,                      0.48 + 0.30 * u_eGFR);
+    vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.72, 0.52 + 0.28 * u_eGFR);
 
     vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum;
 
@@ -376,7 +376,7 @@ float mCa = max(m1, m2);
     rgbColor = clamp(rgbColor + chlorideRGB * strengthCl * mCl, 0., 1.0);
 
     // CO2
-    vec3 co2Tint = hsb2rgb(u_co2HueDeg, .65, 1.00);
+    vec3 co2Tint = hsb2rgb(u_co2HueDeg, .75, 1.00);
     rgbColor = clamp(rgbColor + co2Tint * haloW, 0., 1.);
 
     // Calcium
