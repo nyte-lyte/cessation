@@ -249,8 +249,8 @@ float caOuter2 = 0.30 + 0.18 * u_calciumRadius;
 // with age so orbits expand as the piece progresses. Small u_time term adds
 // realtime breathing on top of the slow year-drift.
 
-// Nitrogen: heavy, wandering — pAxis/rAxis/qtcNorm/tAxisNorm seeds
-vec2 cN = vec2(0.50, 0.50)
+// Nitrogen: lower-left anchor — kidney waste territory
+vec2 cN = vec2(0.28, 0.33)
     + 0.20 * driftMul * vec2(sin(t * 0.19 + 6.2831 * u_pAxisNorm),
                               cos(t * 0.13 + 6.2831 * u_rAxisNorm))
     + 0.09 * driftMul * vec2(sin(t * 0.51 + 6.2831 * u_qtcNorm),
@@ -258,8 +258,8 @@ vec2 cN = vec2(0.50, 0.50)
     + 0.04 * vec2(sin(u_time * 0.23 + 6.2831 * u_pAxisNorm),
                   cos(u_time * 0.17 + 6.2831 * u_rAxisNorm));
 
-// Creatinine lobe 1: inverted pAxis phases from Nitrogen — tends toward opposite side
-vec2 cC1 = vec2(0.50, 0.50)
+// Creatinine lobe 1: upper-right anchor — opposing kidney marker
+vec2 cC1 = vec2(0.68, 0.62)
     + 0.18 * driftMul * vec2(sin(t * 0.23 + 6.2831 * (1.0 - u_pAxisNorm)),
                               cos(t * 0.16 + 6.2831 * u_rAxisNorm))
     + 0.08 * driftMul * vec2(sin(t * 0.44 + 6.2831 * (1.0 - u_qtcNorm)),
@@ -267,8 +267,8 @@ vec2 cC1 = vec2(0.50, 0.50)
     + 0.04 * vec2(sin(u_time * 0.27 + 6.2831 * (1.0 - u_pAxisNorm)),
                   cos(u_time * 0.19 + 6.2831 * u_rAxisNorm));
 
-// Creatinine lobe 2: quarter-phase offset from lobe 1 — satellite companion
-vec2 cC2 = vec2(0.50, 0.50)
+// Creatinine lobe 2: bottom-center anchor — satellite companion
+vec2 cC2 = vec2(0.50, 0.22)
     + 0.15 * driftMul * vec2(sin(t * 0.27 + 6.2831 * (1.0 - u_pAxisNorm) + 1.571),
                               cos(t * 0.19 + 6.2831 * u_rAxisNorm + 1.571))
     + 0.07 * driftMul * vec2(sin(t * 0.61 + 6.2831 * u_pAxisNorm),
@@ -288,8 +288,8 @@ float mC1 = 1.0 - smoothstep(cInner1, cOuter1, ellipseDist(uv, cC1, crAspect, cr
 float mC2 = 1.0 - smoothstep(cInner2, cOuter2, ellipseDist(uv, cC2, crAspect * 0.85, crAngle));
 float mC  = max(mC1, mC2);
 
-// Sodium lobe A: rAxis/ventRateNorm seeds
-vec2 cA = vec2(0.50, 0.50)
+// Sodium lobe A: upper-left anchor
+vec2 cA = vec2(0.24, 0.70)
     + 0.18 * driftMul * vec2(cos(t * 0.17 + 6.2831 * u_rAxisNorm),
                               sin(t * 0.12 + 6.2831 * u_pAxisNorm))
     + 0.08 * driftMul * vec2(cos(t * 0.43 + 6.2831 * u_ventRateNorm),
@@ -297,8 +297,8 @@ vec2 cA = vec2(0.50, 0.50)
     + 0.04 * vec2(cos(u_time * 0.25 + 6.2831 * u_rAxisNorm),
                   sin(u_time * 0.18 + 6.2831 * u_pAxisNorm));
 
-// Sodium lobe B: inverted phases from A — typically on opposite side of canvas
-vec2 cB = vec2(0.50, 0.50)
+// Sodium lobe B: lower-right anchor — opposite of A
+vec2 cB = vec2(0.74, 0.30)
     + 0.16 * driftMul * vec2(cos(t * 0.17 + 6.2831 * (1.0 - u_rAxisNorm)),
                               sin(t * 0.12 + 6.2831 * (1.0 - u_pAxisNorm)))
     + 0.07 * driftMul * vec2(cos(t * 0.43 + 6.2831 * (1.0 - u_ventRateNorm)),
@@ -310,8 +310,8 @@ float mA  = 1. - smoothstep(naInner1, naOuter1, ellipseDist(uv, cA, naAspect, na
 float mB  = 1. - smoothstep(naInner2, naOuter2, ellipseDist(uv, cB, naAspect * 0.9, naAngle));
 float mNa = max(mA, mB);
 
-// Chloride: rAxis/prNorm/tAxisNorm seeds
-vec2 cCl = vec2(0.50, 0.50)
+// Chloride: upper-center anchor
+vec2 cCl = vec2(0.56, 0.74)
     + 0.18 * driftMul * vec2(sin(t * 0.22 + 6.2831 * u_rAxisNorm),
                               cos(t * 0.15 + 6.2831 * u_pAxisNorm))
     + 0.07 * driftMul * vec2(sin(t * 0.53 + 6.2831 * u_prNorm),
@@ -336,15 +336,15 @@ float localGain = smoothstep(.01, .55, lum);// avoid dark wash
 // makes the atmosphere cluster at color boundaries rather than spread uniformly
 float haloW = u_co2Strength * mix(ambW, edgeW, 0.45 + 0.30 * u_qrsTAngle) * localGain * (0.88 + 0.12 * tBias);
 
-// Calcium: slow, heavy — tAxisNorm/qtcNorm seeds. Lobes orbit with inverted phases.
-vec2 c1 = vec2(0.50, 0.50)
+// Calcium: slow, heavy. Lobes anchored on opposite sides — right and left.
+vec2 c1 = vec2(0.74, 0.68)
     + 0.16 * driftMul * vec2(sin(t * 0.15 + 6.2831 * u_pAxisNorm),
                               cos(t * 0.11 + 6.2831 * u_rAxisNorm))
     + 0.07 * driftMul * vec2(sin(t * 0.41 + 6.2831 * u_tAxisNorm),
                               cos(t * 0.28 + 6.2831 * u_qtcNorm))
     + 0.04 * vec2(sin(u_time * 0.14 + 6.2831 * u_pAxisNorm),
                   cos(u_time * 0.20 + 6.2831 * u_rAxisNorm));
-vec2 c2 = vec2(0.50, 0.50)
+vec2 c2 = vec2(0.26, 0.45)
     + 0.16 * driftMul * vec2(cos(t * 0.15 + 6.2831 * (1.0 - u_rAxisNorm)),
                               sin(t * 0.11 + 6.2831 * (1.0 - u_pAxisNorm)))
     + 0.07 * driftMul * vec2(cos(t * 0.41 + 6.2831 * (1.0 - u_tAxisNorm)),
