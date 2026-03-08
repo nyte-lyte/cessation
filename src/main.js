@@ -320,6 +320,8 @@ async function init() {
   const uQrsTAngleLoc = gl.getUniformLocation(program, "u_qrsTAngle");
   const uInheritedHueDegLoc = gl.getUniformLocation(program, "u_inheritedHueDeg");
   const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
+  const uReanimationProgressLoc    = gl.getUniformLocation(program, "u_reanimationProgress");
+  const uPartnerInheritedHueDegLoc = gl.getUniformLocation(program, "u_partnerInheritedHueDeg");
 
   // Blob size + BUN/Cr ratio uniforms
   const uNitrogenRadiusLoc   = gl.getUniformLocation(program, "u_nitrogenRadius");
@@ -370,6 +372,14 @@ async function init() {
   // Console override for tuning the inherited hue visually before chain integration
   window.setInheritedHue = (deg) => { inheritedHueDeg = ((deg % 360) + 360) % 360; };
   window.resetInheritedHue = () => { inheritedHueDeg = ancestorHueDeg; };
+
+  // Entropy pool / reanimation state (dev overrides — set by chain data at mint time)
+  let reanimationProgress = 0.0;
+  let partnerInheritedHueDeg = 0.0;
+  // setReanimation(0..1) — simulate the reanimation transition
+  window.setReanimation = (p) => { reanimationProgress = Math.max(0, Math.min(1, Number(p))); };
+  // setPartnerHue(deg) — set the arriving partner's lineage hue
+  window.setPartnerHue = (deg) => { partnerInheritedHueDeg = ((deg % 360) + 360) % 360; };
 
   const hash01 = lastTwoHashDigits / 99; // 0..1
   const signed = (hash01 - 0.5) * 2; // -1..+1
@@ -657,6 +667,8 @@ async function init() {
     const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
     if (uInheritedHueDegLoc) gl.uniform1f(uInheritedHueDegLoc, inheritedHueDeg);
     if (uInheritedStrengthLoc) gl.uniform1f(uInheritedStrengthLoc, inheritedStrength);
+    if (uReanimationProgressLoc) gl.uniform1f(uReanimationProgressLoc, reanimationProgress);
+    if (uPartnerInheritedHueDegLoc) gl.uniform1f(uPartnerInheritedHueDegLoc, partnerInheritedHueDeg);
 
     // Compute base hue
     const baseHSB = computeHSBFromStats(currentDataSet, healthDataSets); // 0..1

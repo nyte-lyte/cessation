@@ -58,6 +58,10 @@ uniform float u_time;
 uniform float u_inheritedHueDeg;  // hue in degrees, frozen at mint from ancestor
 uniform float u_inheritedStrength; // 0..1, fades toward 0 over piece lifespan
 
+// Entropy pool / reanimation uniforms
+uniform float u_reanimationProgress;    // 0 = nirvana/waiting, 1 = fully reanimated
+uniform float u_partnerInheritedHueDeg; // partner's lineage hue in degrees
+
 // --- helpers ---
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -385,8 +389,40 @@ float mCa = max(m1, m2);
     rgbColor = screenBlend(rgbColor, caTint, u_calciumStrength * mCa * darkW);
 
     // Decay: stays near full brightness until ~70% of lifespan, then drops steeply.
-    // Models how a body stays vital most of its life and deteriorates near the end.
     float latePhase = smoothstep(0.70, 1.00, lifeFraction);
     float decay = exp(-u_decayPerYear * u_totalYears) * (1.0 - 0.90 * latePhase * latePhase);
-    fragColor = vec4(rgbColor * decay, 1.0);
+    vec3 livingColor = rgbColor * decay;
+
+    // --- Nirvana: personal identity dissolves into pure luminous lineage color ---
+    // Begins when u_totalYears exceeds u_lifespanYears. Completes over 1.5 years.
+    // Not darkness — a return to origin. The piece distills to what it always carried.
+    float nirvanaProgress = clamp((u_totalYears - u_lifespanYears) / 1.5, 0.0, 1.0);
+    vec3 nirvanaCol = hsb2rgb(u_inheritedHueDeg, 0.85, 0.92);
+    // Soft luminous glow centered on the lineage field — ambient presence plus radiant center
+    float nirvGlow = exp(-dot(uv - cf4, uv - cf4) / 0.22);
+    vec3 nirvanaField = nirvanaCol * (0.50 + 0.50 * nirvGlow);
+
+    // --- Reanimation: partner's hue arrives from opposite corner, both converge ---
+    // partnerArrival drives the partner hue drifting toward center (0→60% of progress)
+    // lifeRestores drives the return of full living color (50→100% of progress)
+    float partnerArrival = smoothstep(0.0, 0.6, u_reanimationProgress);
+    float lifeRestores   = smoothstep(0.5, 1.0, u_reanimationProgress);
+    vec2 partnerOrigin = clamp(vec2(1.0) - cf4, 0.1, 0.9); // opposite corner from own lineage
+    vec2 partnerPos    = mix(partnerOrigin, vec2(0.5), partnerArrival);
+    vec2 ownPos        = mix(cf4, vec2(0.5), partnerArrival * 0.6);
+    vec3 partnerCol    = hsb2rgb(u_partnerInheritedHueDeg, 0.85, 0.92);
+    float pGlow = exp(-dot(uv - partnerPos, uv - partnerPos) / 0.14);
+    float oGlow = exp(-dot(uv - ownPos,     uv - ownPos)     / 0.14);
+    // Two luminous fields meet — partner brightens in, own hue drifts to greet it
+    vec3 meetingField = clamp(nirvanaCol * oGlow + partnerCol * pGlow * partnerArrival, 0.0, 1.0);
+
+    // --- State blending ---
+    // nirvana state: pure lineage → collision of two hues
+    vec3 nirvanaState = mix(nirvanaField, meetingField, smoothstep(0.0, 0.5, u_reanimationProgress));
+    // overall: living → nirvana → reanimated
+    vec3 finalColor = mix(livingColor, nirvanaState, nirvanaProgress);
+    // When life restores, full living color returns (no decay — the piece is reborn)
+    finalColor = mix(finalColor, rgbColor, lifeRestores);
+
+    fragColor = vec4(clamp(finalColor, 0.0, 1.0), 1.0);
 }
