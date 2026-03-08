@@ -859,10 +859,6 @@ function getBeamTempoSeconds(dataSet, beamId) {
       );
       return 9 + 6 * prNorm; // 9s (short PR) → 15s (long PR)
     }
-    case BEAM.SODIUM:
-      return 7.0;
-    case BEAM.CHLORIDE:
-      return 9.0;
     case BEAM.CO2: {
       // Low eGFR → more acidosis pressure → faster CO2 cycling
       const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);

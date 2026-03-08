@@ -98,7 +98,6 @@ void main(){
     float aspect = u_resolution.x / u_resolution.y;
     vec2 uv = vec2((v_uv.x - 0.5) * aspect + 0.5, v_uv.y);
 
-    float n = 0.0;
     float t = u_totalYears;
 
     // Life fraction and drift growth — the piece moves more as it ages
@@ -186,7 +185,6 @@ void main(){
     vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.58, 0.52 + 0.28 * u_eGFR);
 
     vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum;
-    rgbColor = clamp(rgbColor + n * 0.4, 0., 1.);
 
 // --- ECG-driven blob shape ---
 // Each blob is shaped by a different ECG dimension so pieces diverge across the dataset.
@@ -220,15 +218,6 @@ float clAngle  = tS * 1.571;
 // Calcium: tAxis elongation (repolarization direction reflects Ca directly), QTc tilt
 float caAspect = 1.0 + 1.4 * extremeT;
 float caAngle  = -qtcS * 2.094;
-
-// --- ECG-driven size modifiers ---
-// Each blob uses the same ECG dimension that drives its shape to also modulate size.
-// Centered ECG = compact; extreme ECG = large and assertive.
-float nSizeMod  = 0.45 + 0.55 * extremeP;
-float crSizeMod = 0.45 + 0.55 * extremeQtc;
-float naSizeMod = 0.45 + 0.55 * extremeVR;
-float clSizeMod = 0.45 + 0.55 * extremePR;
-float caSizeMod = 0.45 + 0.55 * extremeT;
 
 // --- Lab-driven blob radii ---
 // Healthy (low percentile) → small, receding. Elevated → large, assertive.
