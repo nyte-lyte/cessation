@@ -375,16 +375,39 @@ async function init() {
   window.setInheritedHue = (deg) => { inheritedHueDeg = ((deg % 360) + 360) % 360; };
   window.resetInheritedHue = () => { inheritedHueDeg = ancestorHueDeg; };
 
-  // Entropy pool / reanimation state (dev overrides — set by chain data at mint time)
+  // Precompute inherited hues for all pieces (piece N inherits piece N-1's glucose hue)
+  const allInheritedHues = healthDataSets.map((_, i) =>
+    computeHSBFromStats(healthDataSets[Math.max(0, i - 1)], healthDataSets).hue * 360
+  );
+  // Pairs: (0,1),(2,3),(4,5)... piece 0 is genesis — no reanimation
+  // Even piece N (N>0): partner = N+1. Odd piece N: partner = N-1.
+  function getPartnerIndex(idx) {
+    if (idx === 0) return -1; // genesis
+    return idx % 2 === 0 ? idx + 1 : idx - 1;
+  }
+  function getPartnerInheritedHue(idx) {
+    const p = getPartnerIndex(idx);
+    if (p < 0 || p >= healthDataSets.length) return 0;
+    return allInheritedHues[p];
+  }
+
+  // Entropy pool / reanimation state (dev — set by chain data at mint time)
   let reanimationProgress = 0.0;
   let partnerInheritedHueDeg = 0.0;
   let isLiberated = 0.0;
-  // setReanimation(0..1) — simulate the reanimation transition
-  window.setReanimation = (p) => { reanimationProgress = Math.max(0, Math.min(1, Number(p))); };
-  // setPartnerHue(deg) — set the arriving partner's lineage hue
-  window.setPartnerHue = (deg) => { partnerInheritedHueDeg = ((deg % 360) + 360) % 360; };
+  // setReanimation(0..1) — auto-uses correct partner hue for current dataset
+  window.setReanimation = (p) => {
+    reanimationProgress = Math.max(0, Math.min(1, Number(p)));
+    partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
+    const pi = getPartnerIndex(currentDataSetIndex);
+    if (pi < 0) console.warn('Piece 0 is genesis — no reanimation partner.');
+    else console.log(`Reanimation: piece ${currentDataSetIndex} ↔ piece ${pi} | partner hue: ${partnerInheritedHueDeg.toFixed(1)}°`);
+  };
   // setLiberated(bool) — simulate karma exhaustion and liberation
-  window.setLiberated = (v) => { isLiberated = v ? 1.0 : 0.0; };
+  window.setLiberated = (v) => {
+    isLiberated = v ? 1.0 : 0.0;
+    partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
+  };
   // karma tools — inspect the reanimation system
   const liberationThreshold = computeLiberationThreshold(healthDataSets, minMaxValues);
   window.getKarma = (idxA, idxB) => {
