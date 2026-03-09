@@ -366,14 +366,11 @@ async function init() {
   const inscriptionUnixSeconds = 1704067200;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
 
-  // Inherited hue — piece 0's primary (glucose) hue in degrees.
-  // TODO: replace with the ancestor piece's hue read from chain at mint time.
-  const ancestorHueDeg = computeHSBFromStats(healthDataSets[0], healthDataSets).hue * 360;
-  let inheritedHueDeg = ancestorHueDeg;
-
-  // Console override for tuning the inherited hue visually before chain integration
-  window.setInheritedHue = (deg) => { inheritedHueDeg = ((deg % 360) + 360) % 360; };
-  window.resetInheritedHue = () => { inheritedHueDeg = ancestorHueDeg; };
+  // Inherited hue — piece N inherits piece N-1's glucose hue (from allInheritedHues).
+  // Console override for manual testing; null = auto-derive from allInheritedHues.
+  let inheritedHueDegOverride = null;
+  window.setInheritedHue = (deg) => { inheritedHueDegOverride = ((deg % 360) + 360) % 360; };
+  window.resetInheritedHue = () => { inheritedHueDegOverride = null; };
 
   // Precompute inherited hues for all pieces (piece N inherits piece N-1's glucose hue)
   const allInheritedHues = healthDataSets.map((_, i) =>
@@ -706,6 +703,9 @@ async function init() {
     // Inherited color field — fades from full presence at birth toward 0 at end of life
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
+    const inheritedHueDeg = inheritedHueDegOverride !== null
+      ? inheritedHueDegOverride
+      : allInheritedHues[currentDataSetIndex];
     if (uInheritedHueDegLoc) gl.uniform1f(uInheritedHueDegLoc, inheritedHueDeg);
     if (uInheritedStrengthLoc) gl.uniform1f(uInheritedStrengthLoc, inheritedStrength);
     if (uReanimationProgressLoc) gl.uniform1f(uReanimationProgressLoc, reanimationProgress);
