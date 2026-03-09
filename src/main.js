@@ -2,6 +2,7 @@
 // main.js
 // ---------------------------------------------
 import { healthDataSets, minMaxValues } from "../data/health_data_sets.js";
+import { blendDatasets, computeKarma, computeLiberationThreshold } from "../data/decay_logic.js";
 
 const canvas = document.getElementById("canvas");
 const gl = canvas.getContext("webgl2");
@@ -322,6 +323,7 @@ async function init() {
   const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
   const uReanimationProgressLoc    = gl.getUniformLocation(program, "u_reanimationProgress");
   const uPartnerInheritedHueDegLoc = gl.getUniformLocation(program, "u_partnerInheritedHueDeg");
+  const uIsLiberatedLoc            = gl.getUniformLocation(program, "u_isLiberated");
 
   // Blob size + BUN/Cr ratio uniforms
   const uNitrogenRadiusLoc   = gl.getUniformLocation(program, "u_nitrogenRadius");
@@ -376,10 +378,26 @@ async function init() {
   // Entropy pool / reanimation state (dev overrides — set by chain data at mint time)
   let reanimationProgress = 0.0;
   let partnerInheritedHueDeg = 0.0;
+  let isLiberated = 0.0;
   // setReanimation(0..1) — simulate the reanimation transition
   window.setReanimation = (p) => { reanimationProgress = Math.max(0, Math.min(1, Number(p))); };
   // setPartnerHue(deg) — set the arriving partner's lineage hue
   window.setPartnerHue = (deg) => { partnerInheritedHueDeg = ((deg % 360) + 360) % 360; };
+  // setLiberated(bool) — simulate karma exhaustion and liberation
+  window.setLiberated = (v) => { isLiberated = v ? 1.0 : 0.0; };
+  // karma tools — inspect the reanimation system
+  const liberationThreshold = computeLiberationThreshold(healthDataSets, minMaxValues);
+  window.getKarma = (idxA, idxB) => {
+    const blended = blendDatasets(healthDataSets[idxA], healthDataSets[idxB]);
+    const karma = computeKarma(blended, minMaxValues);
+    console.log(`Pair (${idxA}, ${idxB}) karma: ${karma.toFixed(4)} | threshold: ${liberationThreshold.toFixed(4)} | liberated: ${karma < liberationThreshold}`);
+    return karma;
+  };
+  window.getBlend = (idxA, idxB) => {
+    const blended = blendDatasets(healthDataSets[idxA], healthDataSets[idxB]);
+    console.log('Blended dataset:', blended);
+    return blended;
+  };
 
   const hash01 = lastTwoHashDigits / 99; // 0..1
   const signed = (hash01 - 0.5) * 2; // -1..+1
@@ -669,6 +687,7 @@ async function init() {
     if (uInheritedStrengthLoc) gl.uniform1f(uInheritedStrengthLoc, inheritedStrength);
     if (uReanimationProgressLoc) gl.uniform1f(uReanimationProgressLoc, reanimationProgress);
     if (uPartnerInheritedHueDegLoc) gl.uniform1f(uPartnerInheritedHueDegLoc, partnerInheritedHueDeg);
+    if (uIsLiberatedLoc) gl.uniform1f(uIsLiberatedLoc, isLiberated);
 
     // Compute base hue
     const baseHSB = computeHSBFromStats(currentDataSet, healthDataSets); // 0..1

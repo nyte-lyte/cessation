@@ -61,6 +61,7 @@ uniform float u_inheritedStrength; // 0..1, fades toward 0 over piece lifespan
 // Entropy pool / reanimation uniforms
 uniform float u_reanimationProgress;    // 0 = nirvana/waiting, 1 = fully reanimated
 uniform float u_partnerInheritedHueDeg; // partner's lineage hue in degrees
+uniform float u_isLiberated;            // 1 = karma exhausted, permanent liberation achieved
 
 // --- helpers ---
 float rand(vec2 co){
@@ -397,10 +398,21 @@ float mCa = max(m1, m2);
     // Begins when u_totalYears exceeds u_lifespanYears. Completes over 1.5 years.
     // Not darkness — a return to origin. The piece distills to what it always carried.
     float nirvanaProgress = clamp((u_totalYears - u_lifespanYears) / 1.5, 0.0, 1.0);
-    vec3 nirvanaCol = hsb2rgb(u_inheritedHueDeg, 0.85, 0.92);
-    // Soft luminous glow centered on the lineage field — ambient presence plus radiant center
-    float nirvGlow = exp(-dot(uv - cf4, uv - cf4) / 0.22);
+
+    // Liberation shifts the nirvana visual: wider glow, richer saturation, both
+    // ancestral hues present simultaneously — two souls at rest, woven together.
+    float liberated = step(0.5, u_isLiberated);
+    float nirvSigma = mix(0.22, 0.38, liberated);
+    float nirvSat   = mix(0.85, 0.92, liberated);
+    float nirvBri   = mix(0.92, 0.98, liberated);
+    vec3 nirvanaCol = hsb2rgb(u_inheritedHueDeg, nirvSat, nirvBri);
+    float nirvGlow  = exp(-dot(uv - cf4, uv - cf4) / nirvSigma);
     vec3 nirvanaField = nirvanaCol * (0.50 + 0.50 * nirvGlow);
+    // Liberation: partner's hue woven in as a permanent secondary presence
+    vec3 partnerNirvCol = hsb2rgb(u_partnerInheritedHueDeg, 0.75, 0.88);
+    vec2 partnerNirvPos = clamp(vec2(1.0) - cf4, 0.1, 0.9);
+    float partnerNirvGlow = exp(-dot(uv - partnerNirvPos, uv - partnerNirvPos) / 0.30);
+    nirvanaField = clamp(nirvanaField + partnerNirvCol * 0.40 * partnerNirvGlow * liberated, 0.0, 1.0);
 
     // --- Reanimation: partner's hue arrives from opposite corner, both converge ---
     // partnerArrival drives the partner hue drifting toward center (0→60% of progress)
