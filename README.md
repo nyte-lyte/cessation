@@ -2,5 +2,6 @@ Cessation has been a work in progress for over four years, evolving through mult
 
 Discovering blockchain as a medium was transformative, opening up new ways to explore ideas. Living with a rare cardiomyopathy presents its own challenges, and as an artist, I’ve wanted to visualize and explore these experiences through the data generated/gathered from my body. Blockchain offers a dynamic, interactive way to do so.
 
-For a more in-depth look at Cessation, explore the project’s Wiki.
+
+
 
