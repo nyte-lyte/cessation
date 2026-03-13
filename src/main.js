@@ -483,40 +483,6 @@ async function init() {
     gl.uniform1f(uEgfrLoc, bri);
   }
 
-  function hsb01ToRgb255(h, s, b) {
-    // h,s,b are 0..1
-    const H = (h * 360) % 360;
-    const C = b * s;
-    const Hp = H / 60;
-    const X = C * (1 - Math.abs((Hp % 2) - 1));
-
-    let r1 = 0,
-      g1 = 0,
-      b1 = 0;
-    if (0 <= Hp && Hp < 1) [r1, g1, b1] = [C, X, 0];
-    else if (1 <= Hp && Hp < 2) [r1, g1, b1] = [X, C, 0];
-    else if (2 <= Hp && Hp < 3) [r1, g1, b1] = [0, C, X];
-    else if (3 <= Hp && Hp < 4) [r1, g1, b1] = [0, X, C];
-    else if (4 <= Hp && Hp < 5) [r1, g1, b1] = [X, 0, C];
-    else if (5 <= Hp && Hp < 6) [r1, g1, b1] = [C, 0, X];
-
-    const m = b - C;
-    const r = Math.round((r1 + m) * 255);
-    const g = Math.round((g1 + m) * 255);
-    const bl = Math.round((b1 + m) * 255);
-
-    return {
-      r: Math.max(0, Math.min(255, r)),
-      g: Math.max(0, Math.min(255, g)),
-      b: Math.max(0, Math.min(255, bl)),
-    };
-  }
-
-  function rgb255ToHex({ r, g, b }) {
-    const to2 = (n) => n.toString(16).padStart(2, "0");
-    return `#${to2(r)}${to2(g)}${to2(b)}`.toUpperCase();
-  }
-
   function setResolutionUniform() {
     gl.uniform2f(uResolutionLoc, gl.canvas.width, gl.canvas.height);
   }
@@ -577,8 +543,7 @@ async function init() {
         const baseStr = 0.06 + 0.10 * p;
         const arrivedStr = clamp(amp * sodiumPulseShape(ph, sodiumPulseCount(ds), 0.12), 0, 1);
         const str = clamp(baseStr + arrivedStr, 0, 1);
-        const note = arr < 1 ? `  (arriving ${Math.round(arr * 100)}%)` : '';
-        return { str, hue, note };
+        return { str, hue };
       },
     },
     {
@@ -595,8 +560,7 @@ async function init() {
         const baseStr = 0.05 + 0.09 * p;
         const arrivedStr = clamp(amp * chlorideTriWithWarble(ph, ds), 0, 1);
         const str = clamp(baseStr + arrivedStr, 0, 1);
-        const note = arr < 1 ? `  (arriving ${Math.round(arr * 100)}%)` : '';
-        return { str, hue, note };
+        return { str, hue };
       },
     },
     {
@@ -716,9 +680,6 @@ async function init() {
     const baseHSB = computeHSBFromStats(currentDataSet, healthDataSets); // 0..1
     let baseHueDeg = baseHSB.hue * 360.0;
 
-    const baseRgb255 = hsb01ToRgb255(baseHSB.hue, baseHSB.sat, baseHSB.bri);
-    const baseHex = rgb255ToHex(baseRgb255);
-
     // Beam phases advance on real-wall-clock dt for smooth animation regardless
     // of totalYears speed. Decay ripple pulses and cross-beam deps pre-computed.
     co2Pulse *= Math.exp(-dt / 18.0);
@@ -730,7 +691,6 @@ async function init() {
       0, 1
     );
 
-    const beamResults = [];
     for (const cfg of beamConfigs) {
       beamPhases[cfg.phaseKey] = beamPhases[cfg.phaseKey] ?? cfg.phaseSeed(lastTwoHashDigits);
       if (cfg.tickTwoPi) {
@@ -740,11 +700,10 @@ async function init() {
       }
       const ph = beamPhases[cfg.phaseKey];
       const p = winsorizedPercentileForLab(currentDataSet, cfg.labKey, healthDataSets);
-      const { str, hue, note } = cfg.update({ ph, p, ds: currentDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
+      const { str, hue } = cfg.update({ ph, p, ds: currentDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
       if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);
       if (cfg.radiusLoc)   gl.uniform1f(cfg.radiusLoc, p);
-      beamResults.push({ label: cfg.label, str, hue, note, p });
     }
 
     // BUN/Creatinine ratio: spatial coupling between nitrogen and creatinine blobs
@@ -754,31 +713,6 @@ async function init() {
       0, 1
     );
     if (uBunCreatRatioNormLoc) gl.uniform1f(uBunCreatRatioNormLoc, bunCreatRatioNorm);
-
-    // Left overlay
-    overlay.textContent = [
-      `Dataset: ${currentDataSetIndex}`,
-      `HealthIndex: ${currentDataSet.healthIndex?.toFixed(3) ?? "N/A"}`,
-      `Years: ${totalYears.toFixed(2)}`,
-      `DecayRate(eff): ${effectiveDecayPerYear.toExponential(3)}`,
-      `PhaseYears: ${phaseYears.toFixed(2)}`,
-      params.overrideYears !== null
-        ? `Mode: OVERRIDE (${params.overrideYears}y)`
-        : `Mode: REALTIME`,
-      `Warp: x${params.timeWarp}`,
-      `Inherited: ${inheritedHueDeg.toFixed(0)}° str=${inheritedStrength.toFixed(2)}`,
-    ].join("\n");
-
-    // Right overlay
-    beamOverlay.textContent = [
-      `pAxis: ${currentDataSet.ecg.pAxis}° (norm=${pAxisNorm.toFixed(2)})`,
-      `rAxis: ${currentDataSet.ecg.rAxis}° (norm=${rAxisNorm.toFixed(2)})`,
-      ...beamResults.map(({ label, str, hue, note }) =>
-        `${label}: str=${str.toFixed(2)} hue=${wrapDeg(hue).toFixed(0)}°${note ?? ''}`
-      ),
-      `BUN/Cr ratio: ${bunCreatRatioNorm.toFixed(2)} (${(currentDataSet.labs.nitrogen / Math.max(0.1, currentDataSet.labs.creatinine)).toFixed(1)})`,
-      `BaseHex: ${baseHex}`,
-    ].join("\n");
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(draw);
@@ -957,44 +891,5 @@ function getBeamHueAnchorDeg(dataSet, beamId) {
       return baseDeg;
   }
 }
-
-// overlays — hidden by default, toggle with window.toggleOverlay()
-const overlay = document.createElement("div");
-overlay.style.position = "fixed";
-overlay.style.top = "5px";
-overlay.style.left = "10px";
-overlay.style.padding = "6px 10px";
-overlay.style.background = "rgba(0, 0, 0, 0.6)";
-overlay.style.color = "lime";
-overlay.style.whiteSpace = "pre";
-overlay.style.fontFamily = "monospace";
-overlay.style.fontSize = "12px";
-overlay.style.textAlign = "left";
-overlay.style.zIndex = "9999";
-overlay.style.display = "none";
-document.body.appendChild(overlay);
-
-const beamOverlay = document.createElement("div");
-beamOverlay.style.position = "fixed";
-beamOverlay.style.top = "5px";
-beamOverlay.style.left = "auto";
-beamOverlay.style.right = "10px";
-beamOverlay.style.padding = "6px 10px";
-beamOverlay.style.background = "rgba(0, 0, 0, 0.6)";
-beamOverlay.style.color = "lime";
-beamOverlay.style.whiteSpace = "pre";
-beamOverlay.style.fontFamily = "monospace";
-beamOverlay.style.fontSize = "12px";
-beamOverlay.style.textAlign = "right";
-beamOverlay.style.zIndex = "9999";
-beamOverlay.style.pointerEvents = "none";
-beamOverlay.style.display = "none";
-document.body.appendChild(beamOverlay);
-
-window.toggleOverlay = () => {
-  const show = overlay.style.display === "none";
-  overlay.style.display = show ? "block" : "none";
-  beamOverlay.style.display = show ? "block" : "none";
-};
 
 init();
