@@ -11,8 +11,8 @@ body {
 
 #canvas-container {
     box-sizing: border-box;
-    width: 100vw;
-    height: 100vh;
+    width: min(100vw, 100vh);
+    height: min(100vw, 100vh);
     display: flex;
     justify-content: center;
     align-items: center;

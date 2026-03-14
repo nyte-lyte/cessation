@@ -450,10 +450,11 @@ async function init() {
     co2Pulse = Math.min(1, co2Pulse + 0.85);
     caPulse = Math.min(1, caPulse + 0.55);
   };
-  window.setYears = (y) => {
-    params.overrideYears = y == null ? null : Number(y);
+  // setLifeFraction(0..1) — 0.0 = birth, 1.0 = cessation
+  window.setLifeFraction = (f) => {
+    params.overrideYears = f == null ? null : clamp(Number(f), 0, 1) * lifespanYears;
   };
-  window.clearYears = () => {
+  window.clearLifeFraction = () => {
     params.overrideYears = null;
   };
   window.timeWarp = (f) => {
@@ -778,7 +779,7 @@ function computeHSBFromStats(dataSet, healthDataSets) {
 
 
 // ──────────────────────────────────────────────────────────────
-// BEAM SCAFFOLD (no-ops for now)
+// BEAM SCAFFOLD 
 // ──────────────────────────────────────────────────────────────
 
 const BEAM = Object.freeze({
