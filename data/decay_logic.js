@@ -52,7 +52,7 @@ function calculateDynamicDecayRate(dataSet, minMaxValues, healthIndex) {
 // Each reanimation cycle produces a genuinely new dataset that has drifted
 // further from the originals. Extreme disease markers smooth out over lifetimes.
 function blendDatasets(a, b) {
-  return {
+  const blended = {
     date: `blended`,
     ecg: {
       ventRate:    (a.ecg.ventRate    + b.ecg.ventRate)    / 2,
@@ -75,7 +75,10 @@ function blendDatasets(a, b) {
       carbonDioxide: (a.labs.carbonDioxide + b.labs.carbonDioxide) / 2,
       calcium:       (a.labs.calcium       + b.labs.calcium)       / 2,
     },
+    healthIndex: ((a.healthIndex ?? 0.5) + (b.healthIndex ?? 0.5)) / 2,
+    decayRate:   ((a.decayRate   ?? 0.01) + (b.decayRate   ?? 0.01)) / 2,
   };
+  return blended;
 }
 
 // Karma = accumulated disease burden of a dataset.

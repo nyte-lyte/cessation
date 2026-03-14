@@ -832,7 +832,6 @@ healthDataSets.forEach((dataSet) => {
   );
 });
 
-console.log("Min/Max Values:", minMaxValues);
 
 function calculateHealthIndex(data) {
   let weightedIndex =
@@ -938,18 +937,5 @@ function updateDecayRates() {
 // Run once so all datasets are enriched with healthIndex + decayRate
 updateDecayRates();
 
-healthDataSets.forEach((dataSet, index) => {
-  console.log(
-    `Dataset ${index} (${
-      dataSet.date
-    }): Health Index = ${dataSet.healthIndex.toFixed(
-      4
-    )}, Decay/yr = ${dataSet.decayRate.toFixed(4)}`
-  );
-});
-
-console.log("✅ Health datasets loaded successfully:", healthDataSets.length);
-console.log("First dataset:", healthDataSets[0]);
-console.log("Last dataset:", healthDataSets[healthDataSets.length - 1]);
 
 export { healthDataSets, minMaxValues};
