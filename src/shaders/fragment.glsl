@@ -61,7 +61,8 @@ uniform float u_inheritedStrength; // 0..1, fades toward 0 over piece lifespan
 // Entropy pool / reanimation uniforms
 uniform float u_reanimationProgress;    // 0 = nirvana/waiting, 1 = fully reanimated
 uniform float u_partnerInheritedHueDeg; // partner's lineage hue in degrees
-uniform float u_isLiberated;            // 1 = karma exhausted, permanent liberation achieved
+uniform float u_isLiberated;            // 1 = karma exhausted, final cycle
+uniform float u_voidProgress;           // 0 = holding radial, 1 = void (both partners ceased)
 
 // --- helpers ---
 float rand(vec2 co){
@@ -389,52 +390,66 @@ float mCa = max(m1, m2);
     vec3 caTint = hsb2rgb(u_calciumHueDeg, 0.70, 0.95);
     rgbColor = screenBlend(rgbColor, caTint, u_calciumStrength * mCa * darkW);
 
-    // Decay: stays near full brightness until ~70% of lifespan, then drops steeply.
+    float liberated = step(0.5, u_isLiberated);
     float latePhase = smoothstep(0.70, 1.00, lifeFraction);
-    float decay = exp(-u_decayPerYear * u_totalYears) * (1.0 - 0.90 * latePhase * latePhase);
+
+    // Decay: natural exponential dimming over lifespan.
+    // Final cycle (liberated): late phase dissolves toward radial instead of darkening.
+    // Non-final cycles: no extra late-phase darkening — piece lives fully until cessation.
+    float decay = exp(-u_decayPerYear * u_totalYears);
     vec3 livingColor = rgbColor * decay;
 
-    // --- Nirvana: personal identity dissolves into pure luminous lineage color ---
-    // Begins when u_totalYears exceeds u_lifespanYears. Completes over 1.5 years.
-    // Not darkness — a return to origin. The piece distills to what it always carried.
-    float nirvanaProgress = clamp((u_totalYears - u_lifespanYears) / 1.5, 0.0, 1.0);
+    // --- Nirvana radial: pure centered glow in the base glucose hue ---
+    // This is the permanent state after liberation. No fields, no blobs, no drift.
+    // Dark at edges, luminous at center — heavenly stillness.
+    // Nirvana: radial glow in the base glucose hue.
+    // Floor keeps corners from going dark — eyes rest at center, edges remain present.
+    float nirvanaHue  = mod(u_glucose * 360.0, 360.0);
+    float radialDist  = length(v_uv - vec2(0.5));
+    float radialGlow  = exp(-radialDist * radialDist / 0.10);
+    // Slow pulse while holding — very subtle breathing, not full stillness
+    float nirvanaPulse = 0.94 + 0.06 * sin(u_time * 0.25);
+    float nirvanaBri  = (0.38 + 0.57 * radialGlow) * nirvanaPulse;
+    float nirvanaSat  = 0.75 - 0.30 * radialGlow;
+    vec3  nirvanaRadial = hsb2rgb(nirvanaHue, nirvanaSat, nirvanaBri);
 
-    // Liberation shifts the nirvana visual: wider glow, richer saturation, both
-    // ancestral hues present simultaneously — two souls at rest, woven together.
-    float liberated = step(0.5, u_isLiberated);
-    float nirvSigma = mix(0.22, 0.38, liberated);
-    float nirvSat   = mix(0.85, 0.92, liberated);
-    float nirvBri   = mix(0.92, 0.98, liberated);
-    vec3 nirvanaCol = hsb2rgb(u_inheritedHueDeg, nirvSat, nirvBri);
-    float nirvGlow  = exp(-dot(uv - cf4, uv - cf4) / nirvSigma);
-    vec3 nirvanaField = nirvanaCol * (0.50 + 0.50 * nirvGlow);
-    // Liberation: partner's hue woven in as a permanent secondary presence
-    vec3 partnerNirvCol = hsb2rgb(u_partnerInheritedHueDeg, 0.75, 0.88);
-    vec2 partnerNirvPos = clamp(vec2(1.0) - cf4, 0.1, 0.9);
-    float partnerNirvGlow = exp(-dot(uv - partnerNirvPos, uv - partnerNirvPos) / 0.30);
-    nirvanaField = clamp(nirvanaField + partnerNirvCol * 0.40 * partnerNirvGlow * liberated, 0.0, 1.0);
+    // Final cycle late phase: dissolve living complexity into nirvana radial.
+    // Replaces the normal darkening — the piece brightens toward liberation.
+    livingColor = mix(livingColor, nirvanaRadial, latePhase * liberated);
+
+    // Post-cessation: complete dissolution into nirvana over 0.5 years.
+    float nirvanaProgress = clamp((u_totalYears - u_lifespanYears) / 0.5, 0.0, 1.0);
 
     // --- Reanimation: partner's hue arrives from opposite corner, both converge ---
-    // partnerArrival drives the partner hue drifting toward center (0→60% of progress)
-    // lifeRestores drives the return of full living color (50→100% of progress)
-    float partnerArrival = smoothstep(0.0, 0.6, u_reanimationProgress);
-    float lifeRestores   = smoothstep(0.5, 1.0, u_reanimationProgress);
-    vec2 partnerOrigin = clamp(vec2(1.0) - cf4, 0.1, 0.9); // opposite corner from own lineage
+    // Only active for non-final cycles. Suppressed when liberated.
+    float partnerArrival = smoothstep(0.0, 0.6, u_reanimationProgress) * (1.0 - liberated);
+    float lifeRestores   = smoothstep(0.5, 1.0, u_reanimationProgress) * (1.0 - liberated);
+    vec2 partnerOrigin = clamp(vec2(1.0) - cf4, 0.1, 0.9);
     vec2 partnerPos    = mix(partnerOrigin, vec2(0.5), partnerArrival);
     vec2 ownPos        = mix(cf4, vec2(0.5), partnerArrival * 0.6);
+    vec3 nirvanaCol    = hsb2rgb(u_inheritedHueDeg, 0.85, 0.92);
     vec3 partnerCol    = hsb2rgb(u_partnerInheritedHueDeg, 0.85, 0.92);
     float pGlow = exp(-dot(uv - partnerPos, uv - partnerPos) / 0.14);
     float oGlow = exp(-dot(uv - ownPos,     uv - ownPos)     / 0.14);
-    // Two luminous fields meet — partner brightens in, own hue drifts to greet it
     vec3 meetingField = clamp(nirvanaCol * oGlow + partnerCol * pGlow * partnerArrival, 0.0, 1.0);
 
     // --- State blending ---
-    // nirvana state: pure lineage → collision of two hues
-    vec3 nirvanaState = mix(nirvanaField, meetingField, smoothstep(0.0, 0.5, u_reanimationProgress));
-    // overall: living → nirvana → reanimated
+    // Non-final nirvana: inherited hue glow → partner collision → new life
+    vec3 nirvanaState = mix(nirvanaCol * 0.90, meetingField, smoothstep(0.0, 0.5, u_reanimationProgress));
+    // Final nirvana: pure radial, permanent
+    nirvanaState = mix(nirvanaState, nirvanaRadial, liberated);
+
     vec3 finalColor = mix(livingColor, nirvanaState, nirvanaProgress);
-    // When life restores, full living color returns (no decay — the piece is reborn)
     finalColor = mix(finalColor, rgbColor, lifeRestores);
+
+    // Void: both partners have reached final cessation — fade to near-black with bright halo outline.
+    // Center is nearly black; edges glow in glucose hue like the piece's own halo.
+    float edgeDist = min(min(v_uv.x, 1.0 - v_uv.x), min(v_uv.y, 1.0 - v_uv.y));
+    float edgeGlow = exp(-edgeDist * edgeDist / 0.003);
+    float voidBri = 0.03 + 1.00 * edgeGlow;
+    float voidSat = 0.90 * edgeGlow;
+    vec3 voidColor = hsb2rgb(nirvanaHue, voidSat, voidBri);
+    finalColor = mix(finalColor, voidColor, u_voidProgress * liberated);
 
     fragColor = vec4(clamp(finalColor, 0.0, 1.0), 1.0);
 }
