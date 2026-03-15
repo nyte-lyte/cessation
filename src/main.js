@@ -324,6 +324,7 @@ async function init() {
   const uReanimationProgressLoc    = gl.getUniformLocation(program, "u_reanimationProgress");
   const uPartnerInheritedHueDegLoc = gl.getUniformLocation(program, "u_partnerInheritedHueDeg");
   const uIsLiberatedLoc            = gl.getUniformLocation(program, "u_isLiberated");
+  const uVoidProgressLoc           = gl.getUniformLocation(program, "u_voidProgress");
 
   // Blob size + BUN/Cr ratio uniforms
   const uNitrogenRadiusLoc   = gl.getUniformLocation(program, "u_nitrogenRadius");
@@ -392,6 +393,7 @@ async function init() {
   let reanimationProgress = 0.0;
   let partnerInheritedHueDeg = 0.0;
   let isLiberated = 0.0;
+  let voidProgress = 0.0;
   // setReanimation(0..1) — auto-uses correct partner hue for current dataset
   window.setReanimation = (p) => {
     reanimationProgress = Math.max(0, Math.min(1, Number(p)));
@@ -400,11 +402,13 @@ async function init() {
     if (pi < 0) console.warn('Piece 0 is genesis — no reanimation partner.');
     else console.log(`Reanimation: piece ${currentDataSetIndex} ↔ piece ${pi} | partner hue: ${partnerInheritedHueDeg.toFixed(1)}°`);
   };
-  // setLiberated(bool) — simulate karma exhaustion and liberation
+  // setLiberated(bool) — simulate karma exhaustion and liberation (final cycle)
   window.setLiberated = (v) => {
     isLiberated = v ? 1.0 : 0.0;
     partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
   };
+  // setVoidProgress(0..1) — simulate both partners having reached final cessation
+  window.setVoidProgress = (v) => { voidProgress = clamp(Number(v), 0, 1); };
   // karma tools — inspect the reanimation system
   const liberationThreshold = computeLiberationThreshold(healthDataSets, minMaxValues);
   window.getKarma = (idxA, idxB) => {
@@ -676,6 +680,7 @@ async function init() {
     if (uReanimationProgressLoc) gl.uniform1f(uReanimationProgressLoc, reanimationProgress);
     if (uPartnerInheritedHueDegLoc) gl.uniform1f(uPartnerInheritedHueDegLoc, partnerInheritedHueDeg);
     if (uIsLiberatedLoc) gl.uniform1f(uIsLiberatedLoc, isLiberated);
+    if (uVoidProgressLoc) gl.uniform1f(uVoidProgressLoc, voidProgress);
 
     // Compute base hue
     const baseHSB = computeHSBFromStats(currentDataSet, healthDataSets); // 0..1
@@ -889,7 +894,7 @@ function getBeamHueAnchorDeg(dataSet, beamId) {
       return baseDeg + (p - 0.5) * 120; // ±60° from base
     }
     default:
-      return baseDeg;
+      return baseDeg; 
   }
 }
 
