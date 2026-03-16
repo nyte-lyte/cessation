@@ -51,32 +51,36 @@ function calculateDynamicDecayRate(dataSet, minMaxValues, healthIndex) {
 // Blend two datasets — all values average toward midpoint.
 // Each reanimation cycle produces a genuinely new dataset that has drifted
 // further from the originals. Extreme disease markers smooth out over lifetimes.
+// blendDatasets(successor, predecessor)
+// Succession blend: successor (a) retains 70% of its own data,
+// predecessor (b) leaves a 30% impression. N+1 dominant.
 function blendDatasets(a, b) {
+  const blend = (x, y) => x * 0.70 + y * 0.30;
   const blended = {
     date: `blended`,
     ecg: {
-      ventRate:    (a.ecg.ventRate    + b.ecg.ventRate)    / 2,
-      prInterval:  (a.ecg.prInterval  + b.ecg.prInterval)  / 2,
-      qrsInterval: (a.ecg.qrsInterval + b.ecg.qrsInterval) / 2,
-      qtInterval:  (a.ecg.qtInterval  + b.ecg.qtInterval)  / 2,
-      qtcInterval: (a.ecg.qtcInterval + b.ecg.qtcInterval) / 2,
-      pAxis:       (a.ecg.pAxis       + b.ecg.pAxis)       / 2,
-      rAxis:       (a.ecg.rAxis       + b.ecg.rAxis)       / 2,
-      tAxis:       (a.ecg.tAxis       + b.ecg.tAxis)       / 2,
+      ventRate:    blend(a.ecg.ventRate,    b.ecg.ventRate),
+      prInterval:  blend(a.ecg.prInterval,  b.ecg.prInterval),
+      qrsInterval: blend(a.ecg.qrsInterval, b.ecg.qrsInterval),
+      qtInterval:  blend(a.ecg.qtInterval,  b.ecg.qtInterval),
+      qtcInterval: blend(a.ecg.qtcInterval, b.ecg.qtcInterval),
+      pAxis:       blend(a.ecg.pAxis,       b.ecg.pAxis),
+      rAxis:       blend(a.ecg.rAxis,       b.ecg.rAxis),
+      tAxis:       blend(a.ecg.tAxis,       b.ecg.tAxis),
     },
     labs: {
-      glucose:       (a.labs.glucose       + b.labs.glucose)       / 2,
-      nitrogen:      (a.labs.nitrogen      + b.labs.nitrogen)      / 2,
-      creatinine:    (a.labs.creatinine    + b.labs.creatinine)    / 2,
-      eGFR:          (a.labs.eGFR          + b.labs.eGFR)          / 2,
-      sodium:        (a.labs.sodium        + b.labs.sodium)        / 2,
-      potassium:     (a.labs.potassium     + b.labs.potassium)     / 2,
-      chloride:      (a.labs.chloride      + b.labs.chloride)      / 2,
-      carbonDioxide: (a.labs.carbonDioxide + b.labs.carbonDioxide) / 2,
-      calcium:       (a.labs.calcium       + b.labs.calcium)       / 2,
+      glucose:       blend(a.labs.glucose,       b.labs.glucose),
+      nitrogen:      blend(a.labs.nitrogen,      b.labs.nitrogen),
+      creatinine:    blend(a.labs.creatinine,    b.labs.creatinine),
+      eGFR:          blend(a.labs.eGFR,          b.labs.eGFR),
+      sodium:        blend(a.labs.sodium,        b.labs.sodium),
+      potassium:     blend(a.labs.potassium,     b.labs.potassium),
+      chloride:      blend(a.labs.chloride,      b.labs.chloride),
+      carbonDioxide: blend(a.labs.carbonDioxide, b.labs.carbonDioxide),
+      calcium:       blend(a.labs.calcium,       b.labs.calcium),
     },
-    healthIndex: ((a.healthIndex ?? 0.5) + (b.healthIndex ?? 0.5)) / 2,
-    decayRate:   ((a.decayRate   ?? 0.01) + (b.decayRate   ?? 0.01)) / 2,
+    healthIndex: blend(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5),
+    decayRate:   blend(a.decayRate   ?? 0.01, b.decayRate   ?? 0.01),
   };
   return blended;
 }
