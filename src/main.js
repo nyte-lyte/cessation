@@ -348,7 +348,6 @@ async function init() {
   const qrsTAngleMax = Math.max(...allQrsTAngles);
 
   let currentDataSetIndex = 0;
-  let currentDataSet = healthDataSets[currentDataSetIndex];
 
   // build normalized health track (0..1) once, used for decay modulation
   const hiTrack = healthDataSets.map((d) => d.healthIndex ?? 0.5);
@@ -735,7 +734,6 @@ async function init() {
       newIndex < healthDataSets.length
     ) {
       currentDataSetIndex = newIndex;
-      currentDataSet = healthDataSets[currentDataSetIndex];
 
       // recompute dataset dependent values
       lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
