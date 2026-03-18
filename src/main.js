@@ -2,7 +2,7 @@
 // main.js
 // ---------------------------------------------
 import { healthDataSets, minMaxValues } from "../data/health_data_sets.js";
-import { blendDatasets, computeKarma, computeLiberationThreshold } from "../data/decay_logic.js";
+import { blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence } from "../data/decay_logic.js";
 
 const canvas = document.getElementById("canvas");
 const gl = canvas.getContext("webgl2");
@@ -350,8 +350,6 @@ async function init() {
   let currentDataSetIndex = 0;
   let currentDataSet = healthDataSets[currentDataSetIndex];
 
-  let baseDecayPerYear32 = currentDataSet.decayRate;
-
   // build normalized health track (0..1) once, used for decay modulation
   const hiTrack = healthDataSets.map((d) => d.healthIndex ?? 0.5);
   const hiMin = Math.min(...hiTrack), hiMax = Math.max(...hiTrack);
@@ -473,16 +471,12 @@ async function init() {
 
   // lifespan + aligned rate
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
-  let decayPerYear = baseDecayPerYear32 * (32 / lifespanYears);
   let phaseYears = clamp(lifespanYears * 0.15, 4, 10);
   let rateAmplitude = 0.3;
 
   // set uniforms
-  function setHSBUniforms() {
-    const { hue, sat, bri } = computeHSBFromStats(
-      currentDataSet,
-      healthDataSets
-    );
+  function setHSBUniforms(ds) {
+    const { hue, sat, bri } = computeHSBFromStats(ds, healthDataSets);
     gl.uniform1f(uGlucoseLoc, hue);
     gl.uniform1f(uPotassiumLoc, sat);
     gl.uniform1f(uEgfrLoc, bri);
@@ -601,7 +595,6 @@ async function init() {
     resizeCanvasToDisplaySize(canvas);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     setResolutionUniform();
-    setHSBUniforms();
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     const t = performance.now() / 1000;
@@ -622,47 +615,55 @@ async function init() {
       (params.overrideYears !== null ? params.overrideYears : baseYears) *
       (params.timeWarp || 1);
 
+    // Chronological drift: piece ages through the real health timeline each frame
+    const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
+    const activeDataSet = applyCollectionInfluence(
+      getAgedDataset(currentDataSetIndex, lifeFraction, healthDataSets),
+      healthDataSets
+    );
+    setHSBUniforms(activeDataSet);
+
     const healthMod01 = sampleHealthMod(totalYears, phaseYears, hiNorm);
     const rateMul = 1.0 + rateAmplitude * (healthMod01 - 0.5);
-    const effectiveDecayPerYear = decayPerYear * rateMul;
+    const activeDecayPerYear = (activeDataSet.decayRate ?? 0.01) * (32 / lifespanYears) * rateMul;
 
-    gl.uniform1f(uDecayPerYearLoc, effectiveDecayPerYear);
+    gl.uniform1f(uDecayPerYearLoc, activeDecayPerYear);
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);
 
     // ECG axis uniforms — pAxis and rAxis normalized over dataset min/max
     const pAxisNorm = clamp(
-      normalize(currentDataSet.ecg.pAxis, minMaxValues.pAxis.min, minMaxValues.pAxis.max),
+      normalize(activeDataSet.ecg.pAxis, minMaxValues.pAxis.min, minMaxValues.pAxis.max),
       0, 1
     );
     const rAxisNorm = clamp(
-      normalize(currentDataSet.ecg.rAxis, minMaxValues.rAxis.min, minMaxValues.rAxis.max),
+      normalize(activeDataSet.ecg.rAxis, minMaxValues.rAxis.min, minMaxValues.rAxis.max),
       0, 1
     );
     if (uPAxisNormLoc) gl.uniform1f(uPAxisNormLoc, pAxisNorm);
     if (uRAxisNormLoc) gl.uniform1f(uRAxisNormLoc, rAxisNorm);
 
     const qtcNorm = clamp(
-      normalize(currentDataSet.ecg.qtcInterval, minMaxValues.qtcInterval.min, minMaxValues.qtcInterval.max),
+      normalize(activeDataSet.ecg.qtcInterval, minMaxValues.qtcInterval.min, minMaxValues.qtcInterval.max),
       0, 1
     );
     const prNorm = clamp(
-      normalize(currentDataSet.ecg.prInterval, minMaxValues.prInterval.min, minMaxValues.prInterval.max),
+      normalize(activeDataSet.ecg.prInterval, minMaxValues.prInterval.min, minMaxValues.prInterval.max),
       0, 1
     );
     if (uQtcNormLoc) gl.uniform1f(uQtcNormLoc, qtcNorm);
     if (uPrNormLoc) gl.uniform1f(uPrNormLoc, prNorm);
     const ventRateNorm = clamp(
-      normalize(currentDataSet.ecg.ventRate, minMaxValues.ventRate.min, minMaxValues.ventRate.max),
+      normalize(activeDataSet.ecg.ventRate, minMaxValues.ventRate.min, minMaxValues.ventRate.max),
       0, 1
     );
     if (uVentRateNormLoc) gl.uniform1f(uVentRateNormLoc, ventRateNorm);
     const tAxisNorm = clamp(
-      normalize(currentDataSet.ecg.tAxis, minMaxValues.tAxis.min, minMaxValues.tAxis.max),
+      normalize(activeDataSet.ecg.tAxis, minMaxValues.tAxis.min, minMaxValues.tAxis.max),
       0, 1
     );
     if (uTAxisNormLoc) gl.uniform1f(uTAxisNormLoc, tAxisNorm);
-    const qrsTAngle = Math.abs(currentDataSet.ecg.rAxis - currentDataSet.ecg.tAxis);
+    const qrsTAngle = Math.abs(activeDataSet.ecg.rAxis - activeDataSet.ecg.tAxis);
     const qrsTAngleNorm = clamp(
       (qrsTAngle - qrsTAngleMin) / Math.max(1e-6, qrsTAngleMax - qrsTAngleMin),
       0, 1
@@ -670,7 +671,6 @@ async function init() {
     if (uQrsTAngleLoc) gl.uniform1f(uQrsTAngleLoc, qrsTAngleNorm);
 
     // Inherited color field — fades from full presence at birth toward 0 at end of life
-    const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
     const inheritedHueDeg = inheritedHueDegOverride !== null
       ? inheritedHueDegOverride
@@ -683,16 +683,16 @@ async function init() {
     if (uVoidProgressLoc) gl.uniform1f(uVoidProgressLoc, voidProgress);
 
     // Compute base hue
-    const baseHSB = computeHSBFromStats(currentDataSet, healthDataSets); // 0..1
+    const baseHSB = computeHSBFromStats(activeDataSet, healthDataSets); // 0..1
     let baseHueDeg = baseHSB.hue * 360.0;
 
     // Beam phases advance on real-wall-clock dt for smooth animation regardless
     // of totalYears speed. Decay ripple pulses and cross-beam deps pre-computed.
     co2Pulse *= Math.exp(-dt / 18.0);
     caPulse  *= Math.exp(-dt / 26.0);
-    const pCO2 = winsorizedPercentileForLab(currentDataSet, 'carbonDioxide', healthDataSets);
+    const pCO2 = winsorizedPercentileForLab(activeDataSet, 'carbonDioxide', healthDataSets);
     const pPR = clamp(
-      (currentDataSet.ecg.prInterval - minMaxValues.prInterval.min) /
+      (activeDataSet.ecg.prInterval - minMaxValues.prInterval.min) /
       Math.max(1e-6, minMaxValues.prInterval.max - minMaxValues.prInterval.min),
       0, 1
     );
@@ -700,20 +700,20 @@ async function init() {
     for (const cfg of beamConfigs) {
       beamPhases[cfg.phaseKey] = beamPhases[cfg.phaseKey] ?? cfg.phaseSeed(lastTwoHashDigits);
       if (cfg.tickTwoPi) {
-        beamPhases[cfg.phaseKey] += (dt * 2 * Math.PI) / Math.max(1e-3, cfg.tempoFn(currentDataSet));
+        beamPhases[cfg.phaseKey] += (dt * 2 * Math.PI) / Math.max(1e-3, cfg.tempoFn(activeDataSet));
       } else {
-        beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(currentDataSet))) % 1;
+        beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet))) % 1;
       }
       const ph = beamPhases[cfg.phaseKey];
-      const p = winsorizedPercentileForLab(currentDataSet, cfg.labKey, healthDataSets);
-      const { str, hue } = cfg.update({ ph, p, ds: currentDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
+      const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, healthDataSets);
+      const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
       if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);
       if (cfg.radiusLoc)   gl.uniform1f(cfg.radiusLoc, p);
     }
 
     // BUN/Creatinine ratio: spatial coupling between nitrogen and creatinine blobs
-    const bunCreatRatio = currentDataSet.labs.nitrogen / Math.max(0.1, currentDataSet.labs.creatinine);
+    const bunCreatRatio = activeDataSet.labs.nitrogen / Math.max(0.1, activeDataSet.labs.creatinine);
     const bunCreatRatioNorm = clamp(
       (bunCreatRatio - bunCreatP05) / Math.max(1e-9, bunCreatP95 - bunCreatP05),
       0, 1
@@ -738,9 +738,7 @@ async function init() {
       currentDataSet = healthDataSets[currentDataSetIndex];
 
       // recompute dataset dependent values
-      baseDecayPerYear32 = currentDataSet.decayRate;
       lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
-      decayPerYear = baseDecayPerYear32 * (32 / lifespanYears);
       phaseYears = clamp(lifespanYears * 0.15, 4, 10);
 
       draw();

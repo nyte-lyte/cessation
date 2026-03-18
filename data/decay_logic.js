@@ -97,6 +97,86 @@ function computeKarma(dataset, minMaxValues) {
   return nQTc * 0.35 + nCreat * 0.25 + (1 - nEGFR) * 0.20 + nGlucose * 0.15 + nVentRate * 0.05;
 }
 
+// Chronological drift — smooth interpolation through the real health timeline.
+// Piece starts at its own snapshot and drifts forward proportionally to collection size.
+// Drift span = 20% of collection size, growing as new pieces are added.
+// Waxing and waning emerge naturally from the real biological trajectory.
+// getAgedDataset(startIdx, lifeFraction, allDatasets)
+function getAgedDataset(startIdx, lifeFraction, allDatasets) {
+  const span    = allDatasets.length * 0.20;
+  const maxSpan = Math.max(0, allDatasets.length - 1 - startIdx);
+  const pos     = startIdx + lifeFraction * Math.min(span, maxSpan);
+  const lo      = Math.floor(pos);
+  const hi      = Math.min(lo + 1, allDatasets.length - 1);
+  const t       = pos - lo;
+  if (lo === hi) return allDatasets[lo];
+  const a = allDatasets[lo];
+  const b = allDatasets[hi];
+  const lerp = (x, y) => x + (y - x) * t;
+  return {
+    date: 'aged',
+    ecg: {
+      ventRate:    lerp(a.ecg.ventRate,    b.ecg.ventRate),
+      prInterval:  lerp(a.ecg.prInterval,  b.ecg.prInterval),
+      qrsInterval: lerp(a.ecg.qrsInterval, b.ecg.qrsInterval),
+      qtInterval:  lerp(a.ecg.qtInterval,  b.ecg.qtInterval),
+      qtcInterval: lerp(a.ecg.qtcInterval, b.ecg.qtcInterval),
+      pAxis:       lerp(a.ecg.pAxis,       b.ecg.pAxis),
+      rAxis:       lerp(a.ecg.rAxis,       b.ecg.rAxis),
+      tAxis:       lerp(a.ecg.tAxis,       b.ecg.tAxis),
+    },
+    labs: {
+      glucose:       lerp(a.labs.glucose,       b.labs.glucose),
+      nitrogen:      lerp(a.labs.nitrogen,      b.labs.nitrogen),
+      creatinine:    lerp(a.labs.creatinine,    b.labs.creatinine),
+      eGFR:          lerp(a.labs.eGFR,          b.labs.eGFR),
+      sodium:        lerp(a.labs.sodium,        b.labs.sodium),
+      potassium:     lerp(a.labs.potassium,     b.labs.potassium),
+      chloride:      lerp(a.labs.chloride,      b.labs.chloride),
+      carbonDioxide: lerp(a.labs.carbonDioxide, b.labs.carbonDioxide),
+      calcium:       lerp(a.labs.calcium,       b.labs.calcium),
+    },
+    healthIndex: lerp(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5),
+    decayRate:   lerp(a.decayRate   ?? 0.01, b.decayRate  ?? 0.01),
+  };
+}
+
+// Systemic collection influence — gentle pull toward collection average.
+// New healthy pieces joining lift existing pieces; sick data pulls the other way.
+// influence = 0.05 means 5% pull toward the average each evaluation.
+function applyCollectionInfluence(dataset, allDatasets, influence = 0.05) {
+  const n    = allDatasets.length;
+  const lerp = (x, y) => x + (y - x) * influence;
+  const avgLab = (key) => allDatasets.reduce((s, d) => s + d.labs[key], 0) / n;
+  const avgEcg = (key) => allDatasets.reduce((s, d) => s + d.ecg[key],  0) / n;
+  return {
+    date: dataset.date,
+    ecg: {
+      ventRate:    lerp(dataset.ecg.ventRate,    avgEcg('ventRate')),
+      prInterval:  lerp(dataset.ecg.prInterval,  avgEcg('prInterval')),
+      qrsInterval: lerp(dataset.ecg.qrsInterval, avgEcg('qrsInterval')),
+      qtInterval:  lerp(dataset.ecg.qtInterval,  avgEcg('qtInterval')),
+      qtcInterval: lerp(dataset.ecg.qtcInterval, avgEcg('qtcInterval')),
+      pAxis:       lerp(dataset.ecg.pAxis,       avgEcg('pAxis')),
+      rAxis:       lerp(dataset.ecg.rAxis,       avgEcg('rAxis')),
+      tAxis:       lerp(dataset.ecg.tAxis,       avgEcg('tAxis')),
+    },
+    labs: {
+      glucose:       lerp(dataset.labs.glucose,       avgLab('glucose')),
+      nitrogen:      lerp(dataset.labs.nitrogen,      avgLab('nitrogen')),
+      creatinine:    lerp(dataset.labs.creatinine,    avgLab('creatinine')),
+      eGFR:          lerp(dataset.labs.eGFR,          avgLab('eGFR')),
+      sodium:        lerp(dataset.labs.sodium,        avgLab('sodium')),
+      potassium:     lerp(dataset.labs.potassium,     avgLab('potassium')),
+      chloride:      lerp(dataset.labs.chloride,      avgLab('chloride')),
+      carbonDioxide: lerp(dataset.labs.carbonDioxide, avgLab('carbonDioxide')),
+      calcium:       lerp(dataset.labs.calcium,       avgLab('calcium')),
+    },
+    healthIndex: lerp(dataset.healthIndex ?? 0.5, allDatasets.reduce((s, d) => s + (d.healthIndex ?? 0.5), 0) / n),
+    decayRate:   lerp(dataset.decayRate   ?? 0.01, allDatasets.reduce((s, d) => s + (d.decayRate  ?? 0.01), 0) / n),
+  };
+}
+
 // Liberation threshold — 25th percentile of karma across the full collection.
 // When a blended dataset's karma drops below this, the next cessation is liberation.
 // Resolves naturally: healthy data → fewer cycles. Disease-heavy → more cycles.
@@ -107,4 +187,4 @@ function computeLiberationThreshold(allDatasets, minMaxValues) {
   return sorted[Math.floor(0.25 * sorted.length)];
 }
 
-export { calculateDynamicDecayRate, BASE_DECAY_PER_YEAR_32, normalize, blendDatasets, computeKarma, computeLiberationThreshold };
+export { calculateDynamicDecayRate, BASE_DECAY_PER_YEAR_32, normalize, blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence };
