@@ -144,9 +144,10 @@ function getAgedDataset(startIdx, lifeFraction, allDatasets) {
 // Systemic collection influence — gentle pull toward collection average.
 // New healthy pieces joining lift existing pieces; sick data pulls the other way.
 // influence = 0.05 means 5% pull toward the average each evaluation.
-function applyCollectionInfluence(dataset, allDatasets, influence = 0.05) {
-  const n    = allDatasets.length;
-  const lerp = (x, y) => x + (y - x) * influence;
+function applyCollectionInfluence(dataset, allDatasets, lifeFraction, influence = 0.05) {
+  const n      = allDatasets.length;
+  const pull   = influence * lifeFraction;
+  const lerp   = (x, y) => x + (y - x) * pull;
   const avgLab = (key) => allDatasets.reduce((s, d) => s + d.labs[key], 0) / n;
   const avgEcg = (key) => allDatasets.reduce((s, d) => s + d.ecg[key],  0) / n;
   return {

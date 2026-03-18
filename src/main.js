@@ -618,7 +618,8 @@ async function init() {
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const activeDataSet = applyCollectionInfluence(
       getAgedDataset(currentDataSetIndex, lifeFraction, healthDataSets),
-      healthDataSets
+      healthDataSets,
+      lifeFraction
     );
     setHSBUniforms(activeDataSet);
 
