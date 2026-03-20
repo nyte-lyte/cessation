@@ -420,6 +420,27 @@ async function init() {
     return blended;
   };
 
+  // recordCanvas(seconds) — captures directly from the WebGL canvas to a .webm download
+  window.recordCanvas = (seconds = 10) => {
+    const stream = canvas.captureStream(60);
+    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `cessation_${currentDataSetIndex}_${Date.now()}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      console.log(`Saved: cessation_${currentDataSetIndex}_${Date.now()}.webm`);
+    };
+    recorder.start();
+    console.log(`Recording ${seconds}s — saving to Downloads when done...`);
+    setTimeout(() => recorder.stop(), seconds * 1000);
+  };
+
   const hash01 = lastTwoHashDigits / 99; // 0..1
   const signed = (hash01 - 0.5) * 2; // -1..+1
 
