@@ -45,7 +45,8 @@ uniform float u_bunCreatRatioNorm;
 // ECG axis uniforms — drive beam spatial positioning and field drift tempo
 uniform float u_pAxisNorm;    // P wave axis, normalized 0..1 over dataset range
 uniform float u_rAxisNorm;    // R wave (QRS) axis, normalized 0..1 over dataset range
-uniform float u_qtcNorm;      // QTc interval, normalized 0..1 — drives identity field tempo
+uniform float u_qtcNorm;       // QTc interval, min-max normalized 0..1 — drives field tempo + blob sizing
+uniform float u_qtcPercentile; // QTc interval, percentile-ranked 0..1 — drives Field 3 hue
 uniform float u_prNorm;       // PR interval, normalized 0..1 — drives acid-base field tempo
 uniform float u_ventRateNorm; // Heart rate, normalized 0..1 — scales all field drift frequencies
 uniform float u_tAxisNorm;    // T-wave axis, normalized 0..1 — repolarization direction
@@ -187,7 +188,7 @@ void main(){
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
     vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.65 + 0.30 * u_potassium, 0.45 + 0.50 * u_eGFR);
     vec3 col2 = hsb2rgb(mod(u_eGFR    * 360.  + hDrift2, 360.), 0.74,                      0.50 + 0.30 * u_eGFR);
-    vec3 col3 = hsb2rgb(mod(u_qtcNorm * 360.  + hDrift3, 360.), 0.76,                      0.48 + 0.30 * u_eGFR);
+    vec3 col3 = hsb2rgb(mod(u_qtcPercentile * 360. + hDrift3, 360.), 0.76,                 0.48 + 0.30 * u_eGFR);
     vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.72, 0.52 + 0.28 * u_eGFR);
 
     vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum;

@@ -315,6 +315,7 @@ async function init() {
   const uPAxisNormLoc = gl.getUniformLocation(program, "u_pAxisNorm");
   const uRAxisNormLoc = gl.getUniformLocation(program, "u_rAxisNorm");
   const uQtcNormLoc = gl.getUniformLocation(program, "u_qtcNorm");
+  const uQtcPercentileLoc = gl.getUniformLocation(program, "u_qtcPercentile");
   const uPrNormLoc = gl.getUniformLocation(program, "u_prNorm");
   const uVentRateNormLoc = gl.getUniformLocation(program, "u_ventRateNorm");
   const uTAxisNormLoc = gl.getUniformLocation(program, "u_tAxisNorm");
@@ -341,6 +342,7 @@ async function init() {
     .sort((a, b) => a - b);
   const bunCreatP05 = allBunCreatRatios[Math.floor(0.05 * (allBunCreatRatios.length - 1))];
   const bunCreatP95 = allBunCreatRatios[Math.ceil(0.95 * (allBunCreatRatios.length - 1))];
+  const sortedQtcValues = healthDataSets.map((d) => d.ecg.qtcInterval).sort((a, b) => a - b);
 
   // QRS-T angle: |rAxis - tAxis|, normalized over dataset range
   const allQrsTAngles = healthDataSets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
@@ -673,6 +675,8 @@ async function init() {
       0, 1
     );
     if (uQtcNormLoc) gl.uniform1f(uQtcNormLoc, qtcNorm);
+    const qtcPercentile = percentile(activeDataSet.ecg.qtcInterval, sortedQtcValues);
+    if (uQtcPercentileLoc) gl.uniform1f(uQtcPercentileLoc, qtcPercentile);
     if (uPrNormLoc) gl.uniform1f(uPrNormLoc, prNorm);
     const ventRateNorm = clamp(
       normalize(activeDataSet.ecg.ventRate, minMaxValues.ventRate.min, minMaxValues.ventRate.max),
