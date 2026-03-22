@@ -857,96 +857,27 @@ healthDataSets.forEach((dataSet) => {
 });
 
 
+// Health index — higher = healthier/calmer, lower = more disease burden = more intense visually.
+// Primary markers: QTc (LVNC), eGFR + creatinine (kidney/med safety), vent rate (cardiac load).
+// Bad markers are inverted so that stress pushes the index down.
 function calculateHealthIndex(data) {
-  let weightedIndex =
-    normalize(
-      data.ecg.ventRate,
-      minMaxValues.ventRate.min,
-      minMaxValues.ventRate.max
-    ) *
-      0.2 +
-    normalize(
-      data.ecg.prInterval,
-      minMaxValues.prInterval.min,
-      minMaxValues.prInterval.max
-    ) *
-      0.15 +
-    normalize(
-      data.ecg.qrsInterval,
-      minMaxValues.qrsInterval.min,
-      minMaxValues.qrsInterval.max
-    ) *
-      0.3 +
-    normalize(
-      data.ecg.qtInterval,
-      minMaxValues.qtInterval.min,
-      minMaxValues.qtInterval.max
-    ) *
-      0.1 +
-    normalize(
-      data.ecg.qtcInterval,
-      minMaxValues.qtcInterval.min,
-      minMaxValues.qtcInterval.max
-    ) *
-      0.25 +
-    normalize(data.ecg.pAxis, minMaxValues.pAxis.min, minMaxValues.pAxis.max) *
-      0.03 +
-    normalize(data.ecg.rAxis, minMaxValues.rAxis.min, minMaxValues.rAxis.max) *
-      0.03 +
-    normalize(data.ecg.tAxis, minMaxValues.tAxis.min, minMaxValues.tAxis.max) *
-      0.04 +
-    normalize(
-      data.labs.glucose,
-      minMaxValues.glucose.min,
-      minMaxValues.glucose.max
-    ) *
-      0.15 +
-    normalize(
-      data.labs.nitrogen,
-      minMaxValues.nitrogen.min,
-      minMaxValues.nitrogen.max
-    ) *
-      0.03 +
-    normalize(
-      data.labs.creatinine,
-      minMaxValues.creatinine.min,
-      minMaxValues.creatinine.max
-    ) *
-      0.02 +
-    normalize(data.labs.eGFR, minMaxValues.eGFR.min, minMaxValues.eGFR.max) *
-      0.1 +
-    normalize(
-      data.labs.sodium,
-      minMaxValues.sodium.min,
-      minMaxValues.sodium.max
-    ) *
-      0.05 +
-    normalize(
-      data.labs.potassium,
-      minMaxValues.potassium.min,
-      minMaxValues.potassium.max
-    ) *
-      0.05 +
-    normalize(
-      data.labs.chloride,
-      minMaxValues.chloride.min,
-      minMaxValues.chloride.max
-    ) *
-      0.05 +
-    normalize(
-      data.labs.carbonDioxide,
-      minMaxValues.carbonDioxide.min,
-      minMaxValues.carbonDioxide.max
-    ) *
-      0.03 +
-    normalize(
-      data.labs.calcium,
-      minMaxValues.calcium.min,
-      minMaxValues.calcium.max
-    ) *
-      0.02;
+  const nQTc  = normalize(data.ecg.qtcInterval, minMaxValues.qtcInterval.min, minMaxValues.qtcInterval.max);
+  const nEGFR = normalize(data.labs.eGFR,       minMaxValues.eGFR.min,        minMaxValues.eGFR.max);
+  const nCr   = normalize(data.labs.creatinine,  minMaxValues.creatinine.min,  minMaxValues.creatinine.max);
+  const nVent = normalize(data.ecg.ventRate,     minMaxValues.ventRate.min,    minMaxValues.ventRate.max);
+  const nK    = normalize(data.labs.potassium,   minMaxValues.potassium.min,   minMaxValues.potassium.max);
+  const nCO2  = normalize(data.labs.carbonDioxide, minMaxValues.carbonDioxide.min, minMaxValues.carbonDioxide.max);
+  const nQRS  = normalize(data.ecg.qrsInterval,  minMaxValues.qrsInterval.min, minMaxValues.qrsInterval.max);
 
-  return weightedIndex;
+  return (
+    (1 - nQTc)  * 0.30 +   // lower QTc = better cardiac electrical stability
+    nEGFR       * 0.25 +   // higher eGFR = better kidney function
+    (1 - nCr)   * 0.15 +   // lower creatinine = better kidney function
+    (1 - nVent) * 0.10 +   // lower resting HR = better cardiac efficiency
+    nK          * 0.07 +   // potassium — cardiac med effect marker
+    nCO2        * 0.07 +   // CO2/bicarb — drops under cardiac/metabolic stress
+    (1 - nQRS)  * 0.06     // narrower QRS = better ventricular conduction
+  );
 }
 
 // Enrich each dataset with healthIndex
