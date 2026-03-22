@@ -1,4 +1,4 @@
-import { calculateDynamicDecayRate, normalize } from "./decay_logic.js";
+import { normalize } from "./decay_logic.js";
 
 let healthDataSets = [
   {
@@ -949,17 +949,10 @@ function calculateHealthIndex(data) {
   return weightedIndex;
 }
 
-// ---- Decay enrichment (baseline tuned for a 32-year piece) ----
-function updateDecayRates() {
-  healthDataSets.forEach((dataSet) => {
-    const hi = calculateHealthIndex(dataSet);
-    dataSet.healthIndex = hi;
-    dataSet.decayRate = calculateDynamicDecayRate(dataSet, minMaxValues, hi);
-  });
-}
-
-// Run once so all datasets are enriched with healthIndex + decayRate
-updateDecayRates();
+// Enrich each dataset with healthIndex
+healthDataSets.forEach((dataSet) => {
+  dataSet.healthIndex = calculateHealthIndex(dataSet);
+});
 
 
 export { healthDataSets, minMaxValues};
