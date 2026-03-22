@@ -10,8 +10,7 @@ uniform float u_potassium;
 uniform float u_eGFR;
 uniform vec2 u_resolution;
 
-// Decay uniforms
-uniform float u_decayPerYear;
+// Lifecycle uniforms
 uniform float u_totalYears;
 uniform float u_lifespanYears;
 
@@ -394,11 +393,10 @@ float mCa = max(m1, m2);
     float liberated = step(0.5, u_isLiberated);
     float latePhase = smoothstep(0.70, 1.00, lifeFraction);
 
-    // Decay: natural exponential dimming over lifespan.
-    // Final cycle (liberated): late phase dissolves toward radial instead of darkening.
-    // Non-final cycles: no extra late-phase darkening — piece lives fully until cessation.
-    float decay = exp(-u_decayPerYear * u_totalYears);
-    vec3 livingColor = rgbColor * decay;
+    // No artificial brightness decay — the data itself evolves over the lifetime
+    // (chronological drift, collection influence, health modulation). That IS the decay.
+    // Final cycle: late phase dissolves toward radial liberation instead.
+    vec3 livingColor = rgbColor;
 
     // --- Nirvana radial: pure centered glow in the base glucose hue ---
     // This is the permanent state after liberation. No fields, no blobs, no drift.

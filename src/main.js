@@ -281,7 +281,6 @@ async function init() {
   const uGlucoseLoc = gl.getUniformLocation(program, "u_glucose");
   const uPotassiumLoc = gl.getUniformLocation(program, "u_potassium");
   const uEgfrLoc = gl.getUniformLocation(program, "u_eGFR");
-  const uDecayPerYearLoc = gl.getUniformLocation(program, "u_decayPerYear");
   const uTotalYearsLoc = gl.getUniformLocation(program, "u_totalYears");
   const uLifespanYearsLoc = gl.getUniformLocation(program, "u_lifespanYears");
 
@@ -350,16 +349,6 @@ async function init() {
   const qrsTAngleMax = Math.max(...allQrsTAngles);
 
   let currentDataSetIndex = 0;
-
-  // build normalized health track (0..1) once, used for decay modulation
-  const hiTrack = healthDataSets.map((d) => d.healthIndex ?? 0.5);
-  const hiMin = Math.min(...hiTrack), hiMax = Math.max(...hiTrack);
-  const hiNorm = hiTrack.map((h) =>
-    hiMax > hiMin ? (h - hiMin) / (hiMax - hiMin) : 0.5
-  );
-  for (let i = 1; i < hiNorm.length - 1; i++) {
-    hiNorm[i] = (hiNorm[i - 1] + 2 * hiNorm[i] + hiNorm[i + 1]) / 4;
-  }
 
   // TODO: replace with real chain values
   const lastTwoHashDigits = 88;
@@ -493,8 +482,6 @@ async function init() {
 
   // lifespan + aligned rate
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
-  let phaseYears = clamp(lifespanYears * 0.15, 4, 10);
-  let rateAmplitude = 0.3;
 
   // set uniforms
   function setHSBUniforms(ds) {
@@ -506,19 +493,6 @@ async function init() {
 
   function setResolutionUniform() {
     gl.uniform2f(uResolutionLoc, gl.canvas.width, gl.canvas.height);
-  }
-
-  // sample the health track over time (returns 0..1)
-  function sampleHealthMod(totalYears, phaseYears, track) {
-    if (!track || track.length === 0) return 0.5;
-    const t = (totalYears / phaseYears) % 1; // 0..1 over one loop
-    const f = t * (track.length - 1);
-    const i = Math.floor(f);
-    const frac = f - i;
-    const a = track[i];
-    const b = track[Math.min(i + 1, track.length - 1)];
-    const mu = (1.0 - Math.cos(frac * Math.PI)) * 0.5;
-    return a * (1 - mu) + b * mu;
   }
 
   // ─── Beam configurations ────────────────────────────────────────────────────
@@ -646,11 +620,6 @@ async function init() {
     );
     setHSBUniforms(activeDataSet);
 
-    const healthMod01 = sampleHealthMod(totalYears, phaseYears, hiNorm);
-    const rateMul = 1.0 + rateAmplitude * (healthMod01 - 0.5);
-    const activeDecayPerYear = (activeDataSet.decayRate ?? 0.01) * (32 / lifespanYears) * rateMul;
-
-    gl.uniform1f(uDecayPerYearLoc, activeDecayPerYear);
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);
 
@@ -761,9 +730,7 @@ async function init() {
     ) {
       currentDataSetIndex = newIndex;
 
-      // recompute dataset dependent values
       lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
-      phaseYears = clamp(lifespanYears * 0.15, 4, 10);
 
       draw();
     } else {
