@@ -50,6 +50,7 @@ uniform float u_prNorm;       // PR interval, normalized 0..1 — drives acid-ba
 uniform float u_ventRateNorm; // Heart rate, normalized 0..1 — scales all field drift frequencies
 uniform float u_tAxisNorm;    // T-wave axis, normalized 0..1 — repolarization direction
 uniform float u_qrsTAngle;   // QRS-T angle normalized 0..1 — electrical dissonance (0=aligned, 1=max)
+uniform float u_qrsNorm;     // QRS interval, min-max normalized 0..1 — depolarization width
 
 // Wall-clock time in seconds — drives realtime blob animation
 uniform float u_time;
@@ -140,7 +141,8 @@ void main(){
     // --- Per-field sigma from health data ---
     // eGFR (kidney function) determines spread: high eGFR = wide diffuse zones,
     // low eGFR = tight concentrated pools. Each field responds to a different axis.
-    float s1 = (0.09 + 0.20 * u_eGFR)         * 0.75;
+    // s1: eGFR spreads the identity field; wide QRS (disorganized depolarization) diffuses it further
+    float s1 = (0.09 + 0.20 * u_eGFR + 0.06 * u_qrsNorm) * 0.75;
     float s2 = (0.10 + 0.16 * (1.0 - u_eGFR)) * 0.75;
     float s3 = (0.08 + 0.18 * u_glucose)       * 0.75;
     float s4 = (0.10 + 0.14 * u_eGFR)         * 0.75;
@@ -387,7 +389,9 @@ float mCa = max(m1, m2);
     rgbColor = clamp(rgbColor + chlorideRGB * strengthCl * mCl, 0., 1.0);
 
     // CO2
-    vec3 co2Tint = hsb2rgb(u_co2HueDeg, .75, 1.00);
+    // Chloride tracks acid-base balance: high Cl (acidosis) intensifies the halo;
+    // low Cl (alkalosis) desaturates it. Chloride and CO2 are metabolic twins.
+    vec3 co2Tint = hsb2rgb(u_co2HueDeg, 0.60 + 0.30 * u_chlorideRadius, 1.00);
     rgbColor = clamp(rgbColor + co2Tint * haloW, 0., 1.);
 
     // Calcium

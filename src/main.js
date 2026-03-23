@@ -319,6 +319,7 @@ async function init() {
   const uVentRateNormLoc = gl.getUniformLocation(program, "u_ventRateNorm");
   const uTAxisNormLoc = gl.getUniformLocation(program, "u_tAxisNorm");
   const uQrsTAngleLoc = gl.getUniformLocation(program, "u_qrsTAngle");
+  const uQrsNormLoc   = gl.getUniformLocation(program, "u_qrsNorm");
   const uInheritedHueDegLoc = gl.getUniformLocation(program, "u_inheritedHueDeg");
   const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
   const uReanimationProgressLoc    = gl.getUniformLocation(program, "u_reanimationProgress");
@@ -454,14 +455,17 @@ async function init() {
 
   // Console triggers (later hook these to real mint events)
   window.ripple = () => {
-    // single ripple: CO2 stronger, Ca smaller
-    co2Pulse = Math.min(1, co2Pulse + 0.55);
-    caPulse = Math.min(1, caPulse + 0.35);
+    // Sodium dysregulation amplifies ripples — elevated Na = stronger compensatory surge
+    const pNa = winsorizedPercentileForLab(healthDataSets[currentDataSetIndex], 'sodium', healthDataSets);
+    const sodiumBoost = 0.8 + 0.4 * pNa; // 0.8 (low Na) → 1.2 (high Na)
+    co2Pulse = Math.min(1, co2Pulse + 0.55 * sodiumBoost);
+    caPulse  = Math.min(1, caPulse  + 0.35 * sodiumBoost);
   };
   window.bigRipple = () => {
-    // larger event
-    co2Pulse = Math.min(1, co2Pulse + 0.85);
-    caPulse = Math.min(1, caPulse + 0.55);
+    const pNa = winsorizedPercentileForLab(healthDataSets[currentDataSetIndex], 'sodium', healthDataSets);
+    const sodiumBoost = 0.8 + 0.4 * pNa;
+    co2Pulse = Math.min(1, co2Pulse + 0.85 * sodiumBoost);
+    caPulse  = Math.min(1, caPulse  + 0.55 * sodiumBoost);
   };
   // setLifeFraction(0..1) — 0.0 = birth, 1.0 = cessation
   window.setLifeFraction = (f) => {
@@ -663,9 +667,12 @@ async function init() {
       0, 1
     );
     if (uQrsTAngleLoc) gl.uniform1f(uQrsTAngleLoc, qrsTAngleNorm);
+    const qrsNorm = normalize(activeDataSet.ecg.qrsInterval, minMaxValues.qrsInterval.min, minMaxValues.qrsInterval.max);
+    if (uQrsNormLoc) gl.uniform1f(uQrsNormLoc, clamp(qrsNorm, 0, 1));
 
-    // Inherited color field — fades from full presence at birth toward 0 at end of life
-    const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
+    // Inherited color field — sick pieces lose ancestral connection faster than healthy ones
+    const fadeExp = 0.7 + 0.5 * (1 - clamp(activeDataSet.healthIndex ?? 0.5, 0, 1));
+    const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), fadeExp);
     const inheritedHueDeg = inheritedHueDegOverride !== null
       ? inheritedHueDegOverride
       : allInheritedHues[currentDataSetIndex];
