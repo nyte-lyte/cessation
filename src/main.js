@@ -261,6 +261,9 @@ async function init() {
   const program = createProgram(gl, vertexSrc, fragmentSrc);
   gl.useProgram(program);
 
+  // Kick off lifecycle engine — resolves chain state asynchronously, safe to start immediately
+  initLifecycle().then(() => lcStartPoller()).catch(e => console.warn('[lifecycle]', e.message));
+
   // set up a fullscreen quad (two triangles covering clip-space)
   const positionAttribLocation = gl.getAttribLocation(program, "a_position");
   const positionBuffer = gl.createBuffer();
@@ -351,9 +354,9 @@ async function init() {
 
   let currentDataSetIndex = 0;
 
-  // TODO: replace with real chain values
-  const lastTwoHashDigits = 88;
-  const inscriptionUnixSeconds = 1704067200;
+  // Chain values — updated by lifecycle engine when on-chain; dev defaults otherwise
+  let lastTwoHashDigits = 88;
+  let inscriptionUnixSeconds = 1704067200;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
 
   // Inherited hue — piece N inherits piece N-1's glucose hue (from allInheritedHues).
@@ -362,48 +365,28 @@ async function init() {
   window.setInheritedHue = (deg) => { inheritedHueDegOverride = ((deg % 360) + 360) % 360; };
   window.resetInheritedHue = () => { inheritedHueDegOverride = null; };
 
-  // Precompute inherited hues for all pieces (piece N inherits piece N-1's glucose hue)
-  const allInheritedHues = healthDataSets.map((_, i) =>
-    computeHSBFromStats(healthDataSets[Math.max(0, i - 1)], healthDataSets).hue * 360
-  );
-  // Pairs: (0,1),(2,3),(4,5)... piece 0 is genesis — no reanimation
-  // Even piece N (N>0): partner = N+1. Odd piece N: partner = N-1.
-  function getPartnerIndex(idx) {
-    if (idx === 0) return -1; // genesis
-    return idx % 2 === 0 ? idx + 1 : idx - 1;
-  }
-  function getPartnerInheritedHue(idx) {
-    const p = getPartnerIndex(idx);
-    if (p < 0 || p >= healthDataSets.length) return 0;
-    return allInheritedHues[p];
-  }
-
-  // Entropy pool / reanimation state (dev — set by chain data at mint time)
-  let reanimationProgress = 0.0;
-  let partnerInheritedHueDeg = 0.0;
-  let isLiberated = 0.0;
-  let voidProgress = 0.0;
-  // setReanimation(0..1) — auto-uses correct partner hue for current dataset
+  // Lifecycle console tools — write directly to module-scope lc (works dev + on-chain)
+  // setReanimation(0..1) — simulate reanimation transition for current dataset
   window.setReanimation = (p) => {
-    reanimationProgress = Math.max(0, Math.min(1, Number(p)));
-    partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
-    const pi = getPartnerIndex(currentDataSetIndex);
-    if (pi < 0) console.warn('Piece 0 is genesis — no reanimation partner.');
-    else console.log(`Reanimation: piece ${currentDataSetIndex} ↔ piece ${pi} | partner hue: ${partnerInheritedHueDeg.toFixed(1)}°`);
+    const partnerIdx = getPartnerIndex(currentDataSetIndex);
+    lc.reanimationProgress    = Math.max(0, Math.min(1, Number(p)));
+    lc.partnerInheritedHueDeg = allInheritedHues[partnerIdx >= 0 ? partnerIdx : 0] ?? 0;
+    if (partnerIdx < 0) console.warn('Piece 0 is genesis — no reanimation partner.');
+    else console.log(`Reanimation: piece ${currentDataSetIndex} ↔ piece ${partnerIdx} | partner hue: ${lc.partnerInheritedHueDeg.toFixed(1)}°`);
   };
-  // setLiberated(bool) — simulate karma exhaustion and liberation (final cycle)
+  // setLiberated(bool) — simulate liberation (karma exhaustion, final cycle)
   window.setLiberated = (v) => {
-    isLiberated = v ? 1.0 : 0.0;
-    partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
+    const partnerIdx = getPartnerIndex(currentDataSetIndex);
+    lc.isLiberated            = v ? 1.0 : 0.0;
+    lc.partnerInheritedHueDeg = allInheritedHues[partnerIdx >= 0 ? partnerIdx : 0] ?? 0;
   };
-  // setVoidProgress(0..1) — simulate both partners having reached final cessation
-  window.setVoidProgress = (v) => { voidProgress = clamp(Number(v), 0, 1); };
-  // karma tools — inspect the reanimation system
-  const liberationThreshold = computeLiberationThreshold(healthDataSets, minMaxValues);
+  // setVoidProgress(0..1) — simulate both partners at final cessation
+  window.setVoidProgress = (v) => { lc.voidProgress = clamp(Number(v), 0, 1); };
+  // getKarma / getBlend — inspect the reanimation system
   window.getKarma = (idxA, idxB) => {
     const blended = blendDatasets(healthDataSets[idxA], healthDataSets[idxB]);
     const karma = computeKarma(blended, minMaxValues);
-    console.log(`Pair (${idxA}, ${idxB}) karma: ${karma.toFixed(4)} | threshold: ${liberationThreshold.toFixed(4)} | liberated: ${karma < liberationThreshold}`);
+    console.log(`Pair (${idxA}, ${idxB}) karma: ${karma.toFixed(4)} | threshold: ${lc.liberationThreshold.toFixed(4)} | liberated: ${karma < lc.liberationThreshold}`);
     return karma;
   };
   window.getBlend = (idxA, idxB) => {
@@ -433,14 +416,26 @@ async function init() {
     setTimeout(() => recorder.stop(), seconds * 1000);
   };
 
+  // Fast init from window.PIECE — correct piece renders from frame 1, no piece-0 flash
+  if (window.PIECE) {
+    currentDataSetIndex    = window.PIECE.datasetIndex    ?? 0;
+    lastTwoHashDigits      = window.PIECE.hashTail        ?? 88;
+    inscriptionUnixSeconds = window.PIECE.inscriptionUnix ?? 1704067200;
+    inheritedHueDegOverride = window.PIECE.inheritedHueDeg ?? null;
+    lc.pieceIndex          = currentDataSetIndex;
+    lc.hashTail            = lastTwoHashDigits;
+    lc.mintUnix            = inscriptionUnixSeconds;
+    lc.lifespanYears       = lifespanYearsFromHashDigits(lastTwoHashDigits);
+  }
+
   const hash01 = lastTwoHashDigits / 99; // 0..1
   const signed = (hash01 - 0.5) * 2; // -1..+1
 
-  // Tuned per-beam ranges (degrees)
-  const nudgeNa = 12 * signed; 
-  const nudgeCl = 14 * signed; 
-  const nudgeCO2 = 18 * signed;  
-  const nudgeCa = 12 * signed; 
+  // Tuned per-beam ranges (degrees) — recomputed in draw() when hashTail changes on reanimation
+  let nudgeNa = 12 * signed;
+  let nudgeCl = 14 * signed;
+  let nudgeCO2 = 18 * signed;
+  let nudgeCa = 12 * signed;
 
   // decay test helpers
   const params = {
@@ -449,24 +444,6 @@ async function init() {
     previewSpeedYPS: 0,
   };
 
-  // Ripple pulses for CO2 / Calcium (decay over preview-time seconds)
-  let co2Pulse = 0,
-    caPulse = 0;
-
-  // Console triggers (later hook these to real mint events)
-  window.ripple = () => {
-    // Sodium dysregulation amplifies ripples — elevated Na = stronger compensatory surge
-    const pNa = winsorizedPercentileForLab(healthDataSets[currentDataSetIndex], 'sodium', healthDataSets);
-    const sodiumBoost = 0.8 + 0.4 * pNa; // 0.8 (low Na) → 1.2 (high Na)
-    co2Pulse = Math.min(1, co2Pulse + 0.55 * sodiumBoost);
-    caPulse  = Math.min(1, caPulse  + 0.35 * sodiumBoost);
-  };
-  window.bigRipple = () => {
-    const pNa = winsorizedPercentileForLab(healthDataSets[currentDataSetIndex], 'sodium', healthDataSets);
-    const sodiumBoost = 0.8 + 0.4 * pNa;
-    co2Pulse = Math.min(1, co2Pulse + 0.85 * sodiumBoost);
-    caPulse  = Math.min(1, caPulse  + 0.55 * sodiumBoost);
-  };
   // setLifeFraction(0..1) — 0.0 = birth, 1.0 = cessation
   window.setLifeFraction = (f) => {
     params.overrideYears = f == null ? null : clamp(Number(f), 0, 1) * lifespanYears;
@@ -488,8 +465,8 @@ async function init() {
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
 
   // set uniforms
-  function setHSBUniforms(ds) {
-    const { hue, sat, bri } = computeHSBFromStats(ds, healthDataSets);
+  function setHSBUniforms(ds, datasets) {
+    const { hue, sat, bri } = computeHSBFromStats(ds, datasets);
     gl.uniform1f(uGlucoseLoc, hue);
     gl.uniform1f(uPotassiumLoc, sat);
     gl.uniform1f(uEgfrLoc, bri);
@@ -567,8 +544,8 @@ async function init() {
       phaseSeed: () => 0, tickTwoPi: true,
       tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CO2),
       strengthLoc: uCo2StrengthLoc, hueLoc: uCo2HueDegLoc, radiusLoc: null,
-      update({ ph, p, baseHueDeg, co2Pulse }) {
-        const str = clamp(0.26 + 0.18 * (1 - p) + 0.22 * co2Pulse, 0, 0.62);
+      update({ ph, p, baseHueDeg }) {
+        const str = clamp(0.26 + 0.18 * (1 - p), 0, 0.62);
         let hue = baseHueDeg - (24 + 12 * p) + nudgeCO2;
         hue = guardHueGap(baseHueDeg, hue, 30, -1);
         hue += (12 + 6 * p) * Math.sin(ph * 1.0 + 0.2);
@@ -580,8 +557,8 @@ async function init() {
       phaseSeed: () => 0, tickTwoPi: true,
       tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CALCIUM),
       strengthLoc: uCalciumStrengthLoc, hueLoc: uCalciumHueDegLoc, radiusLoc: uCalciumRadiusLoc,
-      update({ ph, p, baseHueDeg, caPulse, pCO2, pPR }) {
-        const str = clamp(0.06 + 0.08 * (1 - pCO2) + 0.16 * caPulse, 0, 0.30);
+      update({ ph, p, baseHueDeg, pPR }) {
+        const str = clamp(0.06 + 0.24 * p, 0, 0.30);
         let hue = baseHueDeg + (45 + 25 * p) + nudgeCa;
         hue = guardHueGap(baseHueDeg, hue, 32, +1);
         hue += (10 + 6 * pPR) * Math.sin(ph * 0.92 - 0.13);
@@ -592,6 +569,24 @@ async function init() {
 
   // the draw() call just clears and draws the quad:
   function draw() {
+    // Advance lifecycle transitions and sync chain values from lc
+    lcTick();
+    if (lc.ready && lc.onChain) {
+      if (lastTwoHashDigits !== lc.hashTail) {
+        lastTwoHashDigits = lc.hashTail;
+        const h01 = lastTwoHashDigits / 99;
+        const sg  = (h01 - 0.5) * 2;
+        nudgeNa  = 12 * sg;
+        nudgeCl  = 14 * sg;
+        nudgeCO2 = 18 * sg;
+        nudgeCa  = 12 * sg;
+        // Reset beam phase seeds so they reseed with the new hash on reanimation
+        for (const cfg of beamConfigs) delete beamPhases[cfg.phaseKey];
+      }
+      inscriptionUnixSeconds = lc.mintUnix;
+      lifespanYears          = lc.lifespanYears;
+    }
+
     resizeCanvasToDisplaySize(canvas);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     setResolutionUniform();
@@ -615,14 +610,17 @@ async function init() {
       (params.overrideYears !== null ? params.overrideYears : baseYears) *
       (params.timeWarp || 1);
 
-    // Chronological drift: piece ages through the real health timeline each frame
+    // Chronological drift: piece ages through the real health timeline each frame.
+    // On-chain: use dynamic collection (grows with new mints). Dev: use local healthDataSets.
+    const datasets   = (lc.ready && lc.onChain && lc.collectionDatasets) ? lc.collectionDatasets : healthDataSets;
+    const datasetIdx = (lc.ready && lc.onChain) ? lc.pieceIndex : currentDataSetIndex;
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const activeDataSet = applyCollectionInfluence(
-      getAgedDataset(currentDataSetIndex, lifeFraction, healthDataSets),
-      healthDataSets,
+      getAgedDataset(datasetIdx, lifeFraction, datasets),
+      datasets,
       lifeFraction
     );
-    setHSBUniforms(activeDataSet);
+    setHSBUniforms(activeDataSet, datasets);
 
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);
@@ -678,25 +676,16 @@ async function init() {
       : allInheritedHues[currentDataSetIndex];
     if (uInheritedHueDegLoc) gl.uniform1f(uInheritedHueDegLoc, inheritedHueDeg);
     if (uInheritedStrengthLoc) gl.uniform1f(uInheritedStrengthLoc, inheritedStrength);
-    if (uReanimationProgressLoc) gl.uniform1f(uReanimationProgressLoc, reanimationProgress);
-    if (uPartnerInheritedHueDegLoc) gl.uniform1f(uPartnerInheritedHueDegLoc, partnerInheritedHueDeg);
-    if (uIsLiberatedLoc) gl.uniform1f(uIsLiberatedLoc, isLiberated);
-    if (uVoidProgressLoc) gl.uniform1f(uVoidProgressLoc, voidProgress);
+    if (uReanimationProgressLoc)    gl.uniform1f(uReanimationProgressLoc,    lc.reanimationProgress);
+    if (uPartnerInheritedHueDegLoc) gl.uniform1f(uPartnerInheritedHueDegLoc, lc.partnerInheritedHueDeg);
+    if (uIsLiberatedLoc)            gl.uniform1f(uIsLiberatedLoc,             lc.isLiberated);
+    if (uVoidProgressLoc)           gl.uniform1f(uVoidProgressLoc,            lc.voidProgress);
 
     // Compute base hue
-    const baseHSB = computeHSBFromStats(activeDataSet, healthDataSets); // 0..1
+    const baseHSB = computeHSBFromStats(activeDataSet, datasets); // 0..1
     let baseHueDeg = baseHSB.hue * 360.0;
 
-    // Beam phases advance on real-wall-clock dt for smooth animation regardless
-    // of totalYears speed. Decay ripple pulses and cross-beam deps pre-computed.
-    // eGFR drives ripple decay speed: healthy kidneys clear metabolic signals quickly;
-    // failing kidneys let stress linger. Low eGFR → slow decay; high eGFR → fast decay.
-    const pEGFR = winsorizedPercentileForLab(activeDataSet, 'eGFR', healthDataSets);
-    const co2Decay = 12 + 16 * (1 - pEGFR); // 12s (healthy) → 28s (kidney disease)
-    const caDecay  = 18 + 22 * (1 - pEGFR); // 18s (healthy) → 40s (kidney disease)
-    co2Pulse *= Math.exp(-dt / co2Decay);
-    caPulse  *= Math.exp(-dt / caDecay);
-    const pCO2 = winsorizedPercentileForLab(activeDataSet, 'carbonDioxide', healthDataSets);
+    // Pre-compute cross-beam dependencies for calcium hue
     const pPR = clamp(
       (activeDataSet.ecg.prInterval - minMaxValues.prInterval.min) /
       Math.max(1e-6, minMaxValues.prInterval.max - minMaxValues.prInterval.min),
@@ -711,8 +700,8 @@ async function init() {
         beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet))) % 1;
       }
       const ph = beamPhases[cfg.phaseKey];
-      const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, healthDataSets);
-      const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
+      const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, datasets);
+      const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, pPR });
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
       if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);
       if (cfg.radiusLoc)   gl.uniform1f(cfg.radiusLoc, p);
@@ -741,6 +730,7 @@ async function init() {
       newIndex < healthDataSets.length
     ) {
       currentDataSetIndex = newIndex;
+      lc.pieceIndex = newIndex;
 
       lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
 
@@ -897,8 +887,395 @@ function getBeamHueAnchorDeg(dataSet, beamId) {
       return baseDeg + (p - 0.5) * 120; // ±60° from base
     }
     default:
-      return baseDeg; 
+      return baseDeg;
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Partner pairing — module scope (pure, no closures)
+// ─────────────────────────────────────────────────────────────
+function getPartnerIndex(idx) {
+  if (idx === 0) return -1; // genesis — no partner
+  return idx % 2 === 0 ? idx + 1 : idx - 1;
+}
+
+// Inherited hues: piece N inherits piece N-1's glucose hue
+const allInheritedHues = healthDataSets.map((_, i) =>
+  computeHSBFromStats(healthDataSets[Math.max(0, i - 1)], healthDataSets).hue * 360
+);
+
+// ═══════════════════════════════════════════════════════════════
+// LIFECYCLE ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+// Minimal inline CBOR decoder — uint, negint, bytes, text, array, map, tag, simple
+function cborDecode(input) {
+  const buf = input instanceof ArrayBuffer ? input : input.buffer;
+  const dv  = new DataView(buf);
+  let pos = 0;
+  function next() {
+    const b  = dv.getUint8(pos++);
+    const mt = b >> 5, ai = b & 0x1f;
+    let n;
+    if      (ai < 24)  n = ai;
+    else if (ai === 24) { n = dv.getUint8(pos);             pos += 1; }
+    else if (ai === 25) { n = dv.getUint16(pos);            pos += 2; }
+    else if (ai === 26) { n = dv.getUint32(pos);            pos += 4; }
+    else if (ai === 27) { n = Number(dv.getBigUint64(pos)); pos += 8; }
+    else n = 0;
+    switch (mt) {
+      case 0: return n;
+      case 1: return -1 - n;
+      case 2: { const s = new Uint8Array(buf, pos, n); pos += n; return s; }
+      case 3: { const s = new TextDecoder().decode(new Uint8Array(buf, pos, n)); pos += n; return s; }
+      case 4: { const a = []; for (let i = 0; i < n; i++) a.push(next()); return a; }
+      case 5: { const m = {}; for (let i = 0; i < n; i++) { const k = next(); m[k] = next(); } return m; }
+      case 6: return next(); // tag — skip tag number, decode value
+      case 7: return n === 20 ? false : n === 21 ? true : n === 22 ? null : undefined;
+    }
+  }
+  return next();
+}
+
+// Network helpers with timeout
+async function fetchWithTimeout(url, ms = 8000) {
+  const ctrl = new AbortController();
+  const tid  = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(tid);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
+    return res;
+  } catch (e) { clearTimeout(tid); throw e; }
+}
+
+async function lcBlockHeight() {
+  return parseInt(await (await fetchWithTimeout('/r/blockheight')).text(), 10);
+}
+async function lcBlockInfo(height) {
+  return (await fetchWithTimeout(`/r/blockinfo/${height}`)).json();
+}
+async function lcMetadata(id) {
+  const buf = await (await fetchWithTimeout(`/r/metadata/${id}`)).arrayBuffer();
+  return cborDecode(buf);
+}
+async function lcSelf() {
+  return (await fetchWithTimeout('/r/inscription/self')).json();
+}
+async function lcInscriptionInfo(id) {
+  return (await fetchWithTimeout(`/r/inscription/${id}`)).json();
+}
+async function lcAllChildren(parentId) {
+  const ids = [];
+  for (let page = 0; ; page++) {
+    const d = await (await fetchWithTimeout(`/r/children/${parentId}/inscriptions/${page}`)).json();
+    ids.push(...(d.ids ?? []));
+    if (!d.more) break;
+  }
+  return ids;
+}
+
+// Lifecycle state — single mutable object read by draw() each frame
+const lc = {
+  ready:   false,  // true once initLifecycle() completes
+  onChain: false,  // true if running inside an Ordinals viewer
+
+  // Piece identity
+  pieceIndex: 0,
+
+  // Chain-derived timing (updated at boot and on each reanimation)
+  hashTail:       88,
+  mintBlock:      0,
+  mintUnix:       1704067200,
+  lifespanYears:  lifespanYearsFromHashDigits(88),
+  cessationBlock: Infinity,
+  cycleIndex:     0,
+
+  // Phase: 'living' | 'reanimating' | 'liberated' | 'void'
+  phase: 'living',
+
+  // Transition interpolation
+  transitionStartMs: null,
+  transitionType:    null, // 'reanimation' | 'void'
+
+  // Uniforms fed into draw() each frame
+  reanimationProgress:    0,
+  partnerInheritedHueDeg: 0,
+  isLiberated:            0,
+  voidProgress:           0,
+
+  // Liberation threshold (recomputed after sibling discovery)
+  liberationThreshold: computeLiberationThreshold(healthDataSets, minMaxValues),
+
+  // Bookkeeping
+  lastKnownBlock:     0,
+  siblingIdMap:       {}, // pieceIndex → inscriptionId
+  collectionDatasets: null, // sorted by pieceIndex; null = use local healthDataSets
+
+  // Sibling refresh (for autonomous wall-mount / new-mint propagation)
+  parentId:          null, // inscription 0's id — set in initLifecycle
+  knownSiblingCount: 0,    // total child count last seen
+  datasetByIdx:      {},   // pieceIndex → dataset (all known siblings)
+};
+
+const LC_BLOCKS_PER_YEAR = 52560;   // ~144 blocks/day × 365
+const LC_BLOCK_WIN_MS    = 600_000; // one ~10-min block window (transition duration)
+
+async function initLifecycle() {
+  // Try to reach chain. If we're not in an Ordinals viewer, stay in dev mode.
+  let selfInfo;
+  try {
+    selfInfo = await lcSelf();
+  } catch {
+    console.log('[lifecycle] dev mode — using hardcoded defaults');
+    lc.ready = true;
+    return;
+  }
+
+  lc.onChain = true;
+
+  // Fetch own CBOR metadata to get piece identity and timing
+  let meta = {};
+  try { meta = await lcMetadata(selfInfo.id); } catch (e) {
+    console.warn('[lifecycle] own metadata fetch failed:', e.message);
+  }
+
+  lc.pieceIndex     = meta.pieceIndex      ?? 0;
+  lc.hashTail       = meta.hashTail        ?? 88;
+  lc.mintUnix       = meta.inscriptionUnix ?? (selfInfo.timestamp ?? 1704067200);
+  lc.mintBlock      = selfInfo.height      ?? 0;
+  lc.lifespanYears  = lifespanYearsFromHashDigits(lc.hashTail);
+  lc.cessationBlock = lc.mintBlock + Math.round(lc.lifespanYears * LC_BLOCKS_PER_YEAR);
+
+  // Discover siblings — children of parent inscription (inscription 0 = the engine)
+  const parentId = selfInfo.parent;
+  lc.parentId = parentId ?? null;
+  if (parentId) {
+    try {
+      const sibIds = await lcAllChildren(parentId);
+      lc.knownSiblingCount = sibIds.length;
+
+      // Fetch each sibling's metadata to build a pieceIndex → id map
+      const fetched = await Promise.all(
+        sibIds.map(id =>
+          lcMetadata(id)
+            .then(m => ({ id, idx: m.pieceIndex ?? -1, dataset: m.dataset ?? null }))
+            .catch(() => null)
+        )
+      );
+      const validSibs = fetched.filter(Boolean).filter(m => m.idx >= 0);
+      lc.siblingIdMap  = Object.fromEntries(validSibs.map(m => [m.idx, m.id]));
+      lc.datasetByIdx  = Object.fromEntries(
+        validSibs.map(m => [m.idx, m.dataset ?? healthDataSets[m.idx]])
+      );
+
+      // Build dynamic collection sorted by pieceIndex.
+      // Falls back to local healthDataSets entry if dataset absent from metadata.
+      const sibDatasets = validSibs
+        .sort((a, b) => a.idx - b.idx)
+        .map(m => m.dataset ?? healthDataSets[m.idx] ?? null)
+        .filter(Boolean);
+      if (sibDatasets.length > 0) lc.collectionDatasets = sibDatasets;
+    } catch (e) {
+      console.warn('[lifecycle] sibling discovery failed:', e.message);
+    }
+  }
+
+  await lcPoll();
+  lc.ready = true;
+}
+
+// Called on every new block — picks up pieces minted after this one was inscribed.
+// New mints shift the living collection, which affects color/percentile of all existing pieces.
+async function lcRefreshSiblings() {
+  if (!lc.parentId) return;
+  try {
+    const sibIds = await lcAllChildren(lc.parentId);
+    if (sibIds.length <= lc.knownSiblingCount) return; // nothing new
+
+    // Only fetch metadata for inscriptions we haven't seen yet
+    const knownIdSet = new Set(Object.values(lc.siblingIdMap));
+    const newIds     = sibIds.filter(id => !knownIdSet.has(id));
+    const fetched    = await Promise.all(
+      newIds.map(id =>
+        lcMetadata(id)
+          .then(m => ({ id, idx: m.pieceIndex ?? -1, dataset: m.dataset ?? null }))
+          .catch(() => null)
+      )
+    );
+
+    for (const m of fetched.filter(Boolean).filter(m => m.idx >= 0)) {
+      lc.siblingIdMap[m.idx] = m.id;
+      lc.datasetByIdx[m.idx] = m.dataset ?? healthDataSets[m.idx];
+    }
+
+    // Rebuild sorted collection
+    lc.collectionDatasets = Object.keys(lc.datasetByIdx)
+      .map(Number).sort((a, b) => a - b)
+      .map(idx => lc.datasetByIdx[idx]);
+
+    lc.knownSiblingCount    = sibIds.length;
+    lc.liberationThreshold  = computeLiberationThreshold(lc.collectionDatasets, minMaxValues);
+    console.log(`[lifecycle] collection updated — ${lc.collectionDatasets.length} pieces`);
+  } catch (e) {
+    console.warn('[lifecycle] sibling refresh failed:', e.message);
+  }
+}
+
+async function lcPoll() {
+  let block;
+  try { block = await lcBlockHeight(); } catch { return; }
+  if (block === lc.lastKnownBlock) return;
+  lc.lastKnownBlock = block;
+  await lcRefreshSiblings(); // pick up any new mints before resolving lifecycle
+  await lcResolve(block);
+}
+
+async function lcResolve(currentBlock) {
+  if (lc.phase === 'void') return;
+  if (lc.phase === 'liberated') { await lcCheckVoid(currentBlock); return; }
+
+  if (currentBlock < lc.cessationBlock) {
+    lc.phase = 'living';
+    return;
+  }
+
+  // At or past cessation — run karma check
+  const partnerIdx = getPartnerIndex(lc.pieceIndex);
+
+  if (partnerIdx < 0) {
+    // Genesis piece — no karma check, direct liberation
+    lc.phase       = 'liberated';
+    lc.isLiberated = 1.0;
+    console.log('[lifecycle] piece 0 (genesis) liberated');
+    await lcCheckVoid(currentBlock);
+    return;
+  }
+
+  lc.partnerInheritedHueDeg = allInheritedHues[partnerIdx] ?? 0;
+
+  // Use local datasets as proxy; on-chain would fetch partner's /r/metadata/{id}
+  const ownDs     = healthDataSets[lc.pieceIndex]  ?? healthDataSets[0];
+  const partnerDs = healthDataSets[partnerIdx]      ?? healthDataSets[0];
+  const blended   = blendDatasets(ownDs, partnerDs);
+  const karma     = computeKarma(blended, minMaxValues);
+
+  if (karma < lc.liberationThreshold) {
+    lc.phase       = 'liberated';
+    lc.isLiberated = 1.0;
+    console.log(`[lifecycle] piece ${lc.pieceIndex} liberated — karma ${karma.toFixed(4)} < threshold ${lc.liberationThreshold.toFixed(4)}`);
+    await lcCheckVoid(currentBlock);
+    return;
+  }
+
+  // Reanimate — begin transition if not already underway
+  if (lc.transitionStartMs === null) {
+    lc.phase             = 'reanimating';
+    lc.transitionStartMs = Date.now();
+    lc.transitionType    = 'reanimation';
+    lc.cycleIndex++;
+
+    // Derive next lifespan from cessation block hash
+    try {
+      const info  = await lcBlockInfo(lc.cessationBlock);
+      const tail  = parseInt((info.hash ?? '').slice(-2), 16) % 100; // 0..99
+      lc.hashTail       = tail;
+      lc.lifespanYears  = lifespanYearsFromHashDigits(tail);
+      lc.mintBlock      = lc.cessationBlock;
+      lc.mintUnix       = info.timestamp ?? lc.mintUnix;
+      lc.cessationBlock = lc.mintBlock + Math.round(lc.lifespanYears * LC_BLOCKS_PER_YEAR);
+      console.log(`[lifecycle] piece ${lc.pieceIndex} cycle ${lc.cycleIndex} — lifespan ${lc.lifespanYears.toFixed(1)}y`);
+    } catch (e) {
+      console.warn('[lifecycle] block info fetch failed:', e.message);
+    }
+  }
+}
+
+// Simulate partner's lifecycle forward to determine if they have liberated by currentBlock.
+// Iterates through reanimation cycles, fetching cessation block hashes as needed.
+async function lcIsPartnerLiberated(partnerIdx, currentBlock) {
+  const partnerInscriptionId = lc.siblingIdMap?.[partnerIdx];
+  if (!partnerInscriptionId) return false;
+
+  let partnerInfo, partnerMeta;
+  try {
+    [partnerInfo, partnerMeta] = await Promise.all([
+      lcInscriptionInfo(partnerInscriptionId),
+      lcMetadata(partnerInscriptionId),
+    ]);
+  } catch (e) {
+    console.warn('[lifecycle] partner info fetch failed:', e.message);
+    return false;
+  }
+
+  let mintBlock = partnerInfo.height ?? 0;
+  let hashTail  = partnerMeta.hashTail ?? 88;
+
+  for (let cycle = 0; cycle < 50; cycle++) {
+    const cessationBlock = mintBlock + Math.round(lifespanYearsFromHashDigits(hashTail) * LC_BLOCKS_PER_YEAR);
+
+    if (currentBlock < cessationBlock) return false; // still living in this cycle
+
+    // Piece 0 (genesis) always liberates directly — no karma check
+    if (partnerIdx === 0) return true;
+
+    // Karma check from partner's perspective: partner = self, own piece = their partner
+    const partnerDs = healthDataSets[partnerIdx]    ?? healthDataSets[0];
+    const ownDs     = healthDataSets[lc.pieceIndex] ?? healthDataSets[0];
+    const karma     = computeKarma(blendDatasets(partnerDs, ownDs), minMaxValues);
+
+    if (karma < lc.liberationThreshold) return true; // liberated at this cessation
+
+    // Reanimated — derive next cycle from cessation block hash
+    try {
+      const info = await lcBlockInfo(cessationBlock);
+      hashTail   = parseInt((info.hash ?? '').slice(-2), 16) % 100;
+      mintBlock  = cessationBlock;
+    } catch (e) {
+      console.warn('[lifecycle] partner cessation block fetch failed:', e.message);
+      return false;
+    }
+  }
+
+  return false; // cycle cap reached
+}
+
+// Check if partner has also liberated → trigger void transition
+async function lcCheckVoid(currentBlock) {
+  if (lc.transitionType === 'void') return; // already in progress
+
+  // Piece 0's void partner is piece 1; all others use normal pairing
+  const partnerIdx = lc.pieceIndex === 0 ? 1 : getPartnerIndex(lc.pieceIndex);
+  if (partnerIdx < 0 || partnerIdx >= healthDataSets.length) return;
+
+  const partnerLiberated = await lcIsPartnerLiberated(partnerIdx, currentBlock);
+  if (partnerLiberated) {
+    lc.phase             = 'void';
+    lc.transitionStartMs = Date.now();
+    lc.transitionType    = 'void';
+    console.log(`[lifecycle] piece ${lc.pieceIndex} entering void — both partners liberated`);
+  }
+}
+
+// Called once per frame from draw() — advances transition progress 0→1
+function lcTick() {
+  if (lc.transitionStartMs === null) return;
+  const t = Math.min(1, (Date.now() - lc.transitionStartMs) / LC_BLOCK_WIN_MS);
+  if (lc.transitionType === 'reanimation') {
+    lc.reanimationProgress = t;
+    if (t >= 1) {
+      lc.reanimationProgress = 0;
+      lc.transitionStartMs   = null;
+      lc.transitionType      = null;
+      lc.phase               = 'living';
+    }
+  } else if (lc.transitionType === 'void') {
+    lc.voidProgress = t; // holds at 1.0 after complete
+  }
+}
+
+function lcStartPoller() {
+  setInterval(() => lcPoll(), 60_000);
 }
 
 init();
