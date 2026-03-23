@@ -682,8 +682,13 @@ async function init() {
 
     // Beam phases advance on real-wall-clock dt for smooth animation regardless
     // of totalYears speed. Decay ripple pulses and cross-beam deps pre-computed.
-    co2Pulse *= Math.exp(-dt / 18.0);
-    caPulse  *= Math.exp(-dt / 26.0);
+    // eGFR drives ripple decay speed: healthy kidneys clear metabolic signals quickly;
+    // failing kidneys let stress linger. Low eGFR → slow decay; high eGFR → fast decay.
+    const pEGFR = winsorizedPercentileForLab(activeDataSet, 'eGFR', healthDataSets);
+    const co2Decay = 12 + 16 * (1 - pEGFR); // 12s (healthy) → 28s (kidney disease)
+    const caDecay  = 18 + 22 * (1 - pEGFR); // 18s (healthy) → 40s (kidney disease)
+    co2Pulse *= Math.exp(-dt / co2Decay);
+    caPulse  *= Math.exp(-dt / caDecay);
     const pCO2 = winsorizedPercentileForLab(activeDataSet, 'carbonDioxide', healthDataSets);
     const pPR = clamp(
       (activeDataSet.ecg.prInterval - minMaxValues.prInterval.min) /
@@ -818,9 +823,11 @@ function getBreathingAmplitude(dataSet) {
   const uv = Math.abs(pv - 0.5);
   const uq = Math.abs(pq - 0.5);
   const V = 2 * Math.max(uv, uq); // 0..1
-  let amp = 0.05 + 0.07 * V; // 5–12%
+  // BUN adds urgency: waste accumulation drives more agitated breathing
+  const pBUN = winsorizedPercentileForLab(dataSet, 'nitrogen', healthDataSets);
+  let amp = 0.05 + 0.07 * V + 0.06 * pBUN; // 5–18% base; high BUN adds up to 6% more
   const extreme = pv < 0.1 || pv > 0.9 || pq < 0.1 || pq > 0.9;
-  if (extreme) amp = Math.min(0.18, amp + 0.03); // up to 18%
+  if (extreme) amp = Math.min(0.25, amp + 0.04); // up to 25% under extreme ECG + high BUN
   return amp;
 }
 

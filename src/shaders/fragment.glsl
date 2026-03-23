@@ -186,7 +186,9 @@ void main(){
 
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
     vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.65 + 0.30 * u_potassium, 0.45 + 0.50 * u_eGFR);
-    vec3 col2 = hsb2rgb(mod(u_eGFR    * 360.  + hDrift2, 360.), 0.74,                      0.50 + 0.30 * u_eGFR);
+    // Field 2 brightness: eGFR lifts it, creatinine pulls it down.
+    // High creatinine + low eGFR = worst kidney disease = darkest acid-base field.
+    vec3 col2 = hsb2rgb(mod(u_eGFR    * 360.  + hDrift2, 360.), 0.74, 0.50 + 0.30 * u_eGFR - 0.15 * u_creatinineRadius);
     vec3 col3 = hsb2rgb(mod(u_qtcPercentile * 360. + hDrift3, 360.), 0.76,                 0.48 + 0.30 * u_eGFR);
     vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.72, 0.52 + 0.28 * u_eGFR);
 
