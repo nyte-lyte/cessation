@@ -362,6 +362,7 @@ async function init() {
   // Inherited hue — piece N inherits piece N-1's glucose hue (from allInheritedHues).
   // Console override for manual testing; null = auto-derive from allInheritedHues.
   let inheritedHueDegOverride = null;
+  // DEV_START
   window.setInheritedHue = (deg) => { inheritedHueDegOverride = ((deg % 360) + 360) % 360; };
   window.resetInheritedHue = () => { inheritedHueDegOverride = null; };
 
@@ -394,6 +395,7 @@ async function init() {
     console.log('Blended dataset:', blended);
     return blended;
   };
+  // DEV_END
 
   // recordCanvas(seconds) — captures directly from the WebGL canvas to a .webm download
   let _recorder = null;
@@ -476,6 +478,7 @@ async function init() {
     previewSpeedYPS: 0,
   };
 
+  // DEV_START
   // setLifeFraction(0..1) — 0.0 = birth, 1.0 = cessation
   window.setLifeFraction = (f) => {
     params.overrideYears = f == null ? null : clamp(Number(f), 0, 1) * lifespanYears;
@@ -492,6 +495,7 @@ async function init() {
   window.stopPreview = () => {
     params.previewSpeedYPS = 0;
   };
+  // DEV_END
 
   // lifespan + aligned rate
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
@@ -754,6 +758,7 @@ async function init() {
   gl.clearColor(0, 0, 0, 1);
   draw();
 
+  // DEV_START
   // manually switch datasets in the console
   window.changeDataset = (newIndex) => {
     if (
@@ -782,6 +787,7 @@ async function init() {
       (currentDataSetIndex - 1 + healthDataSets.length) % healthDataSets.length;
     changeDataset(newIndex);
   };
+  // DEV_END
 }
 
 function percentile(value, sortedArray) {

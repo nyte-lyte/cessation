@@ -24,6 +24,9 @@ healthData = healthData.replace(/^export\s*\{[^}]+\};\s*$/m, '');
 // main.js — remove import lines at top
 mainJs = mainJs.replace(/^import\s+.*\n/gm, '');
 
+// main.js — strip dev tool blocks
+mainJs = mainJs.replace(/[ \t]*\/\/ DEV_START[\s\S]*?\/\/ DEV_END\n?/g, '');
+
 // main.js — remove duplicate normalize() (decay_logic.js provides it)
 mainJs = mainJs.replace(/\nfunction normalize\(value, min, max\) \{[\s\S]*?\n\}\n/, '\n');
 
@@ -33,7 +36,7 @@ mainJs = mainJs.replace(/async function loadShaderSource[\s\S]*?\n\}\n/, '');
 // main.js — replace fetch-based shader loading with inline DOM access
 mainJs = mainJs.replace(
   /\/\/ load and compile shaders:\n\s*const vertexSrc\s*=\s*await loadShaderSource\("[^"]+"\);\n\s*const fragmentSrc\s*=\s*await loadShaderSource\("[^"]+"\);/,
-  `// load and compile shaders (inlined):\n  const vertexSrc   = document.getElementById('vert-shader').textContent;\n  const fragmentSrc = document.getElementById('frag-shader').textContent;`
+  `// load and compile shaders (inlined):\n  const vertexSrc   = document.getElementById('vert-shader').textContent.trim();\n  const fragmentSrc = document.getElementById('frag-shader').textContent.trim();`
 );
 
 // ── Strip fs-overlay CSS (element removed) ───────────────────

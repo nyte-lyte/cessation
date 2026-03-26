@@ -1820,8 +1820,8 @@ async function init() {
   });
 
   // load and compile shaders (inlined):
-  const vertexSrc   = document.getElementById('vert-shader').textContent;
-  const fragmentSrc = document.getElementById('frag-shader').textContent;
+  const vertexSrc   = document.getElementById('vert-shader').textContent.trim();
+  const fragmentSrc = document.getElementById('frag-shader').textContent.trim();
   const program = createProgram(gl, vertexSrc, fragmentSrc);
   gl.useProgram(program);
 
@@ -1926,38 +1926,6 @@ async function init() {
   // Inherited hue — piece N inherits piece N-1's glucose hue (from allInheritedHues).
   // Console override for manual testing; null = auto-derive from allInheritedHues.
   let inheritedHueDegOverride = null;
-  window.setInheritedHue = (deg) => { inheritedHueDegOverride = ((deg % 360) + 360) % 360; };
-  window.resetInheritedHue = () => { inheritedHueDegOverride = null; };
-
-  // Lifecycle console tools — write directly to module-scope lc (works dev + on-chain)
-  // setReanimation(0..1) — simulate reanimation transition for current dataset
-  window.setReanimation = (p) => {
-    const partnerIdx = getPartnerIndex(currentDataSetIndex);
-    lc.reanimationProgress    = Math.max(0, Math.min(1, Number(p)));
-    lc.partnerInheritedHueDeg = allInheritedHues[partnerIdx >= 0 ? partnerIdx : 0] ?? 0;
-    if (partnerIdx < 0) console.warn('Piece 0 is genesis — no reanimation partner.');
-    else console.log(`Reanimation: piece ${currentDataSetIndex} ↔ piece ${partnerIdx} | partner hue: ${lc.partnerInheritedHueDeg.toFixed(1)}°`);
-  };
-  // setLiberated(bool) — simulate liberation (karma exhaustion, final cycle)
-  window.setLiberated = (v) => {
-    const partnerIdx = getPartnerIndex(currentDataSetIndex);
-    lc.isLiberated            = v ? 1.0 : 0.0;
-    lc.partnerInheritedHueDeg = allInheritedHues[partnerIdx >= 0 ? partnerIdx : 0] ?? 0;
-  };
-  // setVoidProgress(0..1) — simulate both partners at final cessation
-  window.setVoidProgress = (v) => { lc.voidProgress = clamp(Number(v), 0, 1); };
-  // getKarma / getBlend — inspect the reanimation system
-  window.getKarma = (idxA, idxB) => {
-    const blended = blendDatasets(healthDataSets[idxA], healthDataSets[idxB]);
-    const karma = computeKarma(blended, minMaxValues);
-    console.log(`Pair (${idxA}, ${idxB}) karma: ${karma.toFixed(4)} | threshold: ${lc.liberationThreshold.toFixed(4)} | liberated: ${karma < lc.liberationThreshold}`);
-    return karma;
-  };
-  window.getBlend = (idxA, idxB) => {
-    const blended = blendDatasets(healthDataSets[idxA], healthDataSets[idxB]);
-    console.log('Blended dataset:', blended);
-    return blended;
-  };
 
   // recordCanvas(seconds) — captures directly from the WebGL canvas to a .webm download
   let _recorder = null;
@@ -2040,22 +2008,6 @@ async function init() {
     previewSpeedYPS: 0,
   };
 
-  // setLifeFraction(0..1) — 0.0 = birth, 1.0 = cessation
-  window.setLifeFraction = (f) => {
-    params.overrideYears = f == null ? null : clamp(Number(f), 0, 1) * lifespanYears;
-  };
-  window.clearLifeFraction = () => {
-    params.overrideYears = null;
-  };
-  window.timeWarp = (f) => {
-    params.timeWarp = Math.max(0, Number(f));
-  };
-  window.playPreview = (speedYPS = 4) => {
-    params.previewSpeedYPS = Math.max(0, Number(speedYPS));
-  };
-  window.stopPreview = () => {
-    params.previewSpeedYPS = 0;
-  };
 
   // lifespan + aligned rate
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
@@ -2318,34 +2270,6 @@ async function init() {
   gl.clearColor(0, 0, 0, 1);
   draw();
 
-  // manually switch datasets in the console
-  window.changeDataset = (newIndex) => {
-    if (
-      Number.isInteger(newIndex) &&
-      newIndex >= 0 &&
-      newIndex < healthDataSets.length
-    ) {
-      currentDataSetIndex = newIndex;
-      lc.pieceIndex = newIndex;
-
-      lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
-
-      draw();
-    } else {
-      console.warn("Invalid dataset index:", newIndex);
-    }
-  };
-
-  window.nextDataset = () => {
-    const newIndex = (currentDataSetIndex + 1) % healthDataSets.length;
-    changeDataset(newIndex);
-  };
-
-  window.prevDataset = () => {
-    const newIndex =
-      (currentDataSetIndex - 1 + healthDataSets.length) % healthDataSets.length;
-    changeDataset(newIndex);
-  };
 }
 
 function percentile(value, sortedArray) {
