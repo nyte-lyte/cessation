@@ -396,12 +396,14 @@ async function init() {
   };
 
   // recordCanvas(seconds) — captures directly from the WebGL canvas to a .webm download
+  let _recorder = null;
   window.recordCanvas = (seconds = 10) => {
     const stream = canvas.captureStream(60);
     const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
     recorder.onstop = () => {
+      _recorder = null;
       const blob = new Blob(chunks, { type: 'video/webm' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
@@ -409,12 +411,42 @@ async function init() {
       a.download = `cessation_${currentDataSetIndex}_${Date.now()}.webm`;
       a.click();
       URL.revokeObjectURL(url);
-      console.log(`Saved: cessation_${currentDataSetIndex}_${Date.now()}.webm`);
     };
+    _recorder = recorder;
     recorder.start();
-    console.log(`Recording ${seconds}s — saving to Downloads when done...`);
-    setTimeout(() => recorder.stop(), seconds * 1000);
+    console.log(`[R] recording started — press R again to stop`);
+    if (seconds) setTimeout(() => { if (_recorder) _recorder.stop(); }, seconds * 1000);
   };
+
+  // Collector key bindings
+  // R — toggle video recording
+  // S — save high-res PNG snapshot
+  window.addEventListener('keydown', (e) => {
+    if (e.target !== document.body && e.target !== document.documentElement) return;
+    const key = e.key.toUpperCase();
+
+    if (key === 'R') {
+      if (_recorder && _recorder.state === 'recording') {
+        _recorder.stop();
+        console.log('[R] recording stopped — saving...');
+      } else {
+        window.recordCanvas(0); // 0 = no auto-stop
+      }
+    }
+
+    if (key === 'S') {
+      draw(); // ensure latest frame
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href     = url;
+        a.download = `cessation_${currentDataSetIndex}_${Date.now()}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+        console.log('[S] snapshot saved');
+      }, 'image/png');
+    }
+  });
 
   // Fast init from window.PIECE — correct piece renders from frame 1, no piece-0 flash
   if (window.PIECE) {
