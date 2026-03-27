@@ -193,12 +193,21 @@ void main(){
     vec3 col3 = hsb2rgb(mod(u_qtcPercentile * 360. + hDrift3, 360.), 0.76,                 0.48 + 0.30 * u_eGFR);
     vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.72, 0.52 + 0.28 * u_eGFR);
 
-    // Screen blend fields as light sources — overlaps add luminosity, dark where no field reaches.
-    vec3 rgbColor = vec3(0.0);
-    rgbColor = 1.0 - (1.0 - rgbColor) * (1.0 - clamp(col1 * w1, 0.0, 1.0));
-    rgbColor = 1.0 - (1.0 - rgbColor) * (1.0 - clamp(col2 * w2, 0.0, 1.0));
-    rgbColor = 1.0 - (1.0 - rgbColor) * (1.0 - clamp(col3 * w3, 0.0, 1.0));
-    rgbColor = 1.0 - (1.0 - rgbColor) * (1.0 - clamp(col4 * w4, 0.0, 1.0));
+    // Two-layer light system:
+    // Ambient — weighted average at low intensity, fills the whole canvas with soft mixed hue.
+    //           Prevents true black, preserves hue variety everywhere.
+    // Direct  — fields screen-blended as concentrated light sources. Luminous at field centers,
+    //           bright where fields overlap, dims toward ambient in the gaps.
+    float wSum = w1 + w2 + w3 + w4 + 1e-6;
+    vec3 ambient = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum * 0.35;
+
+    vec3 direct = vec3(0.0);
+    direct = 1.0 - (1.0 - direct) * (1.0 - clamp(col1 * w1, 0.0, 1.0));
+    direct = 1.0 - (1.0 - direct) * (1.0 - clamp(col2 * w2, 0.0, 1.0));
+    direct = 1.0 - (1.0 - direct) * (1.0 - clamp(col3 * w3, 0.0, 1.0));
+    direct = 1.0 - (1.0 - direct) * (1.0 - clamp(col4 * w4, 0.0, 1.0));
+
+    vec3 rgbColor = clamp(ambient + direct, 0.0, 1.0);
 
 // --- ECG-driven form shape ---
 // Each form is shaped by a different ECG dimension so pieces diverge across the dataset.
