@@ -664,8 +664,8 @@ async function init() {
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);
 
-    // ECG axis uniforms — percentile-ranked to prevent one outlier (2025-03-26) from
-    // compressing all other datasets into the bottom third of the normalized range.
+    // ECG axis uniforms — percentile-ranked to prevent the 2025-03-26 outlier
+    // (pAxis:148, rAxis:143, tAxis:142) from compressing all other datasets into 0–0.36.
     const pAxisNorm = percentile(activeDataSet.ecg.pAxis, sortedPAxisValues);
     const rAxisNorm = percentile(activeDataSet.ecg.rAxis, sortedRAxisValues);
     if (uPAxisNormLoc) gl.uniform1f(uPAxisNormLoc, pAxisNorm);

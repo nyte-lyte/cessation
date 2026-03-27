@@ -28,7 +28,7 @@ uniform float u_co2HueDeg;
 uniform float u_calciumStrength;
 uniform float u_calciumHueDeg;
 
-// Form size uniforms — winsorized lab percentile (0..1)
+// Blob size uniforms — winsorized lab percentile (0..1)
 // Higher value → larger, more spatially dominant form
 uniform float u_nitrogenRadius;
 uniform float u_creatinineRadius;
@@ -180,11 +180,11 @@ void main(){
                                   sin(t * freqD * 0.88 + 3.1416 * u_rAxisNorm));
 
     // Gaussian weights: per-field sigma makes each zone uniquely sized
-    float w1 = exp(-dot(uv - cf1, uv - cf1) / s1); w1 = w1 * w1 * w1;
-    float w2 = exp(-dot(uv - cf2, uv - cf2) / s2); w2 = w2 * w2 * w2;
-    float w3 = exp(-dot(uv - cf3, uv - cf3) / s3); w3 = w3 * w3 * w3;
-    float w4 = exp(-dot(uv - cf4, uv - cf4) / s4) * u_inheritedStrength; w4 = w4 * w4 * w4;
-    float wSum = w1 + w2 + w3 + w4 + 1e-10;
+    float w1 = exp(-dot(uv - cf1, uv - cf1) / s1); w1 *= w1;
+    float w2 = exp(-dot(uv - cf2, uv - cf2) / s2); w2 *= w2;
+    float w3 = exp(-dot(uv - cf3, uv - cf3) / s3); w3 *= w3;
+    float w4 = exp(-dot(uv - cf4, uv - cf4) / s4) * u_inheritedStrength; w4 *= w4;
+    float wSum = w1 + w2 + w3 + w4 + 1e-6;
 
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
     vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.65 + 0.30 * u_potassium, 0.45 + 0.50 * u_eGFR);
@@ -262,7 +262,7 @@ float caOuter2 = 0.30 + 0.18 * u_calciumRadius;
 float bt = t * heartPace;
 
 // Data-driven anchors: each form's home position is determined by a unique ECG pair.
-
+// Range 0.20-0.80 keeps forms off the hard edges while using most of the canvas.
 // Different datasets produce genuinely different compositions.
 
 // Nitrogen: pAxis × rAxis
