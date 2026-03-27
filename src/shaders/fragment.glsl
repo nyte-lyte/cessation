@@ -199,7 +199,8 @@ void main(){
     // Direct  — fields screen-blended as concentrated light sources. Luminous at field centers,
     //           bright where fields overlap, dims toward ambient in the gaps.
     float wSum = w1 + w2 + w3 + w4 + 1e-6;
-    vec3 ambient = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum * 0.35;
+    float ambientStrength = clamp(w1 + w2 + w3 + w4, 0.0, 1.0);
+    vec3 ambient = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum * 0.40 * ambientStrength;
 
     vec3 direct = vec3(0.0);
     direct = 1.0 - (1.0 - direct) * (1.0 - clamp(col1 * w1, 0.0, 1.0));
