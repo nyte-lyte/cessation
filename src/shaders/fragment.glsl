@@ -180,10 +180,10 @@ void main(){
                                   sin(t * freqD * 0.88 + 3.1416 * u_rAxisNorm));
 
     // Gaussian weights: per-field sigma makes each zone uniquely sized
-    float w1 = exp(-dot(uv - cf1, uv - cf1) / s1); w1 = w1 * w1 * w1;
-    float w2 = exp(-dot(uv - cf2, uv - cf2) / s2); w2 = w2 * w2 * w2;
-    float w3 = exp(-dot(uv - cf3, uv - cf3) / s3); w3 = w3 * w3 * w3;
-    float w4 = exp(-dot(uv - cf4, uv - cf4) / s4) * u_inheritedStrength; w4 = w4 * w4 * w4;
+    float w1 = exp(-dot(uv - cf1, uv - cf1) / s1); w1 *= w1; w1 *= w1;
+    float w2 = exp(-dot(uv - cf2, uv - cf2) / s2); w2 *= w2; w2 *= w2;
+    float w3 = exp(-dot(uv - cf3, uv - cf3) / s3); w3 *= w3; w3 *= w3;
+    float w4 = exp(-dot(uv - cf4, uv - cf4) / s4) * u_inheritedStrength; w4 *= w4; w4 *= w4;
     float wSum = w1 + w2 + w3 + w4 + 1e-6;
 
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
