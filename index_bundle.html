@@ -266,7 +266,7 @@ void main(){
 
     // Background: normalized w^3 blend — full color variety, dark between fields
     float wSum = w1 + w2 + w3 + w4 + 1e-6;
-    vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum * 0.65;
+    vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum * 0.50;
 
     // Data-driven light direction — tAxis and pAxis give each piece a unique illumination angle
     vec2 lightDir = normalize(vec2(cos(u_tAxisNorm * 3.14159), sin(u_pAxisNorm * 3.14159)));
@@ -449,24 +449,24 @@ float mCa = max(m1, m2);
     // Weighted center for multi-lobe forms so shading follows the dominant lobe.
 
     // Nitrogen
-    float nShade = 0.4 + 0.6 * clamp(dot(normalize(uv - cN  + vec2(1e-4)), lightDir), 0.0, 1.0);
+    float nShade  = 0.4 + 0.6 * clamp(0.5 + dot(uv - cN,  lightDir) / nOuter,  0.0, 1.0);
     vec3 nitrogenRGB = hsb2rgb(u_nitrogenHueDeg, .90, .78);
     rgbColor = clamp(rgbColor + nitrogenRGB * u_nitrogenStrength * mN * nShade, 0., 1.0);
 
     // Creatinine — weighted center from both lobes
     vec2 crCenter = (cC1 * mC1 + cC2 * mC2) / (mC1 + mC2 + 1e-6);
-    float crShade = 0.4 + 0.6 * clamp(dot(normalize(uv - crCenter + vec2(1e-4)), lightDir), 0.0, 1.0);
+    float crShade = 0.4 + 0.6 * clamp(0.5 + dot(uv - crCenter, lightDir) / cOuter1, 0.0, 1.0);
     vec3 creatRGB = hsb2rgb(u_creatinineHueDeg, .90, .78);
     rgbColor = clamp(rgbColor + creatRGB * u_creatinineStrength * mC * crShade, 0., 1.0);
 
     // Sodium — weighted center from both lobes
     vec2 naCenter = (cA * mA + cB * mB) / (mA + mB + 1e-6);
-    float naShade = 0.4 + 0.6 * clamp(dot(normalize(uv - naCenter + vec2(1e-4)), lightDir), 0.0, 1.0);
+    float naShade = 0.4 + 0.6 * clamp(0.5 + dot(uv - naCenter, lightDir) / naOuter1, 0.0, 1.0);
     vec3 sodiumRGB = hsb2rgb(u_sodiumHueDeg, .94, .80);
     rgbColor = clamp(rgbColor + sodiumRGB * u_sodiumStrength * mNa * naShade, 0., 1.0);
 
     // Chloride
-    float clShade = 0.4 + 0.6 * clamp(dot(normalize(uv - cCl + vec2(1e-4)), lightDir), 0.0, 1.0);
+    float clShade = 0.4 + 0.6 * clamp(0.5 + dot(uv - cCl, lightDir) / clOuter, 0.0, 1.0);
     vec3 chlorideRGB = hsb2rgb(u_chlorideHueDeg, .75, .85);
     rgbColor = clamp(rgbColor + chlorideRGB * strengthCl * mCl * clShade, 0., 1.0);
 
@@ -478,7 +478,7 @@ float mCa = max(m1, m2);
 
     // Calcium — weighted center from both lobes
     vec2 caCenter = (c1 * m1 + c2 * m2) / (m1 + m2 + 1e-6);
-    float caShade = 0.4 + 0.6 * clamp(dot(normalize(uv - caCenter + vec2(1e-4)), lightDir), 0.0, 1.0);
+    float caShade = 0.4 + 0.6 * clamp(0.5 + dot(uv - caCenter, lightDir) / caOuter1, 0.0, 1.0);
     float darkW = smoothstep(.65, .25, lum);
     vec3 caTint = hsb2rgb(u_calciumHueDeg, 0.70, 0.95);
     rgbColor = screenBlend(rgbColor, caTint, u_calciumStrength * mCa * darkW * caShade);
