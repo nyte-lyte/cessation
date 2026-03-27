@@ -330,7 +330,7 @@ async function init() {
   const uIsLiberatedLoc            = gl.getUniformLocation(program, "u_isLiberated");
   const uVoidProgressLoc           = gl.getUniformLocation(program, "u_voidProgress");
 
-  // Blob size + BUN/Cr ratio uniforms
+  // Form size + BUN/Cr ratio uniforms
   const uNitrogenRadiusLoc   = gl.getUniformLocation(program, "u_nitrogenRadius");
   const uCreatinineRadiusLoc = gl.getUniformLocation(program, "u_creatinineRadius");
   const uSodiumRadiusLoc     = gl.getUniformLocation(program, "u_sodiumRadius");
@@ -738,7 +738,7 @@ async function init() {
       if (cfg.radiusLoc)   gl.uniform1f(cfg.radiusLoc, p);
     }
 
-    // BUN/Creatinine ratio: spatial coupling between nitrogen and creatinine blobs
+    // BUN/Creatinine ratio: spatial coupling between nitrogen and creatinine forms
     const bunCreatRatio = activeDataSet.labs.nitrogen / Math.max(0.1, activeDataSet.labs.creatinine);
     const bunCreatRatioNorm = clamp(
       (bunCreatRatio - bunCreatP05) / Math.max(1e-9, bunCreatP95 - bunCreatP05),
@@ -908,7 +908,7 @@ function getBeamHueAnchorDeg(dataSet, beamId) {
   switch (beamId) {
     case BEAM.NITROGEN: {
       // eGFR offsets nitrogen ±80° from base. Low eGFR (failing kidneys) pushes
-      // the blob away from the glucose background — disease creates color tension.
+      // the form away from the glucose background — disease creates color tension.
       const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.eGFR, vals);
       return baseDeg + (p - 0.5) * 160; // ±80° from base
