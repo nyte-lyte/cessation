@@ -179,13 +179,6 @@ void main(){
         + 0.12 * driftMul * vec2(cos(t * freqD        + 3.1416 * u_pAxisNorm),
                                   sin(t * freqD * 0.88 + 3.1416 * u_rAxisNorm));
 
-    // Gaussian weights: per-field sigma makes each zone uniquely sized
-    float w1 = exp(-dot(uv - cf1, uv - cf1) / s1); w1 *= w1;
-    float w2 = exp(-dot(uv - cf2, uv - cf2) / s2); w2 *= w2;
-    float w3 = exp(-dot(uv - cf3, uv - cf3) / s3); w3 *= w3;
-    float w4 = exp(-dot(uv - cf4, uv - cf4) / s4) * u_inheritedStrength; w4 *= w4;
-    float wSum = w1 + w2 + w3 + w4 + 1e-6;
-
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
     vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.65 + 0.30 * u_potassium, 0.45 + 0.50 * u_eGFR);
     // Field 2 brightness: eGFR lifts it, creatinine pulls it down.
@@ -194,7 +187,22 @@ void main(){
     vec3 col3 = hsb2rgb(mod(u_qtcPercentile * 360. + hDrift3, 360.), 0.76,                 0.48 + 0.30 * u_eGFR);
     vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.72, 0.52 + 0.28 * u_eGFR);
 
-    vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum;
+    // Dark saturated ground — the void between fields is dark-something, not dark-nothing.
+    // Colored by the piece's own glucose hue: presence without announcement.
+    vec3 ground = hsb2rgb(mod(u_glucose * 360., 360.), 0.75, 0.10);
+
+    // Tight Gaussians — fields emerge from the ground as moments of legibility.
+    // No normalization: brightness falls off naturally. Data earns the light.
+    float s1c = s1 * 0.65, s2c = s2 * 0.65, s3c = s3 * 0.65, s4c = s4 * 0.65;
+    float gc1 = exp(-dot(uv - cf1, uv - cf1) / s1c);
+    float gc2 = exp(-dot(uv - cf2, uv - cf2) / s2c);
+    float gc3 = exp(-dot(uv - cf3, uv - cf3) / s3c);
+    float gc4 = exp(-dot(uv - cf4, uv - cf4) / s4c) * u_inheritedStrength;
+
+    // Reinhard tone map: overlaps bloom, isolation stays dark, nothing clips to white.
+    float emit = 1.8;
+    vec3 lightSum = ground + emit * (gc1 * col1 + gc2 * col2 + gc3 * col3 + gc4 * col4);
+    vec3 rgbColor = lightSum / (lightSum + 1.0);
 
 // --- ECG-driven form shape ---
 // Each form is shaped by a different ECG dimension so pieces diverge across the dataset.
@@ -266,30 +274,30 @@ float bt = t * heartPace;
 // Different datasets produce genuinely different compositions.
 
 // Nitrogen: pAxis × rAxis
-vec2 cN = vec2(-0.05 + 1.10 * u_pAxisNorm, 0.20 + 0.60 * u_rAxisNorm)
+vec2 cN = vec2(-0.05 + 1.10 * u_pAxisNorm, -0.05 + 1.10 * u_rAxisNorm)
     + 0.20 * driftMul * vec2(sin(bt * 0.19 + 6.2831 * u_pAxisNorm),
                               cos(bt * 0.13 + 6.2831 * u_rAxisNorm))
     + 0.09 * driftMul * vec2(sin(bt * 0.51 + 6.2831 * u_qtcNorm),
                               cos(bt * 0.37 + 6.2831 * u_tAxisNorm))
-    + 0.04 * vec2(sin(u_time * 0.23 + 6.2831 * u_pAxisNorm),
+    + 0.12 * vec2(sin(u_time * 0.23 + 6.2831 * u_pAxisNorm),
                   cos(u_time * 0.17 + 6.2831 * u_rAxisNorm));
 
 // Creatinine lobe 1: (1-pAxis) × qtcNorm — inverted pAxis opposes Nitrogen
-vec2 cC1 = vec2(-0.05 + 1.10 * (1.0 - u_pAxisNorm), 0.20 + 0.60 * u_qtcNorm)
+vec2 cC1 = vec2(-0.05 + 1.10 * (1.0 - u_pAxisNorm), -0.05 + 1.10 * u_qtcNorm)
     + 0.18 * driftMul * vec2(sin(bt * 0.23 + 6.2831 * (1.0 - u_pAxisNorm)),
                               cos(bt * 0.16 + 6.2831 * u_rAxisNorm))
     + 0.08 * driftMul * vec2(sin(bt * 0.44 + 6.2831 * (1.0 - u_qtcNorm)),
                               cos(bt * 0.31 + 6.2831 * u_prNorm))
-    + 0.04 * vec2(sin(u_time * 0.27 + 6.2831 * (1.0 - u_pAxisNorm)),
+    + 0.12 * vec2(sin(u_time * 0.27 + 6.2831 * (1.0 - u_pAxisNorm)),
                   cos(u_time * 0.19 + 6.2831 * u_rAxisNorm));
 
 // Creatinine lobe 2: qtcNorm × (1-rAxis)
-vec2 cC2 = vec2(-0.05 + 1.10 * u_qtcNorm, 0.20 + 0.60 * (1.0 - u_rAxisNorm))
+vec2 cC2 = vec2(-0.05 + 1.10 * u_qtcNorm, -0.05 + 1.10 * (1.0 - u_rAxisNorm))
     + 0.15 * driftMul * vec2(sin(bt * 0.27 + 6.2831 * (1.0 - u_pAxisNorm) + 1.571),
                               cos(bt * 0.19 + 6.2831 * u_rAxisNorm + 1.571))
     + 0.07 * driftMul * vec2(sin(bt * 0.61 + 6.2831 * u_pAxisNorm),
                               cos(bt * 0.43 + 6.2831 * (1.0 - u_rAxisNorm)))
-    + 0.03 * vec2(sin(u_time * 0.21 + 6.2831 * u_pAxisNorm),
+    + 0.10 * vec2(sin(u_time * 0.21 + 6.2831 * u_pAxisNorm),
                   cos(u_time * 0.15 + 6.2831 * (1.0 - u_rAxisNorm)));
 
 // BUN/Creatinine ratio coupling: elevated ratio (pre-renal) pulls kidney forms together.
@@ -305,21 +313,21 @@ float mC2 = 1.0 - smoothstep(cInner2, cOuter2, ellipseDist(uv, cC2, crAspect * 0
 float mC  = max(mC1, mC2);
 
 // Sodium lobe A: rAxis × ventRateNorm
-vec2 cA = vec2(-0.05 + 1.10 * u_rAxisNorm, 0.20 + 0.60 * u_ventRateNorm)
+vec2 cA = vec2(-0.05 + 1.10 * u_rAxisNorm, -0.05 + 1.10 * u_ventRateNorm)
     + 0.18 * driftMul * vec2(cos(bt * 0.17 + 6.2831 * u_rAxisNorm),
                               sin(bt * 0.12 + 6.2831 * u_pAxisNorm))
     + 0.08 * driftMul * vec2(cos(bt * 0.43 + 6.2831 * u_ventRateNorm),
                               sin(bt * 0.29 + 6.2831 * u_qtcNorm))
-    + 0.04 * vec2(cos(u_time * 0.25 + 6.2831 * u_rAxisNorm),
+    + 0.12 * vec2(cos(u_time * 0.25 + 6.2831 * u_rAxisNorm),
                   sin(u_time * 0.18 + 6.2831 * u_pAxisNorm));
 
 // Sodium lobe B: (1-rAxis) × (1-pAxis) — naturally opposes A
-vec2 cB = vec2(-0.05 + 1.10 * (1.0 - u_rAxisNorm), 0.20 + 0.60 * (1.0 - u_pAxisNorm))
+vec2 cB = vec2(-0.05 + 1.10 * (1.0 - u_rAxisNorm), -0.05 + 1.10 * (1.0 - u_pAxisNorm))
     + 0.16 * driftMul * vec2(cos(bt * 0.17 + 6.2831 * (1.0 - u_rAxisNorm)),
                               sin(bt * 0.12 + 6.2831 * (1.0 - u_pAxisNorm)))
     + 0.07 * driftMul * vec2(cos(bt * 0.43 + 6.2831 * (1.0 - u_ventRateNorm)),
                               sin(bt * 0.29 + 6.2831 * (1.0 - u_qtcNorm)))
-    + 0.03 * vec2(sin(u_time * 0.16 + 6.2831 * (1.0 - u_rAxisNorm)),
+    + 0.10 * vec2(sin(u_time * 0.16 + 6.2831 * (1.0 - u_rAxisNorm)),
                   cos(u_time * 0.22 + 6.2831 * (1.0 - u_pAxisNorm)));
 
 float mA  = 1. - smoothstep(naInner1, naOuter1, ellipseDist(uv, cA, naAspect, naAngle));
@@ -327,12 +335,12 @@ float mB  = 1. - smoothstep(naInner2, naOuter2, ellipseDist(uv, cB, naAspect * 0
 float mNa = max(mA, mB);
 
 // Chloride: prNorm × tAxisNorm
-vec2 cCl = vec2(-0.05 + 1.10 * u_prNorm, 0.20 + 0.60 * u_tAxisNorm)
+vec2 cCl = vec2(-0.05 + 1.10 * u_prNorm, -0.05 + 1.10 * u_tAxisNorm)
     + 0.18 * driftMul * vec2(sin(bt * 0.22 + 6.2831 * u_rAxisNorm),
                               cos(bt * 0.15 + 6.2831 * u_pAxisNorm))
     + 0.07 * driftMul * vec2(sin(bt * 0.53 + 6.2831 * u_prNorm),
                               cos(bt * 0.37 + 6.2831 * u_tAxisNorm))
-    + 0.04 * vec2(sin(u_time * 0.26 + 6.2831 * u_rAxisNorm),
+    + 0.12 * vec2(sin(u_time * 0.26 + 6.2831 * u_rAxisNorm),
                   cos(u_time * 0.19 + 6.2831 * u_pAxisNorm));
 float mCl = 1.0 - smoothstep(clInner, clOuter, ellipseDist(uv, cCl, clAspect, clAngle));
 
@@ -353,19 +361,19 @@ float localGain = smoothstep(.01, .55, lum);// avoid dark wash
 float haloW = u_co2Strength * mix(ambW, edgeW, 0.45 + 0.30 * u_qrsTAngle) * localGain * (0.88 + 0.12 * tBias);
 
 // Calcium: slow, heavy. c1 anchored by tAxis × (1-qtc), c2 inverted — naturally opposes.
-vec2 c1 = vec2(-0.05 + 1.10 * u_tAxisNorm, 0.20 + 0.60 * (1.0 - u_qtcNorm))
+vec2 c1 = vec2(-0.05 + 1.10 * u_tAxisNorm, -0.05 + 1.10 * (1.0 - u_qtcNorm))
     + 0.16 * driftMul * vec2(sin(bt * 0.15 + 6.2831 * u_pAxisNorm),
                               cos(bt * 0.11 + 6.2831 * u_rAxisNorm))
     + 0.07 * driftMul * vec2(sin(bt * 0.41 + 6.2831 * u_tAxisNorm),
                               cos(bt * 0.28 + 6.2831 * u_qtcNorm))
-    + 0.04 * vec2(sin(u_time * 0.14 + 6.2831 * u_pAxisNorm),
+    + 0.12 * vec2(sin(u_time * 0.14 + 6.2831 * u_pAxisNorm),
                   cos(u_time * 0.20 + 6.2831 * u_rAxisNorm));
-vec2 c2 = vec2(-0.05 + 1.10 * (1.0 - u_tAxisNorm), 0.20 + 0.60 * u_qtcNorm)
+vec2 c2 = vec2(-0.05 + 1.10 * (1.0 - u_tAxisNorm), -0.05 + 1.10 * u_qtcNorm)
     + 0.16 * driftMul * vec2(cos(bt * 0.15 + 6.2831 * (1.0 - u_rAxisNorm)),
                               sin(bt * 0.11 + 6.2831 * (1.0 - u_pAxisNorm)))
     + 0.07 * driftMul * vec2(cos(bt * 0.41 + 6.2831 * (1.0 - u_tAxisNorm)),
                               sin(bt * 0.28 + 6.2831 * (1.0 - u_qtcNorm)))
-    + 0.04 * vec2(cos(u_time * 0.11 + 6.2831 * (1.0 - u_rAxisNorm)),
+    + 0.12 * vec2(cos(u_time * 0.11 + 6.2831 * (1.0 - u_rAxisNorm)),
                   sin(u_time * 0.16 + 6.2831 * (1.0 - u_pAxisNorm)));
 float m1  = 1. - smoothstep(caInner1, caOuter1, ellipseDist(uv, c1, caAspect, caAngle));
 float m2  = 1. - smoothstep(caInner2, caOuter2, ellipseDist(uv, c2, caAspect * 0.88, caAngle));
