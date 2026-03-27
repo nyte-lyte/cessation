@@ -179,17 +179,11 @@ void main(){
         + 0.12 * driftMul * vec2(cos(t * freqD        + 3.1416 * u_pAxisNorm),
                                   sin(t * freqD * 0.88 + 3.1416 * u_rAxisNorm));
 
-    // Sharp weights (w^3) — color zone selection only. Small values by design.
+    // w^3: sharp color zone selection
     float w1 = exp(-dot(uv - cf1, uv - cf1) / s1); w1 = w1 * w1 * w1;
     float w2 = exp(-dot(uv - cf2, uv - cf2) / s2); w2 = w2 * w2 * w2;
     float w3 = exp(-dot(uv - cf3, uv - cf3) / s3); w3 = w3 * w3 * w3;
     float w4 = exp(-dot(uv - cf4, uv - cf4) / s4) * u_inheritedStrength; w4 = w4 * w4 * w4;
-
-    // Raw Gaussians — illumination weights, full [0,1] range, drive actual brightness.
-    float g1 = exp(-dot(uv - cf1, uv - cf1) / s1);
-    float g2 = exp(-dot(uv - cf2, uv - cf2) / s2);
-    float g3 = exp(-dot(uv - cf3, uv - cf3) / s3);
-    float g4 = exp(-dot(uv - cf4, uv - cf4) / s4) * u_inheritedStrength;
 
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
     vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.65 + 0.30 * u_potassium, 0.45 + 0.50 * u_eGFR);
@@ -199,20 +193,12 @@ void main(){
     vec3 col3 = hsb2rgb(mod(u_qtcPercentile * 360. + hDrift3, 360.), 0.76,                 0.48 + 0.30 * u_eGFR);
     vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.72, 0.52 + 0.28 * u_eGFR);
 
-    // Two-layer light system:
-    // Ambient — sharp normalized blend (w^3) at reduced intensity. Color zone hue, soft fill.
-    // Direct  — raw Gaussians screen-blended as light sources. Actual illumination, rich overlaps.
+    // Background: normalized w^3 blend — full color variety, dark between fields
     float wSum = w1 + w2 + w3 + w4 + 1e-6;
-    vec3 ambient = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum
-                 * 0.45 * clamp(g1 + g2 + g3 + g4, 0.0, 1.0);
+    vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum * 0.65;
 
-    vec3 direct = vec3(0.0);
-    direct = 1.0 - (1.0 - direct) * (1.0 - clamp(col1 * g1, 0.0, 1.0));
-    direct = 1.0 - (1.0 - direct) * (1.0 - clamp(col2 * g2, 0.0, 1.0));
-    direct = 1.0 - (1.0 - direct) * (1.0 - clamp(col3 * g3, 0.0, 1.0));
-    direct = 1.0 - (1.0 - direct) * (1.0 - clamp(col4 * g4, 0.0, 1.0));
-
-    vec3 rgbColor = clamp(ambient + direct, 0.0, 1.0);
+    // Data-driven light direction — tAxis and pAxis give each piece a unique illumination angle
+    vec2 lightDir = normalize(vec2(cos(u_tAxisNorm * 3.14159), sin(u_pAxisNorm * 3.14159)));
 
 // --- ECG-driven form shape ---
 // Each form is shaped by a different ECG dimension so pieces diverge across the dataset.
@@ -388,21 +374,30 @@ float m1  = 1. - smoothstep(caInner1, caOuter1, ellipseDist(uv, c1, caAspect, ca
 float m2  = 1. - smoothstep(caInner2, caOuter2, ellipseDist(uv, c2, caAspect * 0.88, caAngle));
 float mCa = max(m1, m2);
     
+    // Per-form directional shading: lit side faces lightDir, shadow side is 40% brightness.
+    // Weighted center for multi-lobe forms so shading follows the dominant lobe.
+
     // Nitrogen
+    float nShade = 0.4 + 0.6 * clamp(dot(normalize(uv - cN  + vec2(1e-4)), lightDir), 0.0, 1.0);
     vec3 nitrogenRGB = hsb2rgb(u_nitrogenHueDeg, .90, .78);
-    rgbColor = clamp(rgbColor + nitrogenRGB * u_nitrogenStrength * mN, 0., 1.0);
+    rgbColor = clamp(rgbColor + nitrogenRGB * u_nitrogenStrength * mN * nShade, 0., 1.0);
 
-    // Creatinine
+    // Creatinine — weighted center from both lobes
+    vec2 crCenter = (cC1 * mC1 + cC2 * mC2) / (mC1 + mC2 + 1e-6);
+    float crShade = 0.4 + 0.6 * clamp(dot(normalize(uv - crCenter + vec2(1e-4)), lightDir), 0.0, 1.0);
     vec3 creatRGB = hsb2rgb(u_creatinineHueDeg, .90, .78);
-    rgbColor = clamp(rgbColor + creatRGB * u_creatinineStrength * mC, 0., 1.0);
+    rgbColor = clamp(rgbColor + creatRGB * u_creatinineStrength * mC * crShade, 0., 1.0);
 
-    // Sodium
+    // Sodium — weighted center from both lobes
+    vec2 naCenter = (cA * mA + cB * mB) / (mA + mB + 1e-6);
+    float naShade = 0.4 + 0.6 * clamp(dot(normalize(uv - naCenter + vec2(1e-4)), lightDir), 0.0, 1.0);
     vec3 sodiumRGB = hsb2rgb(u_sodiumHueDeg, .94, .80);
-    rgbColor = clamp(rgbColor + sodiumRGB * u_sodiumStrength * mNa, 0., 1.0);
+    rgbColor = clamp(rgbColor + sodiumRGB * u_sodiumStrength * mNa * naShade, 0., 1.0);
 
     // Chloride
+    float clShade = 0.4 + 0.6 * clamp(dot(normalize(uv - cCl + vec2(1e-4)), lightDir), 0.0, 1.0);
     vec3 chlorideRGB = hsb2rgb(u_chlorideHueDeg, .75, .85);
-    rgbColor = clamp(rgbColor + chlorideRGB * strengthCl * mCl, 0., 1.0);
+    rgbColor = clamp(rgbColor + chlorideRGB * strengthCl * mCl * clShade, 0., 1.0);
 
     // CO2
     // Chloride tracks acid-base balance: high Cl (acidosis) intensifies the halo;
@@ -410,10 +405,12 @@ float mCa = max(m1, m2);
     vec3 co2Tint = hsb2rgb(u_co2HueDeg, 0.60 + 0.30 * u_chlorideRadius, 1.00);
     rgbColor = clamp(rgbColor + co2Tint * haloW, 0., 1.);
 
-    // Calcium
+    // Calcium — weighted center from both lobes
+    vec2 caCenter = (c1 * m1 + c2 * m2) / (m1 + m2 + 1e-6);
+    float caShade = 0.4 + 0.6 * clamp(dot(normalize(uv - caCenter + vec2(1e-4)), lightDir), 0.0, 1.0);
     float darkW = smoothstep(.65, .25, lum);
     vec3 caTint = hsb2rgb(u_calciumHueDeg, 0.70, 0.95);
-    rgbColor = screenBlend(rgbColor, caTint, u_calciumStrength * mCa * darkW);
+    rgbColor = screenBlend(rgbColor, caTint, u_calciumStrength * mCa * darkW * caShade);
 
     float liberated = step(0.5, u_isLiberated);
     float latePhase = smoothstep(0.70, 1.00, lifeFraction);
