@@ -1908,7 +1908,10 @@ async function init() {
     .sort((a, b) => a - b);
   const bunCreatP05 = allBunCreatRatios[Math.floor(0.05 * (allBunCreatRatios.length - 1))];
   const bunCreatP95 = allBunCreatRatios[Math.ceil(0.95 * (allBunCreatRatios.length - 1))];
-  const sortedQtcValues = healthDataSets.map((d) => d.ecg.qtcInterval).sort((a, b) => a - b);
+  const sortedQtcValues   = healthDataSets.map((d) => d.ecg.qtcInterval).sort((a, b) => a - b);
+  const sortedPAxisValues = healthDataSets.map((d) => d.ecg.pAxis).sort((a, b) => a - b);
+  const sortedRAxisValues = healthDataSets.map((d) => d.ecg.rAxis).sort((a, b) => a - b);
+  const sortedTAxisValues = healthDataSets.map((d) => d.ecg.tAxis).sort((a, b) => a - b);
 
   // QRS-T angle: |rAxis - tAxis|, normalized over dataset range
   const allQrsTAngles = healthDataSets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
@@ -2172,15 +2175,10 @@ async function init() {
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);
 
-    // ECG axis uniforms — pAxis and rAxis normalized over dataset min/max
-    const pAxisNorm = clamp(
-      normalize(activeDataSet.ecg.pAxis, minMaxValues.pAxis.min, minMaxValues.pAxis.max),
-      0, 1
-    );
-    const rAxisNorm = clamp(
-      normalize(activeDataSet.ecg.rAxis, minMaxValues.rAxis.min, minMaxValues.rAxis.max),
-      0, 1
-    );
+    // ECG axis uniforms — percentile-ranked to prevent one outlier (2025-03-26) from
+    // compressing all other datasets into the bottom third of the normalized range.
+    const pAxisNorm = percentile(activeDataSet.ecg.pAxis, sortedPAxisValues);
+    const rAxisNorm = percentile(activeDataSet.ecg.rAxis, sortedRAxisValues);
     if (uPAxisNormLoc) gl.uniform1f(uPAxisNormLoc, pAxisNorm);
     if (uRAxisNormLoc) gl.uniform1f(uRAxisNormLoc, rAxisNorm);
 
@@ -2201,10 +2199,7 @@ async function init() {
       0, 1
     );
     if (uVentRateNormLoc) gl.uniform1f(uVentRateNormLoc, ventRateNorm);
-    const tAxisNorm = clamp(
-      normalize(activeDataSet.ecg.tAxis, minMaxValues.tAxis.min, minMaxValues.tAxis.max),
-      0, 1
-    );
+    const tAxisNorm = percentile(activeDataSet.ecg.tAxis, sortedTAxisValues);
     if (uTAxisNormLoc) gl.uniform1f(uTAxisNormLoc, tAxisNorm);
     const qrsTAngle = Math.abs(activeDataSet.ecg.rAxis - activeDataSet.ecg.tAxis);
     const qrsTAngleNorm = clamp(
