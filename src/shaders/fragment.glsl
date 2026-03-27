@@ -180,11 +180,10 @@ void main(){
                                   sin(t * freqD * 0.88 + 3.1416 * u_rAxisNorm));
 
     // Gaussian weights: per-field sigma makes each zone uniquely sized
-    float w1 = exp(-dot(uv - cf1, uv - cf1) / s1); w1 *= w1; w1 *= w1;
-    float w2 = exp(-dot(uv - cf2, uv - cf2) / s2); w2 *= w2; w2 *= w2;
-    float w3 = exp(-dot(uv - cf3, uv - cf3) / s3); w3 *= w3; w3 *= w3;
-    float w4 = exp(-dot(uv - cf4, uv - cf4) / s4) * u_inheritedStrength; w4 *= w4; w4 *= w4;
-    float wSum = w1 + w2 + w3 + w4 + 1e-6;
+    float w1 = exp(-dot(uv - cf1, uv - cf1) / s1); w1 = w1 * w1 * w1;
+    float w2 = exp(-dot(uv - cf2, uv - cf2) / s2); w2 = w2 * w2 * w2;
+    float w3 = exp(-dot(uv - cf3, uv - cf3) / s3); w3 = w3 * w3 * w3;
+    float w4 = exp(-dot(uv - cf4, uv - cf4) / s4) * u_inheritedStrength; w4 = w4 * w4 * w4;
 
     // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
     vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.65 + 0.30 * u_potassium, 0.45 + 0.50 * u_eGFR);
@@ -194,7 +193,12 @@ void main(){
     vec3 col3 = hsb2rgb(mod(u_qtcPercentile * 360. + hDrift3, 360.), 0.76,                 0.48 + 0.30 * u_eGFR);
     vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.72, 0.52 + 0.28 * u_eGFR);
 
-    vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum;
+    // Screen blend fields as light sources — overlaps add luminosity, dark where no field reaches.
+    vec3 rgbColor = vec3(0.0);
+    rgbColor = 1.0 - (1.0 - rgbColor) * (1.0 - clamp(col1 * w1, 0.0, 1.0));
+    rgbColor = 1.0 - (1.0 - rgbColor) * (1.0 - clamp(col2 * w2, 0.0, 1.0));
+    rgbColor = 1.0 - (1.0 - rgbColor) * (1.0 - clamp(col3 * w3, 0.0, 1.0));
+    rgbColor = 1.0 - (1.0 - rgbColor) * (1.0 - clamp(col4 * w4, 0.0, 1.0));
 
 // --- ECG-driven blob shape ---
 // Each blob is shaped by a different ECG dimension so pieces diverge across the dataset.
