@@ -28,23 +28,23 @@ uniform float u_co2HueDeg;
 uniform float u_calciumStrength;
 uniform float u_calciumHueDeg;
 
-// Blob size uniforms — winsorized lab percentile (0..1)
-// Higher value → larger, more spatially dominant blob
+// Form size uniforms — winsorized lab percentile (0..1)
+// Higher value → larger, more spatially dominant form
 uniform float u_nitrogenRadius;
 uniform float u_creatinineRadius;
 uniform float u_sodiumRadius;
 uniform float u_chlorideRadius;
 uniform float u_calciumRadius;
 
-// BUN/Creatinine ratio — spatial coupling between nitrogen and creatinine blobs
-// 0 = low/normal ratio (kidney-intrinsic), blobs independent
-// 1 = elevated ratio (pre-renal), blobs pulled together and overlapping
+// BUN/Creatinine ratio — spatial coupling between nitrogen and creatinine forms
+// 0 = low/normal ratio (kidney-intrinsic), forms independent
+// 1 = elevated ratio (pre-renal), forms pulled together and overlapping
 uniform float u_bunCreatRatioNorm;
 
 // ECG axis uniforms — drive beam spatial positioning and field drift tempo
 uniform float u_pAxisNorm;    // P wave axis, normalized 0..1 over dataset range
 uniform float u_rAxisNorm;    // R wave (QRS) axis, normalized 0..1 over dataset range
-uniform float u_qtcNorm;       // QTc interval, min-max normalized 0..1 — drives field tempo + blob sizing
+uniform float u_qtcNorm;       // QTc interval, min-max normalized 0..1 — drives field tempo + form sizing
 uniform float u_qtcPercentile; // QTc interval, percentile-ranked 0..1 — drives Field 3 hue
 uniform float u_prNorm;       // PR interval, normalized 0..1 — drives acid-base field tempo
 uniform float u_ventRateNorm; // Heart rate, normalized 0..1 — scales all field drift frequencies
@@ -52,7 +52,7 @@ uniform float u_tAxisNorm;    // T-wave axis, normalized 0..1 — repolarization
 uniform float u_qrsTAngle;   // QRS-T angle normalized 0..1 — electrical dissonance (0=aligned, 1=max)
 uniform float u_qrsNorm;     // QRS interval, min-max normalized 0..1 — depolarization width
 
-// Wall-clock time in seconds — drives realtime blob animation
+// Wall-clock time in seconds — drives realtime form animation
 uniform float u_time;
 
 // Inheritance uniforms — color field carried in from previous piece at mint
@@ -90,7 +90,7 @@ vec3 screenBlend(vec3 base,vec3 tint,float k){
 }
 
 // Ellipse distance: rotates offset by `angle`, then scales major axis by `aspect`.
-// aspect > 1 stretches the blob along the major axis (ECG-driven direction).
+// aspect > 1 stretches the form along the major axis (ECG-driven direction).
 float ellipseDist(vec2 p, vec2 center, float aspect, float angle){
     vec2 d = p - center;
     float cosA = cos(angle);
@@ -196,8 +196,8 @@ void main(){
 
     vec3 rgbColor = (w1 * col1 + w2 * col2 + w3 * col3 + w4 * col4) / wSum;
 
-// --- ECG-driven blob shape ---
-// Each blob is shaped by a different ECG dimension so pieces diverge across the dataset.
+// --- ECG-driven form shape ---
+// Each form is shaped by a different ECG dimension so pieces diverge across the dataset.
 // Extremity = how far the value sits from the dataset midpoint (0=average, 1=extreme).
 float extremeP   = abs(pS) * 2.0;                    // pAxis extremity
 float qtcS       = u_qtcNorm - 0.5;                  // QTc deviation
@@ -229,7 +229,7 @@ float clAngle  = tS * 1.571;
 float caAspect = 1.0 + 1.4 * extremeT;
 float caAngle  = -qtcS * 2.094;
 
-// --- Lab-driven blob radii ---
+// --- Lab-driven form radii ---
 // Healthy (low percentile) → small, receding. Elevated → large, assertive.
 float nInner  = 0.15 + 0.15 * u_nitrogenRadius;
 float nOuter  = 0.30 + 0.25 * u_nitrogenRadius;
@@ -252,7 +252,7 @@ float caOuter1 = 0.36 + 0.20 * u_calciumRadius;
 float caInner2 = 0.15 + 0.14 * u_calciumRadius;
 float caOuter2 = 0.30 + 0.18 * u_calciumRadius;
 
-// Blob positions: two superimposed sine orbits with incommensurate frequencies —
+// Form positions: two superimposed sine orbits with incommensurate frequencies —
 // the path never exactly repeats within a human lifespan. ECG values seed the phases
 // so each dataset traces a genuinely unique trajectory. driftMul grows 0.5→1.3
 // with age so orbits expand as the piece progresses. Small u_time term adds
@@ -261,8 +261,8 @@ float caOuter2 = 0.30 + 0.18 * u_calciumRadius;
 // tachycardic pieces orbit with more urgency — same heartPace used by the fields.
 float bt = t * heartPace;
 
-// Data-driven anchors: each blob's home position is determined by a unique ECG pair.
-// Range 0.20-0.80 keeps blobs off the hard edges while using most of the canvas.
+// Data-driven anchors: each form's home position is determined by a unique ECG pair.
+
 // Different datasets produce genuinely different compositions.
 
 // Nitrogen: pAxis × rAxis
@@ -292,7 +292,7 @@ vec2 cC2 = vec2(-0.05 + 1.10 * u_qtcNorm, 0.20 + 0.60 * (1.0 - u_rAxisNorm))
     + 0.03 * vec2(sin(u_time * 0.21 + 6.2831 * u_pAxisNorm),
                   cos(u_time * 0.15 + 6.2831 * (1.0 - u_rAxisNorm)));
 
-// BUN/Creatinine ratio coupling: elevated ratio (pre-renal) pulls kidney blobs together.
+// BUN/Creatinine ratio coupling: elevated ratio (pre-renal) pulls kidney forms together.
 float pull = u_bunCreatRatioNorm * 0.12;
 vec2 pullVec = cC1 - cN;
 vec2 pullDir = pullVec / max(length(pullVec), 0.001);
@@ -407,7 +407,7 @@ float mCa = max(m1, m2);
     vec3 livingColor = rgbColor;
 
     // --- Nirvana radial: pure centered glow in the base glucose hue ---
-    // This is the permanent state after liberation. No fields, no blobs, no drift.
+    // This is the permanent state after liberation. No fields, no forms, no drift.
     // Dark at edges, luminous at center — heavenly stillness.
     // Nirvana: radial glow in the base glucose hue.
     // Floor keeps corners from going dark — eyes rest at center, edges remain present.
