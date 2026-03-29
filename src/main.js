@@ -319,8 +319,6 @@ async function init() {
   const uVentRateNormLoc = gl.getUniformLocation(program, "u_ventRateNorm");
   const uTAxisNormLoc = gl.getUniformLocation(program, "u_tAxisNorm");
   const uQrsTAngleLoc = gl.getUniformLocation(program, "u_qrsTAngle");
-  const uQrsNormLoc   = gl.getUniformLocation(program, "u_qrsNorm");
-  const uCo2NormLoc   = gl.getUniformLocation(program, "u_co2Norm");
   const uInheritedHueDegLoc = gl.getUniformLocation(program, "u_inheritedHueDeg");
   const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
   const uReanimationProgressLoc    = gl.getUniformLocation(program, "u_reanimationProgress");
@@ -707,16 +705,6 @@ async function init() {
       0, 1
     );
     if (uQrsTAngleLoc) gl.uniform1f(uQrsTAngleLoc, qrsTAngleNorm);
-    const qrsNorm = clamp(
-      normalize(activeDataSet.ecg.qrsInterval, minMaxValues.qrsInterval.min, minMaxValues.qrsInterval.max),
-      0, 1
-    );
-    if (uQrsNormLoc) gl.uniform1f(uQrsNormLoc, qrsNorm);
-    const co2Norm = clamp(
-      normalize(activeDataSet.labs.carbonDioxide, minMaxValues.carbonDioxide.min, minMaxValues.carbonDioxide.max),
-      0, 1
-    );
-    if (uCo2NormLoc) gl.uniform1f(uCo2NormLoc, co2Norm);
 
     // Inherited color field — fades from full presence at birth toward 0 at end of life
     const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
