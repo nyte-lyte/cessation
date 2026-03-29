@@ -334,6 +334,16 @@ async function init() {
   const uCalciumRadiusLoc    = gl.getUniformLocation(program, "u_calciumRadius");
   const uBunCreatRatioNormLoc = gl.getUniformLocation(program, "u_bunCreatRatioNorm");
 
+  // Beam RGB vec3 uniform locations — set per-frame from CPU-precomputed values
+  const uNitrogenRGBLoc  = gl.getUniformLocation(program, "u_nitrogenRGB");
+  const uCreatRGBLoc     = gl.getUniformLocation(program, "u_creatRGB");
+  const uSodiumRGBLoc    = gl.getUniformLocation(program, "u_sodiumRGB");
+  const uChlorideRGBLoc  = gl.getUniformLocation(program, "u_chlorideRGB");
+  const uCo2RGBLoc       = gl.getUniformLocation(program, "u_co2RGB");
+  const uCalciumRGBLoc   = gl.getUniformLocation(program, "u_calciumRGB");
+  const uNirvanaRGBLoc   = gl.getUniformLocation(program, "u_nirvanaRGB");
+  const uPartnerRGBLoc   = gl.getUniformLocation(program, "u_partnerRGB");
+
   // Pre-compute BUN/Creatinine ratio winsorized range across all datasets (once)
   const allBunCreatRatios = healthDataSets
     .map((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine))
@@ -733,7 +743,15 @@ async function init() {
       0, 1
     );
 
-    for (const cfg of beamConfigs) {
+    // Beam RGB uniforms — precomputed per-frame, one vec3 per beam (eliminates per-pixel hsb2rgb)
+    // sat/bri values match what the shader used to compute: N/Cr (0.90, 0.78), Na (0.94, 0.80),
+    // Cl (0.75, 0.85), CO2 (0.75, 1.00), Ca (0.70, 0.95)
+    const beamRGBLocs = [uNitrogenRGBLoc, uCreatRGBLoc, uSodiumRGBLoc, uChlorideRGBLoc, uCo2RGBLoc, uCalciumRGBLoc];
+    const beamSat =     [0.90,            0.90,          0.94,           0.75,            0.75,        0.70];
+    const beamBri =     [0.78,            0.78,          0.80,           0.85,            1.00,        0.95];
+
+    for (let i = 0; i < beamConfigs.length; i++) {
+      const cfg = beamConfigs[i];
       beamPhases[cfg.phaseKey] = beamPhases[cfg.phaseKey] ?? cfg.phaseSeed(lastTwoHashDigits);
       if (cfg.tickTwoPi) {
         beamPhases[cfg.phaseKey] += (dt * 2 * Math.PI) / Math.max(1e-3, cfg.tempoFn(activeDataSet));
@@ -746,7 +764,12 @@ async function init() {
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
       if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);
       if (cfg.radiusLoc)   gl.uniform1f(cfg.radiusLoc, p);
+      if (beamRGBLocs[i])  gl.uniform3fv(beamRGBLocs[i], hsbToRgb(hue, beamSat[i], beamBri[i]));
     }
+
+    // Nirvana / partner RGB — set from inherited hue degrees
+    if (uNirvanaRGBLoc) gl.uniform3fv(uNirvanaRGBLoc, hsbToRgb(inheritedHueDeg, 0.85, 0.92));
+    if (uPartnerRGBLoc) gl.uniform3fv(uPartnerRGBLoc, hsbToRgb(partnerInheritedHueDeg, 0.85, 0.92));
 
     // BUN/Creatinine ratio: spatial coupling between nitrogen and creatinine forms
     const bunCreatRatio = activeDataSet.labs.nitrogen / Math.max(0.1, activeDataSet.labs.creatinine);
@@ -813,9 +836,25 @@ function computeHSBFromStats(dataSet, healthDataSets) {
   return { hue, sat, bri };
 }
 
+// CPU-side HSB → linear RGB (matches branchless shader version)
+function hsbToRgb(hDeg, s, b) {
+  const h = ((hDeg % 360) + 360) % 360;
+  const K = [1, 2/3, 1/3, 3];
+  const fract = (x) => x - Math.floor(x);
+  const p = [
+    Math.abs(fract(h/360 + K[0]) * 6 - K[3]),
+    Math.abs(fract(h/360 + K[1]) * 6 - K[3]),
+    Math.abs(fract(h/360 + K[2]) * 6 - K[3]),
+  ];
+  return [
+    b * (1 - s + s * Math.max(0, Math.min(1, p[0] - 1))),
+    b * (1 - s + s * Math.max(0, Math.min(1, p[1] - 1))),
+    b * (1 - s + s * Math.max(0, Math.min(1, p[2] - 1))),
+  ];
+}
 
 // ──────────────────────────────────────────────────────────────
-// BEAM SCAFFOLD 
+// BEAM SCAFFOLD
 // ──────────────────────────────────────────────────────────────
 
 const BEAM = Object.freeze({

@@ -66,23 +66,24 @@ uniform float u_partnerInheritedHueDeg; // partner's lineage hue in degrees
 uniform float u_isLiberated;            // 1 = karma exhausted, final cycle
 uniform float u_voidProgress;           // 0 = holding radial, 1 = void (both partners ceased)
 
+// Beam RGB — precomputed on CPU, eliminates per-pixel hsb2rgb calls
+uniform vec3 u_nitrogenRGB;
+uniform vec3 u_creatRGB;
+uniform vec3 u_sodiumRGB;
+uniform vec3 u_chlorideRGB;
+uniform vec3 u_co2RGB;
+uniform vec3 u_calciumRGB;
+uniform vec3 u_nirvanaRGB;   // hsb(inheritedHueDeg, 0.85, 0.92)
+uniform vec3 u_partnerRGB;   // hsb(partnerInheritedHueDeg, 0.85, 0.92)
+
 // --- helpers ---
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
 }
 vec3 hsb2rgb(float H, float S, float B){
-    float c = B * S;
-    float Hp = mod(H/60., 6.);
-    float X = c * (1. - abs(mod(Hp, 2.)- 1.));
-    vec3 rgb = vec3(0.);
-    if(0. <= Hp && Hp < 1.)rgb = vec3(c, X, 0.);
-    else if(1.<= Hp && Hp <2.)rgb = vec3(X, c, 0.);
-    else if(2.<= Hp && Hp <3.)rgb = vec3(0., c, X);
-    else if(3.<= Hp && Hp <4.)rgb = vec3(0., X, c);
-    else if(4.<= Hp && Hp <5.)rgb = vec3(X, 0., c);
-    else if(5.<= Hp && Hp <6.)rgb = vec3(c, 0., X);
-    float m = B - c;
-    return rgb + vec3(m);
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(vec3(H/360.0) + K.xyz) * 6.0 - K.www);
+    return B * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), S);
 }
 
 vec3 screenBlend(vec3 base,vec3 tint,float k){
@@ -435,29 +436,23 @@ float m2  = 1. - smoothstep(caInner2, caOuter2, ellipseDist(uv, c2, caAspect * 0
 float mCa = max(m1, m2);
     
     // Nitrogen
-    vec3 nitrogenRGB = hsb2rgb(u_nitrogenHueDeg, .90, .78);
-    rgbColor = clamp(rgbColor + nitrogenRGB * u_nitrogenStrength * mN, 0., 1.0);
+    rgbColor = clamp(rgbColor + u_nitrogenRGB * u_nitrogenStrength * mN, 0., 1.0);
 
     // Creatinine
-    vec3 creatRGB = hsb2rgb(u_creatinineHueDeg, .90, .78);
-    rgbColor = clamp(rgbColor + creatRGB * u_creatinineStrength * mC, 0., 1.0);
+    rgbColor = clamp(rgbColor + u_creatRGB * u_creatinineStrength * mC, 0., 1.0);
 
     // Sodium
-    vec3 sodiumRGB = hsb2rgb(u_sodiumHueDeg, .94, .80);
-    rgbColor = clamp(rgbColor + sodiumRGB * u_sodiumStrength * mNa, 0., 1.0);
+    rgbColor = clamp(rgbColor + u_sodiumRGB * u_sodiumStrength * mNa, 0., 1.0);
 
     // Chloride
-    vec3 chlorideRGB = hsb2rgb(u_chlorideHueDeg, .75, .85);
-    rgbColor = clamp(rgbColor + chlorideRGB * strengthCl * mCl, 0., 1.0);
+    rgbColor = clamp(rgbColor + u_chlorideRGB * strengthCl * mCl, 0., 1.0);
 
     // CO2
-    vec3 co2Tint = hsb2rgb(u_co2HueDeg, .75, 1.00);
-    rgbColor = clamp(rgbColor + co2Tint * haloW, 0., 1.);
+    rgbColor = clamp(rgbColor + u_co2RGB * haloW, 0., 1.);
 
     // Calcium
     float darkW = smoothstep(.65, .25, lum);
-    vec3 caTint = hsb2rgb(u_calciumHueDeg, 0.70, 0.95);
-    rgbColor = screenBlend(rgbColor, caTint, u_calciumStrength * mCa * darkW);
+    rgbColor = screenBlend(rgbColor, u_calciumRGB, u_calciumStrength * mCa * darkW);
 
     float liberated = step(0.5, u_isLiberated);
     float latePhase = smoothstep(0.70, 1.00, lifeFraction);
@@ -495,15 +490,13 @@ float mCa = max(m1, m2);
     vec2 partnerOrigin = clamp(vec2(1.0) - cf4, 0.1, 0.9);
     vec2 partnerPos    = mix(partnerOrigin, vec2(0.5), partnerArrival);
     vec2 ownPos        = mix(cf4, vec2(0.5), partnerArrival * 0.6);
-    vec3 nirvanaCol    = hsb2rgb(u_inheritedHueDeg, 0.85, 0.92);
-    vec3 partnerCol    = hsb2rgb(u_partnerInheritedHueDeg, 0.85, 0.92);
     float pGlow = exp(-dot(uv - partnerPos, uv - partnerPos) / 0.14);
     float oGlow = exp(-dot(uv - ownPos,     uv - ownPos)     / 0.14);
-    vec3 meetingField = clamp(nirvanaCol * oGlow + partnerCol * pGlow * partnerArrival, 0.0, 1.0);
+    vec3 meetingField = clamp(u_nirvanaRGB * oGlow + u_partnerRGB * pGlow * partnerArrival, 0.0, 1.0);
 
     // --- State blending ---
     // Non-final nirvana: inherited hue glow → partner collision → new life
-    vec3 nirvanaState = mix(nirvanaCol * 0.90, meetingField, smoothstep(0.0, 0.5, u_reanimationProgress));
+    vec3 nirvanaState = mix(u_nirvanaRGB * 0.90, meetingField, smoothstep(0.0, 0.5, u_reanimationProgress));
     // Final nirvana: pure radial, permanent
     nirvanaState = mix(nirvanaState, nirvanaRadial, liberated);
 
