@@ -51,6 +51,7 @@ uniform float u_ventRateNorm; // Heart rate, normalized 0..1 — scales all fiel
 uniform float u_tAxisNorm;    // T-wave axis, normalized 0..1 — repolarization direction
 uniform float u_qrsTAngle;   // QRS-T angle normalized 0..1 — electrical dissonance (0=aligned, 1=max)
 uniform float u_qrsNorm;     // QRS interval, min-max normalized 0..1 — depolarization width
+uniform float u_co2Norm;     // CO2/bicarbonate, min-max normalized 0..1 — acid-base balance
 
 // Wall-clock time in seconds — drives realtime form animation
 uniform float u_time;
@@ -89,6 +90,12 @@ vec3 screenBlend(vec3 base,vec3 tint,float k){
     return 1.-(1.- base)*(1.- t);
 }
 
+// Field weight: g⁴ Gaussian for contrast — dominant field wins decisively at each pixel.
+float fw(vec2 p, vec2 center, float sigma) {
+    float g = exp(-dot(p - center, p - center) / sigma);
+    g *= g; return g * g;
+}
+
 // Ellipse distance: rotates offset by `angle`, then scales major axis by `aspect`.
 // aspect > 1 stretches the form along the major axis (ECG-driven direction).
 float ellipseDist(vec2 p, vec2 center, float aspect, float angle){
@@ -115,94 +122,144 @@ void main(){
     float pS = u_pAxisNorm - 0.5;
     float rS = u_rAxisNorm - 0.5;
 
-    // Slow hue evolution — each field drifts at a unique rate seeded by ECG axes.
-    // At 2-3 degrees/year these are imperceptible day-to-day but shift the palette
-    // meaningfully over decades, like a body's chemistry slowly changing.
-    float hDrift1 = t * 2.5 + 180.0 * u_pAxisNorm;
-    float hDrift2 = -t * 1.8 + 120.0 * u_rAxisNorm;
-    float hDrift3 = t * 3.1 + 90.0 * (1.0 - u_pAxisNorm);
+    // ─── 17-field body map ────────────────────────────────────────────────────
+    // Canvas = body. Left: cardiac (ECG). Right: metabolic (labs).
+    // Each value has a fixed physiological home. Data drives size + orbit.
+    // Normal = still and small. Abnormal = restless and larger.
+    // Additive accumulation + Reinhard: dark where nothing reaches, bright where values overlap.
 
-    // --- Base layer: three color fields blending across the canvas ---
-    // Each field is anchored to specific metabolic values so its position,
-    // size, and movement tempo are genuinely unique per dataset.
-    // Fields overlap and mix at their boundaries — different regions of the
-    // canvas have genuinely different dominant colors, like paint on canvas.
+    float heartPace = 0.75 + 0.50 * u_ventRateNorm; // cardiac tempo
+    float labPace   = heartPace * 0.40;              // metabolic time is slower
 
-    // --- Lab-driven field base positions ---
-    // cf1 (identity/glucose field): primary energy + electrolyte balance
-    vec2 fieldBase1 = vec2(0.15 + 0.55 * u_glucose, 0.15 + 0.55 * u_potassium);
-    // cf2 (acid-base/kidney field): eGFR inverted so it naturally opposes cf1
-    vec2 fieldBase2 = vec2(0.85 - 0.55 * u_eGFR, 0.20 + 0.50 * u_pAxisNorm);
-    // cf3 (cardiac/electrolyte field): R axis + potassium inversion
-    vec2 fieldBase3 = vec2(0.20 + 0.50 * u_rAxisNorm, 0.80 - 0.55 * u_potassium);
-    // cf4 (lineage field): antipodal to cf1 — ancestor color occupies opposite space from identity
-    vec2 fieldBase4 = clamp(vec2(1.0) - fieldBase1, vec2(0.15), vec2(0.85));
+    // Abnormality: distance from mid-range (0=normal, 1=extreme). Drives orbit + size.
+    float abVR  = abs(u_ventRateNorm     - 0.5) * 2.0;
+    float abPR  = abs(u_prNorm           - 0.5) * 2.0;
+    float abQRS = abs(u_qrsNorm          - 0.5) * 2.0;
+    float abPA  = abs(u_pAxisNorm        - 0.5) * 2.0;
+    float abRA  = abs(u_rAxisNorm        - 0.5) * 2.0;
+    float abQTc = abs(u_qtcNorm          - 0.5) * 2.0;
+    float abTA  = abs(u_tAxisNorm        - 0.5) * 2.0;
+    float abAng = abs(u_qrsTAngle        - 0.5) * 2.0;
+    float abGlu = abs(u_glucose          - 0.5) * 2.0;
+    float abBUN = abs(u_nitrogenRadius   - 0.5) * 2.0;
+    float abCr  = abs(u_creatinineRadius - 0.5) * 2.0;
+    float abEGF = abs(u_eGFR             - 0.5) * 2.0;
+    float abNa  = abs(u_sodiumRadius     - 0.5) * 2.0;
+    float abK   = abs(u_potassium        - 0.5) * 2.0;
+    float abCl  = abs(u_chlorideRadius   - 0.5) * 2.0;
+    float abCO2 = abs(u_co2Norm          - 0.5) * 2.0;
+    float abCa  = abs(u_calciumRadius    - 0.5) * 2.0;
 
-    // --- Per-field sigma from health data ---
-    // eGFR (kidney function) determines spread: high eGFR = wide diffuse zones,
-    // low eGFR = tight concentrated pools. Each field responds to a different axis.
-    // s1: eGFR spreads the identity field; wide QRS (disorganized depolarization) diffuses it further
-    float s1 = (0.09 + 0.20 * u_eGFR + 0.06 * u_qrsNorm) * 0.75;
-    float s2 = (0.10 + 0.16 * (1.0 - u_eGFR)) * 0.75;
-    float s3 = (0.08 + 0.18 * u_glucose)       * 0.75;
-    float s4 = (0.10 + 0.14 * u_eGFR)         * 0.75;
+    float os = 0.07 * driftMul; // orbit scale — grows with age
 
-    // --- ECG-driven drift frequencies ---
-    // The heart's electrical timing becomes the movement tempo of each field.
-    // QTc (repolarization) drives the identity field; PR (conduction) drives acid-base.
-    // Heart rate scales all frequencies: bradycardic pieces drift slowly, tachycardic urgently.
-    float heartPace = 0.75 + 0.50 * u_ventRateNorm; // 0.75 (slow HR) → 1.25 (fast HR)
-    float freqA = (0.06 + 0.10 * u_qtcNorm)   * heartPace; // cf1: QTc × HR
-    float freqB = (0.04 + 0.07 * u_prNorm)    * heartPace; // cf2: PR × HR
-    float freqC = (0.05 + 0.08 * u_rAxisNorm) * heartPace; // cf3: R axis × HR
-    float freqD = (0.05 + 0.06 * u_pAxisNorm) * heartPace; // cf4 (lineage): P-axis × HR
+    // ECG field centers (left half) — beat at cardiac tempo
+    vec2 fVR  = vec2(0.10, 0.12) + os*abVR  * vec2(sin(t*0.190*heartPace+1.0), cos(t*0.130*heartPace+2.0)) + 0.025*vec2(sin(u_time*0.23+1.0), cos(u_time*0.17+2.0));
+    vec2 fPR  = vec2(0.28, 0.16) + os*abPR  * vec2(cos(t*0.170*heartPace+3.0), sin(t*0.110*heartPace+1.5)) + 0.025*vec2(cos(u_time*0.19+3.0), sin(u_time*0.14+1.5));
+    vec2 fQRS = vec2(0.12, 0.40) + os*abQRS * vec2(sin(t*0.230*heartPace+2.5), cos(t*0.150*heartPace+0.8)) + 0.025*vec2(sin(u_time*0.25+2.5), cos(u_time*0.18+0.8));
+    vec2 fPA  = vec2(0.38, 0.25) + os*abPA  * vec2(cos(t*0.210*heartPace+4.0), sin(t*0.140*heartPace+2.0)) + 0.025*vec2(cos(u_time*0.21+4.0), sin(u_time*0.16+2.0));
+    vec2 fRA  = vec2(0.22, 0.55) + os*abRA  * vec2(sin(t*0.180*heartPace+1.2), cos(t*0.120*heartPace+3.5)) + 0.025*vec2(sin(u_time*0.18+1.2), cos(u_time*0.22+3.5));
+    vec2 fQTc = vec2(0.32, 0.70) + os*abQTc * vec2(cos(t*0.220*heartPace+0.5), sin(t*0.160*heartPace+4.0)) + 0.025*vec2(cos(u_time*0.27+0.5), sin(u_time*0.20+4.0));
+    vec2 fTA  = vec2(0.44, 0.50) + os*abTA  * vec2(sin(t*0.160*heartPace+3.0), cos(t*0.110*heartPace+1.0)) + 0.025*vec2(sin(u_time*0.22+3.0), cos(u_time*0.15+1.0));
+    vec2 fAng = vec2(0.15, 0.82) + os*abAng * vec2(cos(t*0.200*heartPace+2.0), sin(t*0.140*heartPace+0.3)) + 0.025*vec2(cos(u_time*0.20+2.0), sin(u_time*0.13+0.3));
 
-    // --- Field centers: lab anchor + ECG displacement + time drift ---
-    // ECG axes add additional spatial character on top of the lab-derived base.
-    // Drift amplitude grows with lifeFraction so composition shifts more with age.
-    vec2 cf1 = fieldBase1 + vec2(0.12 * pS, 0.10 * rS)
-        + 0.12 * driftMul * vec2(sin(t * freqA        + 6.2831 * u_pAxisNorm),
-                                  cos(t * freqA * 0.82 + 6.2831 * u_rAxisNorm));
+    // Lab field centers (right half) — breathe at metabolic tempo
+    vec2 fGlu = vec2(0.52, 0.08) + os*abGlu * vec2(sin(t*0.140*labPace+1.5), cos(t*0.090*labPace+3.0)) + 0.025*vec2(sin(u_time*0.16+1.5), cos(u_time*0.11+3.0));
+    vec2 fBUN = vec2(0.62, 0.22) + os*abBUN * vec2(cos(t*0.120*labPace+0.8), sin(t*0.080*labPace+2.5)) + 0.025*vec2(cos(u_time*0.14+0.8), sin(u_time*0.10+2.5));
+    vec2 fCr  = vec2(0.80, 0.18) + os*abCr  * vec2(sin(t*0.110*labPace+2.0), cos(t*0.070*labPace+1.0)) + 0.025*vec2(sin(u_time*0.13+2.0), cos(u_time*0.09+1.0));
+    vec2 fEGF = vec2(0.90, 0.42) + os*abEGF * vec2(cos(t*0.100*labPace+3.5), sin(t*0.070*labPace+0.5)) + 0.025*vec2(cos(u_time*0.12+3.5), sin(u_time*0.08+0.5));
+    vec2 fNa  = vec2(0.58, 0.48) + os*abNa  * vec2(sin(t*0.130*labPace+1.0), cos(t*0.090*labPace+4.0)) + 0.025*vec2(sin(u_time*0.15+1.0), cos(u_time*0.10+4.0));
+    vec2 fK   = vec2(0.74, 0.54) + os*abK   * vec2(cos(t*0.120*labPace+2.5), sin(t*0.080*labPace+1.5)) + 0.025*vec2(cos(u_time*0.11+2.5), sin(u_time*0.08+1.5));
+    vec2 fCl  = vec2(0.62, 0.72) + os*abCl  * vec2(sin(t*0.110*labPace+3.0), cos(t*0.070*labPace+0.8)) + 0.025*vec2(sin(u_time*0.13+3.0), cos(u_time*0.09+0.8));
+    vec2 fCO2 = vec2(0.82, 0.76) + os*abCO2 * vec2(cos(t*0.100*labPace+1.5), sin(t*0.070*labPace+2.0)) + 0.025*vec2(cos(u_time*0.10+1.5), sin(u_time*0.07+2.0));
+    vec2 fCa  = vec2(0.92, 0.62) + os*abCa  * vec2(sin(t*0.090*labPace+0.5), cos(t*0.060*labPace+3.0)) + 0.025*vec2(sin(u_time*0.11+0.5), cos(u_time*0.08+3.0));
 
-    vec2 cf2 = fieldBase2 + vec2(-0.10 * pS, 0.09 * rS)
-        + 0.11 * driftMul * vec2(cos(t * freqB        + 6.2831 * u_rAxisNorm),
-                                  sin(t * freqB * 1.18 + 6.2831 * u_pAxisNorm));
+    // Inherited lineage field — antipodal to glucose anchor, fades over lifetime
+    // cf4 kept for reanimation visuals downstream
+    vec2 cf4 = clamp(vec2(1.0 - (0.15 + 0.55*u_glucose), 1.0 - (0.15 + 0.55*u_potassium)), 0.1, 0.9)
+        + 0.06 * driftMul * vec2(cos(t*0.05*heartPace + 3.1416*u_pAxisNorm),
+                                  sin(t*0.04*heartPace + 3.1416*u_rAxisNorm));
 
-    // cf3 drift seeded by T-wave axis — repolarization direction gives the cardiac
-    // field an independent trajectory, distinct from depolarization (p/r) axes.
-    vec2 cf3 = fieldBase3 + vec2(0.09 * rS, -0.10 * pS)
-        + 0.11 * driftMul * vec2(sin(t * freqC        + 6.2831 * u_tAxisNorm),
-                                  cos(t * freqC * 0.91 + 6.2831 * (1.0 - u_tAxisNorm)));
+    // Field sigma: base 0.12, grows with abnormality (wider when value is extreme)
+    float bSig = 0.12;
+    float sSc  = 0.07;
 
-    // Lineage field: antipodal to cf1, π-offset drift so it moves in counterpoint
-    vec2 cf4 = fieldBase4 + vec2(-0.08 * pS, -0.08 * rS)
-        + 0.12 * driftMul * vec2(cos(t * freqD        + 3.1416 * u_pAxisNorm),
-                                  sin(t * freqD * 0.88 + 3.1416 * u_rAxisNorm));
+    // Per-field hue angles (radians) — value × 360° + slow per-field drift
+    float hVR  = radians(mod(u_ventRateNorm     * 360. + t *  2.1, 360.));
+    float hPR  = radians(mod(u_prNorm           * 360. + t * -1.8, 360.));
+    float hQRS = radians(mod(u_qrsNorm          * 360. + t *  2.7, 360.));
+    float hPA  = radians(mod(u_pAxisNorm        * 360. + t * -1.5, 360.));
+    float hRA  = radians(mod(u_rAxisNorm        * 360. + t *  3.2, 360.));
+    float hQTc = radians(mod(u_qtcNorm          * 360. + t * -2.3, 360.));
+    float hTA  = radians(mod(u_tAxisNorm        * 360. + t *  1.9, 360.));
+    float hAng = radians(mod(u_qrsTAngle        * 360. + t * -2.8, 360.));
+    float hGlu = radians(mod(u_glucose          * 360. + t *  1.4, 360.));
+    float hBUN = radians(mod(u_nitrogenRadius   * 360. + t * -1.7, 360.));
+    float hCr  = radians(mod(u_creatinineRadius * 360. + t *  2.4, 360.));
+    float hEGF = radians(mod(u_eGFR             * 360. + t * -1.3, 360.));
+    float hNa  = radians(mod(u_sodiumRadius     * 360. + t *  2.9, 360.));
+    float hK   = radians(mod(u_potassium        * 360. + t * -2.0, 360.));
+    float hChl = radians(mod(u_chlorideRadius   * 360. + t *  1.6, 360.));
+    float hCO2 = radians(mod(u_co2Norm          * 360. + t * -2.5, 360.));
+    float hCa  = radians(mod(u_calciumRadius    * 360. + t *  1.2, 360.));
+    float hInh = radians(u_inheritedHueDeg);
 
-    // Field colors: metabolic values drive hue, sat, bri; hue drifts slowly over years
-    vec3 col1 = hsb2rgb(mod(u_glucose * 360. + hDrift1, 360.), 0.65 + 0.30 * u_potassium, 0.45 + 0.50 * u_eGFR);
-    // Field 2 brightness: eGFR lifts it, creatinine pulls it down.
-    // High creatinine + low eGFR = worst kidney disease = darkest acid-base field.
-    vec3 col2 = hsb2rgb(mod(u_eGFR    * 360.  + hDrift2, 360.), 0.74, 0.50 + 0.30 * u_eGFR - 0.15 * u_creatinineRadius);
-    vec3 col3 = hsb2rgb(mod(u_qtcPercentile * 360. + hDrift3, 360.), 0.76,                 0.48 + 0.30 * u_eGFR);
-    vec3 col4 = hsb2rgb(u_inheritedHueDeg, 0.72, 0.52 + 0.28 * u_eGFR);
+    // Per-field sat: abnormality drives intensity (disease = vivid, normal = still)
+    // Per-field bri: each field's own value drives its brightness — shade variety across canvas
+    float sVR=0.70+0.30*abVR;   float bVR=0.35+0.60*u_ventRateNorm;
+    float sPR=0.70+0.30*abPR;   float bPR=0.35+0.60*u_prNorm;
+    float sQRS=0.70+0.30*abQRS; float bQRS=0.35+0.60*u_qrsNorm;
+    float sPA=0.70+0.30*abPA;   float bPA=0.35+0.60*u_pAxisNorm;
+    float sRA=0.70+0.30*abRA;   float bRA=0.35+0.60*u_rAxisNorm;
+    float sQTc=0.70+0.30*abQTc; float bQTc=0.35+0.60*u_qtcNorm;
+    float sTA=0.70+0.30*abTA;   float bTA=0.35+0.60*u_tAxisNorm;
+    float sAng=0.70+0.30*abAng; float bAng=0.35+0.60*u_qrsTAngle;
+    float sGlu=0.70+0.30*abGlu; float bGlu=0.35+0.60*u_glucose;
+    float sBUN=0.70+0.30*abBUN; float bBUN=0.35+0.60*u_nitrogenRadius;
+    float sCr=0.70+0.30*abCr;   float bCr=0.35+0.60*u_creatinineRadius;
+    float sEGF=0.70+0.30*abEGF; float bEGF=0.35+0.60*u_eGFR;
+    float sNa=0.70+0.30*abNa;   float bNa=0.35+0.60*u_sodiumRadius;
+    float sK=0.70+0.30*abK;     float bK=0.35+0.60*u_potassium;
+    float sChl=0.70+0.30*abCl;  float bChl=0.35+0.60*u_chlorideRadius;
+    float sCO2=0.70+0.30*abCO2; float bCO2=0.35+0.60*u_co2Norm;
+    float sCa=0.70+0.30*abCa;   float bCa=0.35+0.60*u_calciumRadius;
+    float sInh=0.72;             float bInh=0.52+0.28*u_eGFR;
 
-    // Dark saturated ground — the void between fields is dark-something, not dark-nothing.
-    // Colored by the piece's own glucose hue: presence without announcement.
-    vec3 ground = hsb2rgb(mod(u_glucose * 360., 360.), 0.75, 0.10);
+    // Weighted average — normalized so canvas is always fully covered, no black corners
+    float w1  = fw(uv, fVR,  bSig + sSc*abVR);
+    float w2  = fw(uv, fPR,  bSig + sSc*abPR);
+    float w3  = fw(uv, fQRS, bSig + sSc*abQRS);
+    float w4  = fw(uv, fPA,  bSig + sSc*abPA);
+    float w5  = fw(uv, fRA,  bSig + sSc*abRA);
+    float w6  = fw(uv, fQTc, bSig + sSc*abQTc);
+    float w7  = fw(uv, fTA,  bSig + sSc*abTA);
+    float w8  = fw(uv, fAng, bSig + sSc*abAng);
+    float w9  = fw(uv, fGlu, bSig + sSc*abGlu);
+    float w10 = fw(uv, fBUN, bSig + sSc*abBUN);
+    float w11 = fw(uv, fCr,  bSig + sSc*abCr);
+    float w12 = fw(uv, fEGF, bSig + sSc*abEGF);
+    float w13 = fw(uv, fNa,  bSig + sSc*abNa);
+    float w14 = fw(uv, fK,   bSig + sSc*abK);
+    float w15 = fw(uv, fCl,  bSig + sSc*abCl);
+    float w16 = fw(uv, fCO2, bSig + sSc*abCO2);
+    float w17 = fw(uv, fCa,  bSig + sSc*abCa);
+    float w18 = fw(uv, cf4,  0.14) * u_inheritedStrength;
+    float wSum = w1+w2+w3+w4+w5+w6+w7+w8+w9+w10+w11+w12+w13+w14+w15+w16+w17+w18 + 1e-6;
 
-    // Tight Gaussians — fields emerge from the ground as moments of legibility.
-    // No normalization: brightness falls off naturally. Data earns the light.
-    float s1c = s1 * 0.65, s2c = s2 * 0.65, s3c = s3 * 0.65, s4c = s4 * 0.65;
-    float gc1 = exp(-dot(uv - cf1, uv - cf1) / s1c);
-    float gc2 = exp(-dot(uv - cf2, uv - cf2) / s2c);
-    float gc3 = exp(-dot(uv - cf3, uv - cf3) / s3c);
-    float gc4 = exp(-dot(uv - cf4, uv - cf4) / s4c) * u_inheritedStrength;
-
-    // Reinhard tone map: overlaps bloom, isolation stays dark, nothing clips to white.
-    float emit = 1.8;
-    vec3 lightSum = ground + emit * (gc1 * col1 + gc2 * col2 + gc3 * col3 + gc4 * col4);
-    vec3 rgbColor = lightSum / (lightSum + 1.0);
+    // Circular mean of hues — blends angles not RGB vectors, no wash to white
+    float hueX = (w1*cos(hVR)+w2*cos(hPR)+w3*cos(hQRS)+w4*cos(hPA)+w5*cos(hRA)+w6*cos(hQTc)+
+                  w7*cos(hTA)+w8*cos(hAng)+w9*cos(hGlu)+w10*cos(hBUN)+w11*cos(hCr)+w12*cos(hEGF)+
+                  w13*cos(hNa)+w14*cos(hK)+w15*cos(hChl)+w16*cos(hCO2)+w17*cos(hCa)+w18*cos(hInh)) / wSum;
+    float hueY = (w1*sin(hVR)+w2*sin(hPR)+w3*sin(hQRS)+w4*sin(hPA)+w5*sin(hRA)+w6*sin(hQTc)+
+                  w7*sin(hTA)+w8*sin(hAng)+w9*sin(hGlu)+w10*sin(hBUN)+w11*sin(hCr)+w12*sin(hEGF)+
+                  w13*sin(hNa)+w14*sin(hK)+w15*sin(hChl)+w16*sin(hCO2)+w17*sin(hCa)+w18*sin(hInh)) / wSum;
+    float blendedHue = mod(degrees(atan(hueY, hueX)), 360.0);
+    float blendedSat = (w1*sVR+w2*sPR+w3*sQRS+w4*sPA+w5*sRA+w6*sQTc+
+                        w7*sTA+w8*sAng+w9*sGlu+w10*sBUN+w11*sCr+w12*sEGF+
+                        w13*sNa+w14*sK+w15*sChl+w16*sCO2+w17*sCa+w18*sInh) / wSum;
+    float blendedBri = (w1*bVR+w2*bPR+w3*bQRS+w4*bPA+w5*bRA+w6*bQTc+
+                        w7*bTA+w8*bAng+w9*bGlu+w10*bBUN+w11*bCr+w12*bEGF+
+                        w13*bNa+w14*bK+w15*bChl+w16*bCO2+w17*bCa+w18*bInh) / wSum;
+    vec3 rgbColor = hsb2rgb(blendedHue, blendedSat, blendedBri);
 
 // --- ECG-driven form shape ---
 // Each form is shaped by a different ECG dimension so pieces diverge across the dataset.
@@ -260,44 +317,42 @@ float caOuter1 = 0.36 + 0.20 * u_calciumRadius;
 float caInner2 = 0.15 + 0.14 * u_calciumRadius;
 float caOuter2 = 0.30 + 0.18 * u_calciumRadius;
 
-// Form positions: two superimposed sine orbits with incommensurate frequencies —
+// Form positions: lava lamp style.
+// Each form floats on two superimposed sine orbits with incommensurate frequencies —
 // the path never exactly repeats within a human lifespan. ECG values seed the phases
 // so each dataset traces a genuinely unique trajectory. driftMul grows 0.5→1.3
 // with age so orbits expand as the piece progresses. Small u_time term adds
 // realtime breathing on top of the slow year-drift.
-// bt = year-drift time scaled by ventricular rate: bradycardic pieces orbit slowly,
-// tachycardic pieces orbit with more urgency — same heartPace used by the fields.
-float bt = t * heartPace;
 
 // Data-driven anchors: each form's home position is determined by a unique ECG pair.
 // Range 0.20-0.80 keeps forms off the hard edges while using most of the canvas.
 // Different datasets produce genuinely different compositions.
 
 // Nitrogen: pAxis × rAxis
-vec2 cN = vec2(-0.05 + 1.10 * u_pAxisNorm, -0.05 + 1.10 * u_rAxisNorm)
-    + 0.20 * driftMul * vec2(sin(bt * 0.19 + 6.2831 * u_pAxisNorm),
-                              cos(bt * 0.13 + 6.2831 * u_rAxisNorm))
-    + 0.09 * driftMul * vec2(sin(bt * 0.51 + 6.2831 * u_qtcNorm),
-                              cos(bt * 0.37 + 6.2831 * u_tAxisNorm))
-    + 0.12 * vec2(sin(u_time * 0.23 + 6.2831 * u_pAxisNorm),
+vec2 cN = vec2(0.20 + 0.60 * u_pAxisNorm, 0.20 + 0.60 * u_rAxisNorm)
+    + 0.20 * driftMul * vec2(sin(t * 0.19 + 6.2831 * u_pAxisNorm),
+                              cos(t * 0.13 + 6.2831 * u_rAxisNorm))
+    + 0.09 * driftMul * vec2(sin(t * 0.51 + 6.2831 * u_qtcNorm),
+                              cos(t * 0.37 + 6.2831 * u_tAxisNorm))
+    + 0.04 * vec2(sin(u_time * 0.23 + 6.2831 * u_pAxisNorm),
                   cos(u_time * 0.17 + 6.2831 * u_rAxisNorm));
 
 // Creatinine lobe 1: (1-pAxis) × qtcNorm — inverted pAxis opposes Nitrogen
-vec2 cC1 = vec2(-0.05 + 1.10 * (1.0 - u_pAxisNorm), -0.05 + 1.10 * u_qtcNorm)
-    + 0.18 * driftMul * vec2(sin(bt * 0.23 + 6.2831 * (1.0 - u_pAxisNorm)),
-                              cos(bt * 0.16 + 6.2831 * u_rAxisNorm))
-    + 0.08 * driftMul * vec2(sin(bt * 0.44 + 6.2831 * (1.0 - u_qtcNorm)),
-                              cos(bt * 0.31 + 6.2831 * u_prNorm))
-    + 0.12 * vec2(sin(u_time * 0.27 + 6.2831 * (1.0 - u_pAxisNorm)),
+vec2 cC1 = vec2(0.20 + 0.60 * (1.0 - u_pAxisNorm), 0.20 + 0.60 * u_qtcNorm)
+    + 0.18 * driftMul * vec2(sin(t * 0.23 + 6.2831 * (1.0 - u_pAxisNorm)),
+                              cos(t * 0.16 + 6.2831 * u_rAxisNorm))
+    + 0.08 * driftMul * vec2(sin(t * 0.44 + 6.2831 * (1.0 - u_qtcNorm)),
+                              cos(t * 0.31 + 6.2831 * u_prNorm))
+    + 0.04 * vec2(sin(u_time * 0.27 + 6.2831 * (1.0 - u_pAxisNorm)),
                   cos(u_time * 0.19 + 6.2831 * u_rAxisNorm));
 
 // Creatinine lobe 2: qtcNorm × (1-rAxis)
-vec2 cC2 = vec2(-0.05 + 1.10 * u_qtcNorm, -0.05 + 1.10 * (1.0 - u_rAxisNorm))
-    + 0.15 * driftMul * vec2(sin(bt * 0.27 + 6.2831 * (1.0 - u_pAxisNorm) + 1.571),
-                              cos(bt * 0.19 + 6.2831 * u_rAxisNorm + 1.571))
-    + 0.07 * driftMul * vec2(sin(bt * 0.61 + 6.2831 * u_pAxisNorm),
-                              cos(bt * 0.43 + 6.2831 * (1.0 - u_rAxisNorm)))
-    + 0.10 * vec2(sin(u_time * 0.21 + 6.2831 * u_pAxisNorm),
+vec2 cC2 = vec2(0.20 + 0.60 * u_qtcNorm, 0.20 + 0.60 * (1.0 - u_rAxisNorm))
+    + 0.15 * driftMul * vec2(sin(t * 0.27 + 6.2831 * (1.0 - u_pAxisNorm) + 1.571),
+                              cos(t * 0.19 + 6.2831 * u_rAxisNorm + 1.571))
+    + 0.07 * driftMul * vec2(sin(t * 0.61 + 6.2831 * u_pAxisNorm),
+                              cos(t * 0.43 + 6.2831 * (1.0 - u_rAxisNorm)))
+    + 0.03 * vec2(sin(u_time * 0.21 + 6.2831 * u_pAxisNorm),
                   cos(u_time * 0.15 + 6.2831 * (1.0 - u_rAxisNorm)));
 
 // BUN/Creatinine ratio coupling: elevated ratio (pre-renal) pulls kidney forms together.
@@ -313,21 +368,21 @@ float mC2 = 1.0 - smoothstep(cInner2, cOuter2, ellipseDist(uv, cC2, crAspect * 0
 float mC  = max(mC1, mC2);
 
 // Sodium lobe A: rAxis × ventRateNorm
-vec2 cA = vec2(-0.05 + 1.10 * u_rAxisNorm, -0.05 + 1.10 * u_ventRateNorm)
-    + 0.18 * driftMul * vec2(cos(bt * 0.17 + 6.2831 * u_rAxisNorm),
-                              sin(bt * 0.12 + 6.2831 * u_pAxisNorm))
-    + 0.08 * driftMul * vec2(cos(bt * 0.43 + 6.2831 * u_ventRateNorm),
-                              sin(bt * 0.29 + 6.2831 * u_qtcNorm))
-    + 0.12 * vec2(cos(u_time * 0.25 + 6.2831 * u_rAxisNorm),
+vec2 cA = vec2(0.20 + 0.60 * u_rAxisNorm, 0.20 + 0.60 * u_ventRateNorm)
+    + 0.18 * driftMul * vec2(cos(t * 0.17 + 6.2831 * u_rAxisNorm),
+                              sin(t * 0.12 + 6.2831 * u_pAxisNorm))
+    + 0.08 * driftMul * vec2(cos(t * 0.43 + 6.2831 * u_ventRateNorm),
+                              sin(t * 0.29 + 6.2831 * u_qtcNorm))
+    + 0.04 * vec2(cos(u_time * 0.25 + 6.2831 * u_rAxisNorm),
                   sin(u_time * 0.18 + 6.2831 * u_pAxisNorm));
 
 // Sodium lobe B: (1-rAxis) × (1-pAxis) — naturally opposes A
-vec2 cB = vec2(-0.05 + 1.10 * (1.0 - u_rAxisNorm), -0.05 + 1.10 * (1.0 - u_pAxisNorm))
-    + 0.16 * driftMul * vec2(cos(bt * 0.17 + 6.2831 * (1.0 - u_rAxisNorm)),
-                              sin(bt * 0.12 + 6.2831 * (1.0 - u_pAxisNorm)))
-    + 0.07 * driftMul * vec2(cos(bt * 0.43 + 6.2831 * (1.0 - u_ventRateNorm)),
-                              sin(bt * 0.29 + 6.2831 * (1.0 - u_qtcNorm)))
-    + 0.10 * vec2(sin(u_time * 0.16 + 6.2831 * (1.0 - u_rAxisNorm)),
+vec2 cB = vec2(0.20 + 0.60 * (1.0 - u_rAxisNorm), 0.20 + 0.60 * (1.0 - u_pAxisNorm))
+    + 0.16 * driftMul * vec2(cos(t * 0.17 + 6.2831 * (1.0 - u_rAxisNorm)),
+                              sin(t * 0.12 + 6.2831 * (1.0 - u_pAxisNorm)))
+    + 0.07 * driftMul * vec2(cos(t * 0.43 + 6.2831 * (1.0 - u_ventRateNorm)),
+                              sin(t * 0.29 + 6.2831 * (1.0 - u_qtcNorm)))
+    + 0.03 * vec2(sin(u_time * 0.16 + 6.2831 * (1.0 - u_rAxisNorm)),
                   cos(u_time * 0.22 + 6.2831 * (1.0 - u_pAxisNorm)));
 
 float mA  = 1. - smoothstep(naInner1, naOuter1, ellipseDist(uv, cA, naAspect, naAngle));
@@ -335,12 +390,12 @@ float mB  = 1. - smoothstep(naInner2, naOuter2, ellipseDist(uv, cB, naAspect * 0
 float mNa = max(mA, mB);
 
 // Chloride: prNorm × tAxisNorm
-vec2 cCl = vec2(-0.05 + 1.10 * u_prNorm, -0.05 + 1.10 * u_tAxisNorm)
-    + 0.18 * driftMul * vec2(sin(bt * 0.22 + 6.2831 * u_rAxisNorm),
-                              cos(bt * 0.15 + 6.2831 * u_pAxisNorm))
-    + 0.07 * driftMul * vec2(sin(bt * 0.53 + 6.2831 * u_prNorm),
-                              cos(bt * 0.37 + 6.2831 * u_tAxisNorm))
-    + 0.12 * vec2(sin(u_time * 0.26 + 6.2831 * u_rAxisNorm),
+vec2 cCl = vec2(0.20 + 0.60 * u_prNorm, 0.20 + 0.60 * u_tAxisNorm)
+    + 0.18 * driftMul * vec2(sin(t * 0.22 + 6.2831 * u_rAxisNorm),
+                              cos(t * 0.15 + 6.2831 * u_pAxisNorm))
+    + 0.07 * driftMul * vec2(sin(t * 0.53 + 6.2831 * u_prNorm),
+                              cos(t * 0.37 + 6.2831 * u_tAxisNorm))
+    + 0.04 * vec2(sin(u_time * 0.26 + 6.2831 * u_rAxisNorm),
                   cos(u_time * 0.19 + 6.2831 * u_pAxisNorm));
 float mCl = 1.0 - smoothstep(clInner, clOuter, ellipseDist(uv, cCl, clAspect, clAngle));
 
@@ -361,19 +416,19 @@ float localGain = smoothstep(.01, .55, lum);// avoid dark wash
 float haloW = u_co2Strength * mix(ambW, edgeW, 0.45 + 0.30 * u_qrsTAngle) * localGain * (0.88 + 0.12 * tBias);
 
 // Calcium: slow, heavy. c1 anchored by tAxis × (1-qtc), c2 inverted — naturally opposes.
-vec2 c1 = vec2(-0.05 + 1.10 * u_tAxisNorm, -0.05 + 1.10 * (1.0 - u_qtcNorm))
-    + 0.16 * driftMul * vec2(sin(bt * 0.15 + 6.2831 * u_pAxisNorm),
-                              cos(bt * 0.11 + 6.2831 * u_rAxisNorm))
-    + 0.07 * driftMul * vec2(sin(bt * 0.41 + 6.2831 * u_tAxisNorm),
-                              cos(bt * 0.28 + 6.2831 * u_qtcNorm))
-    + 0.12 * vec2(sin(u_time * 0.14 + 6.2831 * u_pAxisNorm),
+vec2 c1 = vec2(0.20 + 0.60 * u_tAxisNorm, 0.20 + 0.60 * (1.0 - u_qtcNorm))
+    + 0.16 * driftMul * vec2(sin(t * 0.15 + 6.2831 * u_pAxisNorm),
+                              cos(t * 0.11 + 6.2831 * u_rAxisNorm))
+    + 0.07 * driftMul * vec2(sin(t * 0.41 + 6.2831 * u_tAxisNorm),
+                              cos(t * 0.28 + 6.2831 * u_qtcNorm))
+    + 0.04 * vec2(sin(u_time * 0.14 + 6.2831 * u_pAxisNorm),
                   cos(u_time * 0.20 + 6.2831 * u_rAxisNorm));
-vec2 c2 = vec2(-0.05 + 1.10 * (1.0 - u_tAxisNorm), -0.05 + 1.10 * u_qtcNorm)
-    + 0.16 * driftMul * vec2(cos(bt * 0.15 + 6.2831 * (1.0 - u_rAxisNorm)),
-                              sin(bt * 0.11 + 6.2831 * (1.0 - u_pAxisNorm)))
-    + 0.07 * driftMul * vec2(cos(bt * 0.41 + 6.2831 * (1.0 - u_tAxisNorm)),
-                              sin(bt * 0.28 + 6.2831 * (1.0 - u_qtcNorm)))
-    + 0.12 * vec2(cos(u_time * 0.11 + 6.2831 * (1.0 - u_rAxisNorm)),
+vec2 c2 = vec2(0.20 + 0.60 * (1.0 - u_tAxisNorm), 0.20 + 0.60 * u_qtcNorm)
+    + 0.16 * driftMul * vec2(cos(t * 0.15 + 6.2831 * (1.0 - u_rAxisNorm)),
+                              sin(t * 0.11 + 6.2831 * (1.0 - u_pAxisNorm)))
+    + 0.07 * driftMul * vec2(cos(t * 0.41 + 6.2831 * (1.0 - u_tAxisNorm)),
+                              sin(t * 0.28 + 6.2831 * (1.0 - u_qtcNorm)))
+    + 0.04 * vec2(cos(u_time * 0.11 + 6.2831 * (1.0 - u_rAxisNorm)),
                   sin(u_time * 0.16 + 6.2831 * (1.0 - u_pAxisNorm)));
 float m1  = 1. - smoothstep(caInner1, caOuter1, ellipseDist(uv, c1, caAspect, caAngle));
 float m2  = 1. - smoothstep(caInner2, caOuter2, ellipseDist(uv, c2, caAspect * 0.88, caAngle));
@@ -396,9 +451,7 @@ float mCa = max(m1, m2);
     rgbColor = clamp(rgbColor + chlorideRGB * strengthCl * mCl, 0., 1.0);
 
     // CO2
-    // Chloride tracks acid-base balance: high Cl (acidosis) intensifies the halo;
-    // low Cl (alkalosis) desaturates it. Chloride and CO2 are metabolic twins.
-    vec3 co2Tint = hsb2rgb(u_co2HueDeg, 0.60 + 0.30 * u_chlorideRadius, 1.00);
+    vec3 co2Tint = hsb2rgb(u_co2HueDeg, .75, 1.00);
     rgbColor = clamp(rgbColor + co2Tint * haloW, 0., 1.);
 
     // Calcium
