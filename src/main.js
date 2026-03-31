@@ -315,6 +315,9 @@ async function init() {
   const uRAxisNormLoc = gl.getUniformLocation(program, "u_rAxisNorm");
   const uQtcNormLoc = gl.getUniformLocation(program, "u_qtcNorm");
   const uQtcPercentileLoc = gl.getUniformLocation(program, "u_qtcPercentile");
+  const uPAxisPctLoc = gl.getUniformLocation(program, "u_pAxisPct");
+  const uRAxisPctLoc = gl.getUniformLocation(program, "u_rAxisPct");
+  const uTAxisPctLoc = gl.getUniformLocation(program, "u_tAxisPct");
   const uPrNormLoc = gl.getUniformLocation(program, "u_prNorm");
   const uVentRateNormLoc = gl.getUniformLocation(program, "u_ventRateNorm");
   const uTAxisNormLoc = gl.getUniformLocation(program, "u_tAxisNorm");
@@ -352,6 +355,9 @@ async function init() {
   const bunCreatP05 = allBunCreatRatios[Math.floor(0.05 * (allBunCreatRatios.length - 1))];
   const bunCreatP95 = allBunCreatRatios[Math.ceil(0.95 * (allBunCreatRatios.length - 1))];
   const sortedQtcValues = healthDataSets.map((d) => d.ecg.qtcInterval).sort((a, b) => a - b);
+  const sortedPAxisValues = healthDataSets.map((d) => d.ecg.pAxis).sort((a, b) => a - b);
+  const sortedRAxisValues = healthDataSets.map((d) => d.ecg.rAxis).sort((a, b) => a - b);
+  const sortedTAxisValues = healthDataSets.map((d) => d.ecg.tAxis).sort((a, b) => a - b);
 
   // QRS-T angle: |rAxis - tAxis|, normalized over dataset range
   const allQrsTAngles = healthDataSets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
@@ -698,6 +704,12 @@ async function init() {
     if (uQtcNormLoc) gl.uniform1f(uQtcNormLoc, qtcNorm);
     const qtcPercentile = percentile(activeDataSet.ecg.qtcInterval, sortedQtcValues);
     if (uQtcPercentileLoc) gl.uniform1f(uQtcPercentileLoc, qtcPercentile);
+    const pAxisPct = percentile(activeDataSet.ecg.pAxis, sortedPAxisValues);
+    const rAxisPct = percentile(activeDataSet.ecg.rAxis, sortedRAxisValues);
+    const tAxisPct = percentile(activeDataSet.ecg.tAxis, sortedTAxisValues);
+    if (uPAxisPctLoc) gl.uniform1f(uPAxisPctLoc, pAxisPct);
+    if (uRAxisPctLoc) gl.uniform1f(uRAxisPctLoc, rAxisPct);
+    if (uTAxisPctLoc) gl.uniform1f(uTAxisPctLoc, tAxisPct);
     if (uPrNormLoc) gl.uniform1f(uPrNormLoc, prNorm);
     const ventRateNorm = clamp(
       normalize(activeDataSet.ecg.ventRate, minMaxValues.ventRate.min, minMaxValues.ventRate.max),

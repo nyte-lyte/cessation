@@ -46,6 +46,9 @@ uniform float u_pAxisNorm;    // P wave axis, normalized 0..1 over dataset range
 uniform float u_rAxisNorm;    // R wave (QRS) axis, normalized 0..1 over dataset range
 uniform float u_qtcNorm;       // QTc interval, min-max normalized 0..1 — drives field tempo + form sizing
 uniform float u_qtcPercentile; // QTc interval, percentile-ranked 0..1 — drives Field 3 hue
+uniform float u_pAxisPct;     // P wave axis, percentile-ranked 0..1 — drives Field hue only
+uniform float u_rAxisPct;     // R wave axis, percentile-ranked 0..1 — drives Field hue only
+uniform float u_tAxisPct;     // T-wave axis, percentile-ranked 0..1 — drives Field hue only
 uniform float u_prNorm;       // PR interval, normalized 0..1 — drives acid-base field tempo
 uniform float u_ventRateNorm; // Heart rate, normalized 0..1 — scales all field drift frequencies
 uniform float u_tAxisNorm;    // T-wave axis, normalized 0..1 — repolarization direction
@@ -153,26 +156,26 @@ void main(){
 
     float os = 0.10 * driftMul; // orbit scale — grows with age
 
-    // ECG field centers (left half) — beat at cardiac tempo
-    vec2 fVR  = vec2(0.10, 0.12) + os*abVR  * vec2(sin(t*0.190*heartPace+1.0), cos(t*0.130*heartPace+2.0)) + 0.03*vec2(sin(u_time*0.23+1.0), cos(u_time*0.17+2.0));
-    vec2 fPR  = vec2(0.28, 0.16) + os*abPR  * vec2(cos(t*0.170*heartPace+3.0), sin(t*0.110*heartPace+1.5)) + 0.03*vec2(cos(u_time*0.19+3.0), sin(u_time*0.14+1.5));
-    vec2 fQRS = vec2(0.12, 0.40) + os*abQRS * vec2(sin(t*0.230*heartPace+2.5), cos(t*0.150*heartPace+0.8)) + 0.03*vec2(sin(u_time*0.25+2.5), cos(u_time*0.18+0.8));
-    vec2 fPA  = vec2(0.38, 0.25) + os*abPA  * vec2(cos(t*0.210*heartPace+4.0), sin(t*0.140*heartPace+2.0)) + 0.03*vec2(cos(u_time*0.21+4.0), sin(u_time*0.16+2.0));
-    vec2 fRA  = vec2(0.22, 0.55) + os*abRA  * vec2(sin(t*0.180*heartPace+1.2), cos(t*0.120*heartPace+3.5)) + 0.03*vec2(sin(u_time*0.18+1.2), cos(u_time*0.22+3.5));
-    vec2 fQTc = vec2(0.32, 0.70) + os*abQTc * vec2(cos(t*0.220*heartPace+0.5), sin(t*0.160*heartPace+4.0)) + 0.03*vec2(cos(u_time*0.27+0.5), sin(u_time*0.20+4.0));
-    vec2 fTA  = vec2(0.44, 0.50) + os*abTA  * vec2(sin(t*0.160*heartPace+3.0), cos(t*0.110*heartPace+1.0)) + 0.03*vec2(sin(u_time*0.22+3.0), cos(u_time*0.15+1.0));
-    vec2 fAng = vec2(0.15, 0.82) + os*abAng * vec2(cos(t*0.200*heartPace+2.0), sin(t*0.140*heartPace+0.3)) + 0.03*vec2(cos(u_time*0.20+2.0), sin(u_time*0.13+0.3));
+    // ECG field centers — anchors data-driven, orbit on top
+    vec2 fVR  = vec2(0.10+0.80*u_ventRateNorm,  0.10+0.80*u_glucose)          + os*abVR  * vec2(sin(t*0.190*heartPace+1.0), cos(t*0.130*heartPace+2.0)) + 0.03*vec2(sin(u_time*0.23+1.0), cos(u_time*0.17+2.0));
+    vec2 fPR  = vec2(0.10+0.80*u_prNorm,         0.10+0.80*u_eGFR)            + os*abPR  * vec2(cos(t*0.170*heartPace+3.0), sin(t*0.110*heartPace+1.5)) + 0.03*vec2(cos(u_time*0.19+3.0), sin(u_time*0.14+1.5));
+    vec2 fQRS = vec2(0.10+0.80*u_qrsNorm,        0.10+0.80*u_potassium)       + os*abQRS * vec2(sin(t*0.230*heartPace+2.5), cos(t*0.150*heartPace+0.8)) + 0.03*vec2(sin(u_time*0.25+2.5), cos(u_time*0.18+0.8));
+    vec2 fPA  = vec2(0.10+0.80*u_pAxisNorm,      0.10+0.80*u_nitrogenRadius)  + os*abPA  * vec2(cos(t*0.210*heartPace+4.0), sin(t*0.140*heartPace+2.0)) + 0.03*vec2(cos(u_time*0.21+4.0), sin(u_time*0.16+2.0));
+    vec2 fRA  = vec2(0.10+0.80*u_rAxisNorm,      0.10+0.80*u_creatinineRadius)+ os*abRA  * vec2(sin(t*0.180*heartPace+1.2), cos(t*0.120*heartPace+3.5)) + 0.03*vec2(sin(u_time*0.18+1.2), cos(u_time*0.22+3.5));
+    vec2 fQTc = vec2(0.10+0.80*u_qtcPercentile,  0.10+0.80*u_eGFR)            + os*abQTc * vec2(cos(t*0.220*heartPace+0.5), sin(t*0.160*heartPace+4.0)) + 0.03*vec2(cos(u_time*0.27+0.5), sin(u_time*0.20+4.0));
+    vec2 fTA  = vec2(0.10+0.80*u_tAxisNorm,      0.10+0.80*u_glucose)         + os*abTA  * vec2(sin(t*0.160*heartPace+3.0), cos(t*0.110*heartPace+1.0)) + 0.03*vec2(sin(u_time*0.22+3.0), cos(u_time*0.15+1.0));
+    vec2 fAng = vec2(0.10+0.80*u_qrsTAngle,      0.10+0.80*u_potassium)       + os*abAng * vec2(cos(t*0.200*heartPace+2.0), sin(t*0.140*heartPace+0.3)) + 0.03*vec2(cos(u_time*0.20+2.0), sin(u_time*0.13+0.3));
 
-    // Lab field centers (right half) — breathe at metabolic tempo
-    vec2 fGlu = vec2(0.52, 0.08) + os*abGlu * vec2(sin(t*0.140*labPace+1.5), cos(t*0.090*labPace+3.0)) + 0.03*vec2(sin(u_time*0.16+1.5), cos(u_time*0.11+3.0));
-    vec2 fBUN = vec2(0.62, 0.22) + os*abBUN * vec2(cos(t*0.120*labPace+0.8), sin(t*0.080*labPace+2.5)) + 0.03*vec2(cos(u_time*0.14+0.8), sin(u_time*0.10+2.5));
-    vec2 fCr  = vec2(0.80, 0.18) + os*abCr  * vec2(sin(t*0.110*labPace+2.0), cos(t*0.070*labPace+1.0)) + 0.03*vec2(sin(u_time*0.13+2.0), cos(u_time*0.09+1.0));
-    vec2 fEGF = vec2(0.90, 0.42) + os*abEGF * vec2(cos(t*0.100*labPace+3.5), sin(t*0.070*labPace+0.5)) + 0.03*vec2(cos(u_time*0.12+3.5), sin(u_time*0.08+0.5));
-    vec2 fNa  = vec2(0.58, 0.48) + os*abNa  * vec2(sin(t*0.130*labPace+1.0), cos(t*0.090*labPace+4.0)) + 0.03*vec2(sin(u_time*0.15+1.0), cos(u_time*0.10+4.0));
-    vec2 fK   = vec2(0.74, 0.54) + os*abK   * vec2(cos(t*0.120*labPace+2.5), sin(t*0.080*labPace+1.5)) + 0.03*vec2(cos(u_time*0.11+2.5), sin(u_time*0.08+1.5));
-    vec2 fCl  = vec2(0.62, 0.72) + os*abCl  * vec2(sin(t*0.110*labPace+3.0), cos(t*0.070*labPace+0.8)) + 0.03*vec2(sin(u_time*0.13+3.0), cos(u_time*0.09+0.8));
-    vec2 fCO2 = vec2(0.82, 0.76) + os*abCO2 * vec2(cos(t*0.100*labPace+1.5), sin(t*0.070*labPace+2.0)) + 0.03*vec2(cos(u_time*0.10+1.5), sin(u_time*0.07+2.0));
-    vec2 fCa  = vec2(0.92, 0.62) + os*abCa  * vec2(sin(t*0.090*labPace+0.5), cos(t*0.060*labPace+3.0)) + 0.03*vec2(sin(u_time*0.11+0.5), cos(u_time*0.08+3.0));
+    // Lab field centers — anchors data-driven, orbit on top
+    vec2 fGlu = vec2(0.10+0.80*u_glucose,         0.10+0.80*u_eGFR)            + os*abGlu * vec2(sin(t*0.140*labPace+1.5), cos(t*0.090*labPace+3.0)) + 0.03*vec2(sin(u_time*0.16+1.5), cos(u_time*0.11+3.0));
+    vec2 fBUN = vec2(0.10+0.80*u_nitrogenRadius,  0.10+0.80*(1.0-u_eGFR))     + os*abBUN * vec2(cos(t*0.120*labPace+0.8), sin(t*0.080*labPace+2.5)) + 0.03*vec2(cos(u_time*0.14+0.8), sin(u_time*0.10+2.5));
+    vec2 fCr  = vec2(0.10+0.80*u_creatinineRadius,0.10+0.80*u_qtcPercentile)   + os*abCr  * vec2(sin(t*0.110*labPace+2.0), cos(t*0.070*labPace+1.0)) + 0.03*vec2(sin(u_time*0.13+2.0), cos(u_time*0.09+1.0));
+    vec2 fEGF = vec2(0.10+0.80*u_eGFR,            0.10+0.80*u_potassium)       + os*abEGF * vec2(cos(t*0.100*labPace+3.5), sin(t*0.070*labPace+0.5)) + 0.03*vec2(cos(u_time*0.12+3.5), sin(u_time*0.08+0.5));
+    vec2 fNa  = vec2(0.10+0.80*u_sodiumRadius,    0.10+0.80*u_chlorideRadius)  + os*abNa  * vec2(sin(t*0.130*labPace+1.0), cos(t*0.090*labPace+4.0)) + 0.03*vec2(sin(u_time*0.15+1.0), cos(u_time*0.10+4.0));
+    vec2 fK   = vec2(0.10+0.80*u_potassium,       0.10+0.80*u_glucose)         + os*abK   * vec2(cos(t*0.120*labPace+2.5), sin(t*0.080*labPace+1.5)) + 0.03*vec2(cos(u_time*0.11+2.5), sin(u_time*0.08+1.5));
+    vec2 fCl  = vec2(0.10+0.80*u_chlorideRadius,  0.10+0.80*u_co2Norm)        + os*abCl  * vec2(sin(t*0.110*labPace+3.0), cos(t*0.070*labPace+0.8)) + 0.03*vec2(sin(u_time*0.13+3.0), cos(u_time*0.09+0.8));
+    vec2 fCO2 = vec2(0.10+0.80*u_co2Norm,         0.10+0.80*u_creatinineRadius)+ os*abCO2 * vec2(cos(t*0.100*labPace+1.5), sin(t*0.070*labPace+2.0)) + 0.03*vec2(cos(u_time*0.10+1.5), sin(u_time*0.07+2.0));
+    vec2 fCa  = vec2(0.10+0.80*u_calciumRadius,   0.10+0.80*u_qtcPercentile)   + os*abCa  * vec2(sin(t*0.090*labPace+0.5), cos(t*0.060*labPace+3.0)) + 0.03*vec2(sin(u_time*0.11+0.5), cos(u_time*0.08+3.0));
 
     // Inherited lineage field — antipodal to glucose anchor, fades over lifetime
     // cf4 kept for reanimation visuals downstream
@@ -188,10 +191,10 @@ void main(){
     float hVR  = radians(mod(u_ventRateNorm     * 360. + t *  2.1, 360.));
     float hPR  = radians(mod(u_prNorm           * 360. + t * -1.8, 360.));
     float hQRS = radians(mod(u_qrsNorm          * 360. + t *  2.7, 360.));
-    float hPA  = radians(mod(u_pAxisNorm        * 360. + t * -1.5, 360.));
-    float hRA  = radians(mod(u_rAxisNorm        * 360. + t *  3.2, 360.));
+    float hPA  = radians(mod(u_pAxisPct         * 360. + t * -1.5, 360.));
+    float hRA  = radians(mod(u_rAxisPct         * 360. + t *  3.2, 360.));
     float hQTc = radians(mod(u_qtcNorm          * 360. + t * -2.3, 360.));
-    float hTA  = radians(mod(u_tAxisNorm        * 360. + t *  1.9, 360.));
+    float hTA  = radians(mod(u_tAxisPct         * 360. + t *  1.9, 360.));
     float hAng = radians(mod(u_qrsTAngle        * 360. + t * -2.8, 360.));
     float hGlu = radians(mod(u_glucose          * 360. + t *  1.4, 360.));
     float hBUN = radians(mod(u_nitrogenRadius   * 360. + t * -1.7, 360.));
