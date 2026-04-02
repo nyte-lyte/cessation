@@ -321,6 +321,7 @@ async function init() {
   const uPrNormLoc = gl.getUniformLocation(program, "u_prNorm");
   const uVentRateNormLoc = gl.getUniformLocation(program, "u_ventRateNorm");
   const uTAxisNormLoc = gl.getUniformLocation(program, "u_tAxisNorm");
+  const uQrsNormLoc   = gl.getUniformLocation(program, "u_qrsNorm");
   const uQrsTAngleLoc = gl.getUniformLocation(program, "u_qrsTAngle");
   const uInheritedHueDegLoc = gl.getUniformLocation(program, "u_inheritedHueDeg");
   const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
@@ -358,7 +359,6 @@ async function init() {
   const sortedPAxisValues = healthDataSets.map((d) => d.ecg.pAxis).sort((a, b) => a - b);
   const sortedRAxisValues = healthDataSets.map((d) => d.ecg.rAxis).sort((a, b) => a - b);
   const sortedTAxisValues = healthDataSets.map((d) => d.ecg.tAxis).sort((a, b) => a - b);
-
   // QRS-T angle: |rAxis - tAxis|, normalized over dataset range
   const allQrsTAngles = healthDataSets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
   const qrsTAngleMin = Math.min(...allQrsTAngles);
@@ -721,6 +721,11 @@ async function init() {
       0, 1
     );
     if (uTAxisNormLoc) gl.uniform1f(uTAxisNormLoc, tAxisNorm);
+    const qrsNorm = clamp(
+      normalize(activeDataSet.ecg.qrsInterval, minMaxValues.qrsInterval.min, minMaxValues.qrsInterval.max),
+      0, 1
+    );
+    if (uQrsNormLoc) gl.uniform1f(uQrsNormLoc, qrsNorm);
     const qrsTAngle = Math.abs(activeDataSet.ecg.rAxis - activeDataSet.ecg.tAxis);
     const qrsTAngleNorm = clamp(
       (qrsTAngle - qrsTAngleMin) / Math.max(1e-6, qrsTAngleMax - qrsTAngleMin),
