@@ -56,6 +56,12 @@ uniform float u_qrsTAngle;   // QRS-T angle normalized 0..1 — electrical disso
 uniform float u_qrsNorm;     // QRS interval, min-max normalized 0..1 — depolarization width
 uniform float u_co2Norm;     // CO2/bicarbonate, min-max normalized 0..1 — acid-base balance
 
+// Percentile-ranked ECG hues — future-proof against outliers in any dataset past the first 29
+uniform float u_ventRatePct;
+uniform float u_prPct;
+uniform float u_qrsPct;
+uniform float u_qrsTAnglePct;
+
 // Wall-clock time in seconds — drives realtime form animation
 uniform float u_time;
 
@@ -188,14 +194,14 @@ void main(){
     float sSc  = 0.07;
 
     // Per-field hue angles (radians) — value × 360° + slow per-field drift
-    float hVR  = radians(mod(u_ventRateNorm     * 360. + t *  2.1, 360.));
-    float hPR  = radians(mod(u_prNorm           * 360. + t * -1.8, 360.));
-    float hQRS = radians(mod(u_qrsNorm          * 360. + t *  2.7, 360.));
-    float hPA  = radians(mod(u_pAxisPct         * 360. + t * -1.5, 360.));
-    float hRA  = radians(mod(u_rAxisPct         * 360. + t *  3.2, 360.));
-    float hQTc = radians(mod(u_qtcNorm          * 360. + t * -2.3, 360.));
-    float hTA  = radians(mod(u_tAxisPct         * 360. + t *  1.9, 360.));
-    float hAng = radians(mod(u_qrsTAngle        * 360. + t * -2.8, 360.));
+    float hVR  = radians(mod(u_ventRatePct      * 360. + t *  2.1, 360.));
+    float hPR  = radians(mod(u_prPct           * 360. + t * -1.8, 360.));
+    float hQRS = radians(mod(u_qrsPct          * 360. + t *  2.7, 360.));
+    float hPA  = radians(mod(u_pAxisPct        * 360. + t * -1.5, 360.));
+    float hRA  = radians(mod(u_rAxisPct        * 360. + t *  3.2, 360.));
+    float hQTc = radians(mod(u_qtcPercentile   * 360. + t * -2.3, 360.));
+    float hTA  = radians(mod(u_tAxisPct        * 360. + t *  1.9, 360.));
+    float hAng = radians(mod(u_qrsTAnglePct    * 360. + t * -2.8, 360.));
     float hGlu = radians(mod(u_glucose          * 360. + t *  1.4, 360.));
     float hBUN = radians(mod(u_nitrogenRadius   * 360. + t * -1.7, 360.));
     float hCr  = radians(mod(u_creatinineRadius * 360. + t *  2.4, 360.));

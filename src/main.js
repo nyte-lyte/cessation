@@ -321,8 +321,12 @@ async function init() {
   const uPrNormLoc = gl.getUniformLocation(program, "u_prNorm");
   const uVentRateNormLoc = gl.getUniformLocation(program, "u_ventRateNorm");
   const uTAxisNormLoc = gl.getUniformLocation(program, "u_tAxisNorm");
-  const uQrsNormLoc   = gl.getUniformLocation(program, "u_qrsNorm");
-  const uQrsTAngleLoc = gl.getUniformLocation(program, "u_qrsTAngle");
+  const uQrsNormLoc       = gl.getUniformLocation(program, "u_qrsNorm");
+  const uQrsTAngleLoc     = gl.getUniformLocation(program, "u_qrsTAngle");
+  const uVentRatePctLoc   = gl.getUniformLocation(program, "u_ventRatePct");
+  const uPrPctLoc         = gl.getUniformLocation(program, "u_prPct");
+  const uQrsPctLoc        = gl.getUniformLocation(program, "u_qrsPct");
+  const uQrsTAnglePctLoc  = gl.getUniformLocation(program, "u_qrsTAnglePct");
   const uInheritedHueDegLoc = gl.getUniformLocation(program, "u_inheritedHueDeg");
   const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
   const uReanimationProgressLoc    = gl.getUniformLocation(program, "u_reanimationProgress");
@@ -356,13 +360,17 @@ async function init() {
   const bunCreatP05 = allBunCreatRatios[Math.floor(0.05 * (allBunCreatRatios.length - 1))];
   const bunCreatP95 = allBunCreatRatios[Math.ceil(0.95 * (allBunCreatRatios.length - 1))];
   const sortedQtcValues = healthDataSets.map((d) => d.ecg.qtcInterval).sort((a, b) => a - b);
-  const sortedPAxisValues = healthDataSets.map((d) => d.ecg.pAxis).sort((a, b) => a - b);
-  const sortedRAxisValues = healthDataSets.map((d) => d.ecg.rAxis).sort((a, b) => a - b);
-  const sortedTAxisValues = healthDataSets.map((d) => d.ecg.tAxis).sort((a, b) => a - b);
+  const sortedPAxisValues     = healthDataSets.map((d) => d.ecg.pAxis).sort((a, b) => a - b);
+  const sortedRAxisValues     = healthDataSets.map((d) => d.ecg.rAxis).sort((a, b) => a - b);
+  const sortedTAxisValues     = healthDataSets.map((d) => d.ecg.tAxis).sort((a, b) => a - b);
+  const sortedVentRateValues  = healthDataSets.map((d) => d.ecg.ventRate).sort((a, b) => a - b);
+  const sortedPRValues        = healthDataSets.map((d) => d.ecg.prInterval).sort((a, b) => a - b);
+  const sortedQRSValues       = healthDataSets.map((d) => d.ecg.qrsInterval).sort((a, b) => a - b);
   // QRS-T angle: |rAxis - tAxis|, normalized over dataset range
   const allQrsTAngles = healthDataSets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
   const qrsTAngleMin = Math.min(...allQrsTAngles);
   const qrsTAngleMax = Math.max(...allQrsTAngles);
+  const sortedQRSTAngleValues = [...allQrsTAngles].sort((a, b) => a - b);
 
   let currentDataSetIndex = 0;
 
@@ -732,6 +740,14 @@ async function init() {
       0, 1
     );
     if (uQrsTAngleLoc) gl.uniform1f(uQrsTAngleLoc, qrsTAngleNorm);
+    const ventRatePct   = percentile(activeDataSet.ecg.ventRate,    sortedVentRateValues);
+    const prPct         = percentile(activeDataSet.ecg.prInterval,  sortedPRValues);
+    const qrsPct        = percentile(activeDataSet.ecg.qrsInterval, sortedQRSValues);
+    const qrsTAnglePct  = percentile(qrsTAngle,                     sortedQRSTAngleValues);
+    if (uVentRatePctLoc)  gl.uniform1f(uVentRatePctLoc,  ventRatePct);
+    if (uPrPctLoc)        gl.uniform1f(uPrPctLoc,        prPct);
+    if (uQrsPctLoc)       gl.uniform1f(uQrsPctLoc,       qrsPct);
+    if (uQrsTAnglePctLoc) gl.uniform1f(uQrsTAnglePctLoc, qrsTAnglePct);
 
     // Inherited color field — fades from full presence at birth toward 0 at end of life
     const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
