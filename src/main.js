@@ -322,6 +322,7 @@ async function init() {
   const uVentRateNormLoc = gl.getUniformLocation(program, "u_ventRateNorm");
   const uTAxisNormLoc = gl.getUniformLocation(program, "u_tAxisNorm");
   const uQrsNormLoc       = gl.getUniformLocation(program, "u_qrsNorm");
+  const uCo2NormLoc       = gl.getUniformLocation(program, "u_co2Norm");
   const uQrsTAngleLoc     = gl.getUniformLocation(program, "u_qrsTAngle");
   const uVentRatePctLoc   = gl.getUniformLocation(program, "u_ventRatePct");
   const uPrPctLoc         = gl.getUniformLocation(program, "u_prPct");
@@ -740,6 +741,11 @@ async function init() {
       0, 1
     );
     if (uQrsNormLoc) gl.uniform1f(uQrsNormLoc, qrsNorm);
+    const co2Norm = clamp(
+      normalize(activeDataSet.labs.carbonDioxide, minMaxValues.carbonDioxide.min, minMaxValues.carbonDioxide.max),
+      0, 1
+    );
+    if (uCo2NormLoc) gl.uniform1f(uCo2NormLoc, co2Norm);
     const qrsTAngle = Math.abs(activeDataSet.ecg.rAxis - activeDataSet.ecg.tAxis);
     const qrsTAngleNorm = clamp(
       (qrsTAngle - qrsTAngleMin) / Math.max(1e-6, qrsTAngleMax - qrsTAngleMin),
