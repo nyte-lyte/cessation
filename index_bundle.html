@@ -49,7 +49,7 @@ body {
 #canvas-container:fullscreen {
     width: 100vw;
     height: 100vh;
-    border: clamp(20px, 5vmin, 60px) solid black;
+    border: clamp(12px, 3vmin, 36px) solid black;
 }
   </style>
 </head>
@@ -60,7 +60,7 @@ body {
 
   <!-- Shaders -->
   <script id="vert-shader" type="x-shader/x-vertex">
-#version 300 es 
+#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
 void main() {
@@ -104,19 +104,19 @@ uniform float u_calciumRadius;
 
 uniform float u_bunCreatRatioNorm;
 
-uniform float u_pAxisNorm;    
-uniform float u_rAxisNorm;    
-uniform float u_qtcNorm;       
-uniform float u_qtcPercentile; 
-uniform float u_pAxisPct;     
-uniform float u_rAxisPct;     
-uniform float u_tAxisPct;     
-uniform float u_prNorm;       
-uniform float u_ventRateNorm; 
-uniform float u_tAxisNorm;    
-uniform float u_qrsTAngle;   
-uniform float u_qrsNorm;     
-uniform float u_co2Norm;     
+uniform float u_pAxisNorm;
+uniform float u_rAxisNorm;
+uniform float u_qtcNorm;
+uniform float u_qtcPercentile;
+uniform float u_pAxisPct;
+uniform float u_rAxisPct;
+uniform float u_tAxisPct;
+uniform float u_prNorm;
+uniform float u_ventRateNorm;
+uniform float u_tAxisNorm;
+uniform float u_qrsTAngle;
+uniform float u_qrsNorm;
+uniform float u_co2Norm;
 
 uniform float u_ventRatePct;
 uniform float u_prPct;
@@ -125,13 +125,13 @@ uniform float u_qrsTAnglePct;
 
 uniform float u_time;
 
-uniform float u_inheritedHueDeg;  
-uniform float u_inheritedStrength; 
+uniform float u_inheritedHueDeg;
+uniform float u_inheritedStrength;
 
-uniform float u_reanimationProgress;    
-uniform float u_partnerInheritedHueDeg; 
-uniform float u_isLiberated;            
-uniform float u_voidProgress;           
+uniform float u_reanimationProgress;
+uniform float u_partnerInheritedHueDeg;
+uniform float u_isLiberated;
+uniform float u_voidProgress;
 
 uniform vec3 u_nitrogenRGB;
 uniform vec3 u_creatRGB;
@@ -139,8 +139,8 @@ uniform vec3 u_sodiumRGB;
 uniform vec3 u_chlorideRGB;
 uniform vec3 u_co2RGB;
 uniform vec3 u_calciumRGB;
-uniform vec3 u_nirvanaRGB;   
-uniform vec3 u_partnerRGB;   
+uniform vec3 u_nirvanaRGB;
+uniform vec3 u_partnerRGB;
 
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -170,31 +170,21 @@ float ellipseDist(vec2 p, vec2 center, float aspect, float angle){
 }
 
 void main(){
-    
-    
+
     float aspect = u_resolution.x / u_resolution.y;
     vec2 uv = vec2((v_uv.x - 0.5) * aspect + 0.5, v_uv.y);
 
     float t = u_totalYears;
 
-    
     float lifeFraction = clamp(u_totalYears / max(u_lifespanYears, 0.001), 0.0, 1.0);
-    float driftMul = 0.5 + 0.8 * lifeFraction; 
+    float driftMul = 0.5 + 0.8 * lifeFraction;
 
-    
     float pS = u_pAxisNorm - 0.5;
     float rS = u_rAxisNorm - 0.5;
 
-    
-    
-    
-    
-    
+    float heartPace = 0.75 + 0.50 * u_ventRateNorm;
+    float labPace   = heartPace * 0.40;
 
-    float heartPace = 0.75 + 0.50 * u_ventRateNorm; 
-    float labPace   = heartPace * 0.40;              
-
-    
     float abVR  = abs(u_ventRateNorm     - 0.5) * 2.0;
     float abPR  = abs(u_prNorm           - 0.5) * 2.0;
     float abQRS = abs(u_qrsNorm          - 0.5) * 2.0;
@@ -213,9 +203,8 @@ void main(){
     float abCO2 = abs(u_co2Norm          - 0.5) * 2.0;
     float abCa  = abs(u_calciumRadius    - 0.5) * 2.0;
 
-    float os = 0.10 * driftMul; 
+    float os = 0.10 * driftMul;
 
-    
     vec2 fVR  = vec2(0.10+0.80*u_ventRateNorm,  0.10+0.80*u_glucose)          + os*abVR  * vec2(sin(t*0.190*heartPace+1.0), cos(t*0.130*heartPace+2.0)) + 0.03*vec2(sin(u_time*0.23+1.0), cos(u_time*0.17+2.0));
     vec2 fPR  = vec2(0.10+0.80*u_prNorm,         0.10+0.80*u_eGFR)            + os*abPR  * vec2(cos(t*0.170*heartPace+3.0), sin(t*0.110*heartPace+1.5)) + 0.03*vec2(cos(u_time*0.19+3.0), sin(u_time*0.14+1.5));
     vec2 fQRS = vec2(0.10+0.80*u_qrsNorm,        0.10+0.80*u_potassium)       + os*abQRS * vec2(sin(t*0.230*heartPace+2.5), cos(t*0.150*heartPace+0.8)) + 0.03*vec2(sin(u_time*0.25+2.5), cos(u_time*0.18+0.8));
@@ -225,7 +214,6 @@ void main(){
     vec2 fTA  = vec2(0.10+0.80*u_tAxisNorm,      0.10+0.80*u_glucose)         + os*abTA  * vec2(sin(t*0.160*heartPace+3.0), cos(t*0.110*heartPace+1.0)) + 0.03*vec2(sin(u_time*0.22+3.0), cos(u_time*0.15+1.0));
     vec2 fAng = vec2(0.10+0.80*u_qrsTAngle,      0.10+0.80*u_potassium)       + os*abAng * vec2(cos(t*0.200*heartPace+2.0), sin(t*0.140*heartPace+0.3)) + 0.03*vec2(cos(u_time*0.20+2.0), sin(u_time*0.13+0.3));
 
-    
     vec2 fGlu = vec2(0.10+0.80*u_glucose,         0.10+0.80*u_eGFR)            + os*abGlu * vec2(sin(t*0.140*labPace+1.5), cos(t*0.090*labPace+3.0)) + 0.03*vec2(sin(u_time*0.16+1.5), cos(u_time*0.11+3.0));
     vec2 fBUN = vec2(0.10+0.80*u_nitrogenRadius,  0.10+0.80*(1.0-u_eGFR))     + os*abBUN * vec2(cos(t*0.120*labPace+0.8), sin(t*0.080*labPace+2.5)) + 0.03*vec2(cos(u_time*0.14+0.8), sin(u_time*0.10+2.5));
     vec2 fCr  = vec2(0.10+0.80*u_creatinineRadius,0.10+0.80*u_qtcPercentile)   + os*abCr  * vec2(sin(t*0.110*labPace+2.0), cos(t*0.070*labPace+1.0)) + 0.03*vec2(sin(u_time*0.13+2.0), cos(u_time*0.09+1.0));
@@ -236,17 +224,13 @@ void main(){
     vec2 fCO2 = vec2(0.10+0.80*u_co2Norm,         0.10+0.80*u_creatinineRadius)+ os*abCO2 * vec2(cos(t*0.100*labPace+1.5), sin(t*0.070*labPace+2.0)) + 0.03*vec2(cos(u_time*0.10+1.5), sin(u_time*0.07+2.0));
     vec2 fCa  = vec2(0.10+0.80*u_calciumRadius,   0.10+0.80*u_qtcPercentile)   + os*abCa  * vec2(sin(t*0.090*labPace+0.5), cos(t*0.060*labPace+3.0)) + 0.03*vec2(sin(u_time*0.11+0.5), cos(u_time*0.08+3.0));
 
-    
-    
     vec2 cf4 = clamp(vec2(1.0 - (0.15 + 0.55*u_glucose), 1.0 - (0.15 + 0.55*u_potassium)), 0.1, 0.9)
         + 0.06 * driftMul * vec2(cos(t*0.05*heartPace + 3.1416*u_pAxisNorm),
                                   sin(t*0.04*heartPace + 3.1416*u_rAxisNorm));
 
-    
     float bSig = 0.12;
     float sSc  = 0.07;
 
-    
     float hVR  = radians(mod(u_ventRatePct      * 360. + t *  2.1, 360.));
     float hPR  = radians(mod(u_prPct           * 360. + t * -1.8, 360.));
     float hQRS = radians(mod(u_qrsPct          * 360. + t *  2.7, 360.));
@@ -266,8 +250,6 @@ void main(){
     float hCa  = radians(mod(u_calciumRadius    * 360. + t *  1.2, 360.));
     float hInh = radians(u_inheritedHueDeg);
 
-    
-    
     float sVR=0.92+0.08*abVR;   float bVR=0.25+0.65*u_ventRateNorm;
     float sPR=0.92+0.08*abPR;   float bPR=0.25+0.65*u_prNorm;
     float sQRS=0.92+0.08*abQRS; float bQRS=0.25+0.65*u_qrsNorm;
@@ -287,7 +269,6 @@ void main(){
     float sCa=0.92+0.08*abCa;   float bCa=0.25+0.65*u_calciumRadius;
     float sInh=0.72;             float bInh=0.52+0.28*u_eGFR;
 
-    
     float w1  = fw(uv, fVR,  bSig + sSc*abVR);
     float w2  = fw(uv, fPR,  bSig + sSc*abPR);
     float w3  = fw(uv, fQRS, bSig + sSc*abQRS);
@@ -308,7 +289,6 @@ void main(){
     float w18 = fw(uv, cf4,  0.14) * u_inheritedStrength;
     float wSum = w1+w2+w3+w4+w5+w6+w7+w8+w9+w10+w11+w12+w13+w14+w15+w16+w17+w18 + 1e-6;
 
-    
     float hueX = (w1*cos(hVR)+w2*cos(hPR)+w3*cos(hQRS)+w4*cos(hPA)+w5*cos(hRA)+w6*cos(hQTc)+
                   w7*cos(hTA)+w8*cos(hAng)+w9*cos(hGlu)+w10*cos(hBUN)+w11*cos(hCr)+w12*cos(hEGF)+
                   w13*cos(hNa)+w14*cos(hK)+w15*cos(hChl)+w16*cos(hCO2)+w17*cos(hCa)+w18*cos(hInh)) / wSum;
@@ -324,11 +304,11 @@ void main(){
                         w13*bNa+w14*bK+w15*bChl+w16*bCO2+w17*bCa+w18*bInh) / wSum;
     vec3 rgbColor = hsb2rgb(blendedHue, blendedSat, blendedBri);
 
-float extremeP   = abs(pS) * 2.0;                    
-float qtcS       = u_qtcNorm - 0.5;                  
-float prS        = u_prNorm - 0.5;                   
-float vrS        = u_ventRateNorm - 0.5;             
-float tS         = u_tAxisNorm - 0.5;                
+float extremeP   = abs(pS) * 2.0;
+float qtcS       = u_qtcNorm - 0.5;
+float prS        = u_prNorm - 0.5;
+float vrS        = u_ventRateNorm - 0.5;
+float tS         = u_tAxisNorm - 0.5;
 float extremeQtc = abs(qtcS) * 2.0;
 float extremePR  = abs(prS)  * 2.0;
 float extremeVR  = abs(vrS)  * 2.0;
@@ -464,57 +444,38 @@ vec2 c2 = vec2(0.20 + 0.60 * (1.0 - u_tAxisNorm), 0.20 + 0.60 * u_qtcNorm)
 float m1  = 1. - smoothstep(caInner1, caOuter1, ellipseDist(uv, c1, caAspect, caAngle));
 float m2  = 1. - smoothstep(caInner2, caOuter2, ellipseDist(uv, c2, caAspect * 0.88, caAngle));
 float mCa = max(m1, m2);
-    
-    
+
     rgbColor = clamp(rgbColor + u_nitrogenRGB * u_nitrogenStrength * mN, 0., 1.0);
 
-    
     rgbColor = clamp(rgbColor + u_creatRGB * u_creatinineStrength * mC, 0., 1.0);
 
-    
     rgbColor = clamp(rgbColor + u_sodiumRGB * u_sodiumStrength * mNa, 0., 1.0);
 
-    
     rgbColor = clamp(rgbColor + u_chlorideRGB * strengthCl * mCl, 0., 1.0);
 
-    
     rgbColor = clamp(rgbColor + u_co2RGB * haloW, 0., 1.);
 
-    
     float darkW = smoothstep(.65, .25, lum);
     rgbColor = screenBlend(rgbColor, u_calciumRGB, u_calciumStrength * mCa * darkW);
 
     float liberated = step(0.5, u_isLiberated);
     float latePhase = smoothstep(0.70, 1.00, lifeFraction);
 
-    
-    
-    
     vec3 livingColor = rgbColor;
 
-    
-    
-    
-    
-    
     float nirvanaHue  = mod(u_glucose * 360.0, 360.0);
     float radialDist  = length(v_uv - vec2(0.5));
     float radialGlow  = exp(-radialDist * radialDist / 0.10);
-    
+
     float nirvanaPulse = 0.94 + 0.06 * sin(u_time * 0.25);
     float nirvanaBri  = (0.38 + 0.57 * radialGlow) * nirvanaPulse;
     float nirvanaSat  = 0.75 - 0.30 * radialGlow;
     vec3  nirvanaRadial = hsb2rgb(nirvanaHue, nirvanaSat, nirvanaBri);
 
-    
-    
     livingColor = mix(livingColor, nirvanaRadial, latePhase * liberated);
 
-    
     float nirvanaProgress = clamp((u_totalYears - u_lifespanYears) / 0.5, 0.0, 1.0);
 
-    
-    
     float partnerArrival = smoothstep(0.0, 0.6, u_reanimationProgress) * (1.0 - liberated);
     float lifeRestores   = smoothstep(0.5, 1.0, u_reanimationProgress) * (1.0 - liberated);
     vec2 partnerOrigin = clamp(vec2(1.0) - cf4, 0.1, 0.9);
@@ -524,17 +485,13 @@ float mCa = max(m1, m2);
     float oGlow = exp(-dot(uv - ownPos,     uv - ownPos)     / 0.14);
     vec3 meetingField = clamp(u_nirvanaRGB * oGlow + u_partnerRGB * pGlow * partnerArrival, 0.0, 1.0);
 
-    
-    
     vec3 nirvanaState = mix(u_nirvanaRGB * 0.90, meetingField, smoothstep(0.0, 0.5, u_reanimationProgress));
-    
+
     nirvanaState = mix(nirvanaState, nirvanaRadial, liberated);
 
     vec3 finalColor = mix(livingColor, nirvanaState, nirvanaProgress);
     finalColor = mix(finalColor, rgbColor, lifeRestores);
 
-    
-    
     float edgeDist = min(min(v_uv.x, 1.0 - v_uv.x), min(v_uv.y, 1.0 - v_uv.y));
     float edgeGlow = exp(-edgeDist * edgeDist / 0.003);
     float voidBri = 0.03 + 1.00 * edgeGlow;
@@ -1405,7 +1362,7 @@ let minMaxValues = {
 };
 
 healthDataSets.forEach((dataSet) => {
-  
+
   minMaxValues.ventRate.min = Math.min(
     minMaxValues.ventRate.min,
     dataSet.ecg.ventRate
@@ -1460,7 +1417,6 @@ healthDataSets.forEach((dataSet) => {
   minMaxValues.tAxis.min = Math.min(minMaxValues.tAxis.min, dataSet.ecg.tAxis);
   minMaxValues.tAxis.max = Math.max(minMaxValues.tAxis.max, dataSet.ecg.tAxis);
 
-  
   minMaxValues.glucose.min = Math.min(
     minMaxValues.glucose.min,
     dataSet.labs.glucose
@@ -1547,13 +1503,13 @@ function calculateHealthIndex(data) {
   const nQRS  = normalize(data.ecg.qrsInterval,  minMaxValues.qrsInterval.min, minMaxValues.qrsInterval.max);
 
   return (
-    (1 - nQTc)  * 0.30 +   
-    nEGFR       * 0.25 +   
-    (1 - nCr)   * 0.15 +   
-    (1 - nVent) * 0.10 +   
-    nK          * 0.07 +   
-    nCO2        * 0.07 +   
-    (1 - nQRS)  * 0.06     
+    (1 - nQTc)  * 0.30 +
+    nEGFR       * 0.25 +
+    (1 - nCr)   * 0.15 +
+    (1 - nVent) * 0.10 +
+    nK          * 0.07 +
+    nCO2        * 0.07 +
+    (1 - nQRS)  * 0.06
   );
 }
 
@@ -1593,7 +1549,7 @@ function lifespanYearsFromHashDigits(x ) {
   if (x < 5) {
     lifespan = 5 + n * 10;
   } else if (x > 95) {
-    const base = 5 + Math.pow(95 / 99, 2.5) * 35; 
+    const base = 5 + Math.pow(95 / 99, 2.5) * 35;
     lifespan = base + ((x - 95) / 4) * (65 - base);
   }
 
@@ -1619,7 +1575,7 @@ function guardHueGap(baseDeg, candDeg, minGapDeg, pushSign) {
 
 function sodiumArrivalProgress(totalYears, lifespanYears) {
   const start = 0.2 * lifespanYears;
-  const ramp = Math.max(0.1 * lifespanYears, 0.25); 
+  const ramp = Math.max(0.1 * lifespanYears, 0.25);
   return clamp((totalYears - start) / ramp, 0, 1);
 }
 
@@ -1631,7 +1587,7 @@ function sodiumTempoSeconds(ds) {
     0,
     1
   );
-  
+
   return 10 - 5.5 * nVR;
 }
 
@@ -1643,40 +1599,40 @@ function sodiumPulseCount(ds) {
     0,
     1
   );
-  const k = Math.round(3 + (1 - nQRS) * 3); 
+  const k = Math.round(3 + (1 - nQRS) * 3);
   return Math.max(3, Math.min(6, k));
 }
 
 function sodiumPhaseSeed(hashTail ) {
-  return hashTail / 99 + 0.57; 
+  return hashTail / 99 + 0.57;
 }
 
 function sodiumPulseShape(phase01, k, width = 0.12) {
   let acc = 0.0;
   for (let i = 0; i < k; i++) {
-    const c = (i + 0.5) / k; 
-    const d = Math.min(Math.abs(phase01 - c), 1 - Math.abs(phase01 - c)); 
+    const c = (i + 0.5) / k;
+    const d = Math.min(Math.abs(phase01 - c), 1 - Math.abs(phase01 - c));
     const g = Math.exp(-0.5 * Math.pow(d / Math.max(1e-3, width), 2));
     acc += g;
   }
   acc /= k;
-  return 0.25 + 0.75 * acc; 
+  return 0.25 + 0.75 * acc;
 }
 
 function sodiumAmplitude(ds, healthIndex, arrivalProgress, pNa ) {
-  const base = 0.08 + 0.12 * clamp(pNa, 0, 1); 
+  const base = 0.08 + 0.12 * clamp(pNa, 0, 1);
   const healthMul = 0.85 + 0.15 * (1 - clamp(healthIndex ?? 0.5, 0, 1));
   return arrivalProgress * base * healthMul;
 }
 
 function sodiumHueDeg(baseHueDeg, ds, pNa ) {
-  const targetOffset = -25 + 50 * clamp(pNa, 0, 1); 
+  const targetOffset = -25 + 50 * clamp(pNa, 0, 1);
   let hue = baseHueDeg + targetOffset;
 
   const wrap = (h) => ((h % 360) + 360) % 360;
   const base = wrap(baseHueDeg);
   let cand = wrap(hue);
-  let diff = Math.abs(((cand - base + 540) % 360) - 180); 
+  let diff = Math.abs(((cand - base + 540) % 360) - 180);
 
   if (diff < 36) {
     const push = (32 - diff) * Math.sign(targetOffset || 1);
@@ -1699,7 +1655,7 @@ function chlorideTempoSeconds(ds) {
     0,
     1
   );
-  return 11 - 5.5 * nQT; 
+  return 11 - 5.5 * nQT;
 }
 
 function chloridePhaseSeed(hashTail ) {
@@ -1711,13 +1667,13 @@ function chlorideTriWithWarble(phase01, ds) {
   const tMin = minMaxValues.tAxis.min,
     tMax = minMaxValues.tAxis.max;
   const nT = clamp((ds.ecg.tAxis - tMin) / Math.max(1e-6, tMax - tMin), 0, 1);
-  const wf = 1.6 + 2.2 * nT; 
+  const wf = 1.6 + 2.2 * nT;
   const war = 0.92 + 0.08 * Math.sin(2 * Math.PI * (phase01 * wf));
   return clamp(tri * war, 0, 1);
 }
 
 function chlorideAmplitude(ds, healthIndex, arrCl, pCl ) {
-  const base = 0.09 + 0.13 * clamp(pCl, 0, 1); 
+  const base = 0.09 + 0.13 * clamp(pCl, 0, 1);
   const healthMul = 0.9 + 0.1 * (1 - (healthIndex ?? 0.5));
   return arrCl * base * healthMul;
 }
@@ -1725,7 +1681,7 @@ function chlorideAmplitude(ds, healthIndex, arrCl, pCl ) {
 function chlorideHueDeg(baseHueDeg, pCl ) {
   const wrap = (h) => ((h % 360) + 360) % 360;
   const base = wrap(baseHueDeg);
-  const targetOffset = -20 + 40 * clamp(pCl, 0, 1); 
+  const targetOffset = -20 + 40 * clamp(pCl, 0, 1);
   let cand = wrap(base + targetOffset);
   const diff = Math.abs(((cand - base + 540) % 360) - 180);
   if (diff < 32) {
@@ -1767,20 +1723,18 @@ function resizeCanvasToDisplaySize(canvas) {
 }
 
 async function init() {
-  
+
   resizeCanvasToDisplaySize(canvas);
   window.addEventListener("resize", () => {
     resizeCanvasToDisplaySize(canvas);
     draw();
   });
 
-  
   const vertexSrc   = document.getElementById('vert-shader').textContent.trim();
   const fragmentSrc = document.getElementById('frag-shader').textContent.trim();
   const program = createProgram(gl, vertexSrc, fragmentSrc);
   gl.useProgram(program);
 
-  
   const positionAttribLocation = gl.getAttribLocation(program, "a_position");
   const positionBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
@@ -1794,7 +1748,6 @@ async function init() {
   gl.enableVertexAttribArray(positionAttribLocation);
   gl.vertexAttribPointer(positionAttribLocation, 2, gl.FLOAT, false, 0, 0);
 
-  
   const uTimeLoc = gl.getUniformLocation(program, "u_time");
   const uResolutionLoc = gl.getUniformLocation(program, "u_resolution");
   const uGlucoseLoc = gl.getUniformLocation(program, "u_glucose");
@@ -1854,7 +1807,6 @@ async function init() {
   const uIsLiberatedLoc            = gl.getUniformLocation(program, "u_isLiberated");
   const uVoidProgressLoc           = gl.getUniformLocation(program, "u_voidProgress");
 
-  
   const uNitrogenRadiusLoc   = gl.getUniformLocation(program, "u_nitrogenRadius");
   const uCreatinineRadiusLoc = gl.getUniformLocation(program, "u_creatinineRadius");
   const uSodiumRadiusLoc     = gl.getUniformLocation(program, "u_sodiumRadius");
@@ -1862,7 +1814,6 @@ async function init() {
   const uCalciumRadiusLoc    = gl.getUniformLocation(program, "u_calciumRadius");
   const uBunCreatRatioNormLoc = gl.getUniformLocation(program, "u_bunCreatRatioNorm");
 
-  
   const uNitrogenRGBLoc  = gl.getUniformLocation(program, "u_nitrogenRGB");
   const uCreatRGBLoc     = gl.getUniformLocation(program, "u_creatRGB");
   const uSodiumRGBLoc    = gl.getUniformLocation(program, "u_sodiumRGB");
@@ -1872,7 +1823,6 @@ async function init() {
   const uNirvanaRGBLoc   = gl.getUniformLocation(program, "u_nirvanaRGB");
   const uPartnerRGBLoc   = gl.getUniformLocation(program, "u_partnerRGB");
 
-  
   const allBunCreatRatios = healthDataSets
     .map((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine))
     .slice()
@@ -1886,7 +1836,7 @@ async function init() {
   const sortedVentRateValues  = healthDataSets.map((d) => d.ecg.ventRate).sort((a, b) => a - b);
   const sortedPRValues        = healthDataSets.map((d) => d.ecg.prInterval).sort((a, b) => a - b);
   const sortedQRSValues       = healthDataSets.map((d) => d.ecg.qrsInterval).sort((a, b) => a - b);
-  
+
   const allQrsTAngles = healthDataSets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
   const qrsTAngleMin = Math.min(...allQrsTAngles);
   const qrsTAngleMax = Math.max(...allQrsTAngles);
@@ -1894,23 +1844,18 @@ async function init() {
 
   let currentDataSetIndex = 0;
 
-  
   const lastTwoHashDigits = 88;
   const inscriptionUnixSeconds = 1704067200;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
 
-  
-  
   let inheritedHueDegOverride = null;
 
-  
   const allInheritedHues = healthDataSets.map((_, i) =>
     computeHSBFromStats(healthDataSets[Math.max(0, i - 1)], healthDataSets).hue * 360
   );
-  
-  
+
   function getPartnerIndex(idx) {
-    if (idx === 0) return -1; 
+    if (idx === 0) return -1;
     return idx % 2 === 0 ? idx + 1 : idx - 1;
   }
   function getPartnerInheritedHue(idx) {
@@ -1919,13 +1864,11 @@ async function init() {
     return allInheritedHues[p];
   }
 
-  
   let reanimationProgress = 0.0;
   let partnerInheritedHueDeg = 0.0;
   let isLiberated = 0.0;
   let voidProgress = 0.0;
 
-  
   let _recorder = null;
   window.recordCanvas = (seconds = 10) => {
     const stream = canvas.captureStream(60);
@@ -1948,10 +1891,6 @@ async function init() {
     if (seconds) setTimeout(() => { if (_recorder) _recorder.stop(); }, seconds * 1000);
   };
 
-  
-  
-  
-  
   window.addEventListener('keydown', (e) => {
     if (e.target !== document.body && e.target !== document.documentElement) return;
     const key = e.key.toUpperCase();
@@ -1970,12 +1909,12 @@ async function init() {
         _recorder.stop();
         console.log('[R] recording stopped — saving...');
       } else {
-        window.recordCanvas(0); 
+        window.recordCanvas(0);
       }
     }
 
     if (key === 'S') {
-      draw(); 
+      draw();
       canvas.toBlob((blob) => {
         const url = URL.createObjectURL(blob);
         const a   = document.createElement('a');
@@ -1988,30 +1927,25 @@ async function init() {
     }
   });
 
-  const hash01 = lastTwoHashDigits / 99; 
-  const signed = (hash01 - 0.5) * 2; 
+  const hash01 = lastTwoHashDigits / 99;
+  const signed = (hash01 - 0.5) * 2;
 
-  
-  const nudgeNa = 12 * signed; 
-  const nudgeCl = 14 * signed; 
-  const nudgeCO2 = 18 * signed;  
-  const nudgeCa = 12 * signed; 
+  const nudgeNa = 12 * signed;
+  const nudgeCl = 14 * signed;
+  const nudgeCO2 = 18 * signed;
+  const nudgeCa = 12 * signed;
 
-  
   const params = {
     overrideYears: null,
     timeWarp: 1.0,
     previewSpeedYPS: 0,
   };
 
-  
   let co2Pulse = 0,
     caPulse = 0;
 
-  
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
 
-  
   function setHSBUniforms(ds) {
     const { hue, sat, bri } = computeHSBFromStats(ds, healthDataSets);
     gl.uniform1f(uGlucoseLoc, hue);
@@ -2023,7 +1957,6 @@ async function init() {
     gl.uniform2f(uResolutionLoc, gl.canvas.width, gl.canvas.height);
   }
 
-  
   const beamPhases = {};
   const beamConfigs = [
     {
@@ -2062,7 +1995,7 @@ async function init() {
         const amp = sodiumAmplitude(ds, ds.healthIndex ?? 0.5, arr, p);
         let hue = sodiumHueDeg(baseHueDeg, ds, p) + nudgeNa;
         hue += (16 + 4 * p) * Math.sin(ph * 0.82 + 0.32);
-        
+
         const baseStr = 0.06 + 0.10 * p;
         const arrivedStr = clamp(amp * sodiumPulseShape(ph, sodiumPulseCount(ds), 0.12), 0, 1);
         const str = clamp(baseStr + arrivedStr, 0, 1);
@@ -2079,7 +2012,7 @@ async function init() {
         const amp = chlorideAmplitude(ds, ds.healthIndex ?? 0.5, arr, p);
         let hue = chlorideHueDeg(baseHueDeg, p) + nudgeCl;
         hue += (12 + 6 * p) * Math.sin(ph * 0.88 - 0.24);
-        
+
         const baseStr = 0.05 + 0.09 * p;
         const arrivedStr = clamp(amp * chlorideTriWithWarble(ph, ds), 0, 1);
         const str = clamp(baseStr + arrivedStr, 0, 1);
@@ -2114,7 +2047,6 @@ async function init() {
     },
   ];
 
-  
   function draw() {
     resizeCanvasToDisplaySize(canvas);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
@@ -2139,7 +2071,6 @@ async function init() {
       (params.overrideYears !== null ? params.overrideYears : baseYears) *
       (params.timeWarp || 1);
 
-    
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const activeDataSet = applyCollectionInfluence(
       getAgedDataset(currentDataSetIndex, lifeFraction, healthDataSets),
@@ -2151,7 +2082,6 @@ async function init() {
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);
 
-    
     const pAxisNorm = clamp(
       normalize(activeDataSet.ecg.pAxis, minMaxValues.pAxis.min, minMaxValues.pAxis.max),
       0, 1
@@ -2216,7 +2146,6 @@ async function init() {
     if (uQrsPctLoc)       gl.uniform1f(uQrsPctLoc,       qrsPct);
     if (uQrsTAnglePctLoc) gl.uniform1f(uQrsTAnglePctLoc, qrsTAnglePct);
 
-    
     const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
     const inheritedHueDeg = inheritedHueDegOverride !== null
       ? inheritedHueDegOverride
@@ -2228,12 +2157,9 @@ async function init() {
     if (uIsLiberatedLoc) gl.uniform1f(uIsLiberatedLoc, isLiberated);
     if (uVoidProgressLoc) gl.uniform1f(uVoidProgressLoc, voidProgress);
 
-    
-    const baseHSB = computeHSBFromStats(activeDataSet, healthDataSets); 
+    const baseHSB = computeHSBFromStats(activeDataSet, healthDataSets);
     let baseHueDeg = baseHSB.hue * 360.0;
 
-    
-    
     co2Pulse *= Math.exp(-dt / 18.0);
     caPulse  *= Math.exp(-dt / 26.0);
     const pCO2 = winsorizedPercentileForLab(activeDataSet, 'carbonDioxide', healthDataSets);
@@ -2243,9 +2169,6 @@ async function init() {
       0, 1
     );
 
-    
-    
-    
     const beamRGBLocs = [uNitrogenRGBLoc, uCreatRGBLoc, uSodiumRGBLoc, uChlorideRGBLoc, uCo2RGBLoc, uCalciumRGBLoc];
     const beamSat =     [0.90,            0.90,          0.94,           0.75,            0.75,        0.70];
     const beamBri =     [0.78,            0.78,          0.80,           0.85,            1.00,        0.95];
@@ -2267,11 +2190,9 @@ async function init() {
       if (beamRGBLocs[i])  gl.uniform3fv(beamRGBLocs[i], hsbToRgb(hue, beamSat[i], beamBri[i]));
     }
 
-    
     if (uNirvanaRGBLoc) gl.uniform3fv(uNirvanaRGBLoc, hsbToRgb(inheritedHueDeg, 0.85, 0.92));
     if (uPartnerRGBLoc) gl.uniform3fv(uPartnerRGBLoc, hsbToRgb(partnerInheritedHueDeg, 0.85, 0.92));
 
-    
     const bunCreatRatio = activeDataSet.labs.nitrogen / Math.max(0.1, activeDataSet.labs.creatinine);
     const bunCreatRatioNorm = clamp(
       (bunCreatRatio - bunCreatP05) / Math.max(1e-9, bunCreatP95 - bunCreatP05),
@@ -2290,7 +2211,7 @@ async function init() {
 
 function percentile(value, sortedArray) {
   const rank = sortedArray.filter((v) => v < value).length;
-  return rank / (sortedArray.length - 1); 
+  return rank / (sortedArray.length - 1);
 }
 
 function computeHSBFromStats(dataSet, healthDataSets) {
@@ -2302,9 +2223,9 @@ function computeHSBFromStats(dataSet, healthDataSets) {
   potassiumValues.sort((a, b) => a - b);
   egfrValues.sort((a, b) => a - b);
 
-  const hue = percentile(dataSet.labs.glucose, glucoseValues); 
-  const sat = percentile(dataSet.labs.potassium, potassiumValues); 
-  const bri = percentile(dataSet.labs.eGFR, egfrValues); 
+  const hue = percentile(dataSet.labs.glucose, glucoseValues);
+  const sat = percentile(dataSet.labs.potassium, potassiumValues);
+  const bri = percentile(dataSet.labs.eGFR, egfrValues);
 
   return { hue, sat, bri };
 }
@@ -2326,12 +2247,12 @@ function hsbToRgb(hDeg, s, b) {
 }
 
 const BEAM = Object.freeze({
-  NITROGEN: 0, 
-  CREATININE: 1, 
-  SODIUM: 2, 
-  CHLORIDE: 3, 
-  CO2: 4, 
-  CALCIUM: 5, 
+  NITROGEN: 0,
+  CREATININE: 1,
+  SODIUM: 2,
+  CHLORIDE: 3,
+  CO2: 4,
+  CALCIUM: 5,
 });
 
 function winsorizedPercentileForLab(
@@ -2348,7 +2269,7 @@ function winsorizedPercentileForLab(
   const p95 = values[Math.ceil(0.95 * (values.length - 1))];
   const v = dataSet.labs[labKey];
   const clamped = Math.max(p05, Math.min(p95, v));
-  return (clamped - p05) / Math.max(1e-9, p95 - p05); 
+  return (clamped - p05) / Math.max(1e-9, p95 - p05);
 }
 
 function getBreathingAmplitude(dataSet) {
@@ -2364,44 +2285,44 @@ function getBreathingAmplitude(dataSet) {
   );
   const uv = Math.abs(pv - 0.5);
   const uq = Math.abs(pq - 0.5);
-  const V = 2 * Math.max(uv, uq); 
-  let amp = 0.05 + 0.07 * V; 
+  const V = 2 * Math.max(uv, uq);
+  let amp = 0.05 + 0.07 * V;
   const extreme = pv < 0.1 || pv > 0.9 || pq < 0.1 || pq > 0.9;
-  if (extreme) amp = Math.min(0.18, amp + 0.03); 
+  if (extreme) amp = Math.min(0.18, amp + 0.03);
   return amp;
 }
 
 function getBeamTempoSeconds(dataSet, beamId) {
   switch (beamId) {
     case BEAM.NITROGEN: {
-      
+
       const vals = healthDataSets.map(d => d.labs.nitrogen).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.nitrogen, vals);
-      return 10 - 3 * p; 
+      return 10 - 3 * p;
     }
     case BEAM.CREATININE: {
-      
+
       const prNorm = clamp(
         (dataSet.ecg.prInterval - minMaxValues.prInterval.min) /
         Math.max(1e-6, minMaxValues.prInterval.max - minMaxValues.prInterval.min),
         0, 1
       );
-      return 9 + 6 * prNorm; 
+      return 9 + 6 * prNorm;
     }
     case BEAM.CO2: {
-      
+
       const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.eGFR, vals);
-      return 12 + 8 * p; 
+      return 12 + 8 * p;
     }
     case BEAM.CALCIUM: {
-      
+
       const tNorm = clamp(
         (dataSet.ecg.tAxis - minMaxValues.tAxis.min) /
         Math.max(1e-6, minMaxValues.tAxis.max - minMaxValues.tAxis.min),
         0, 1
       );
-      return 18 + 12 * (1 - tNorm); 
+      return 18 + 12 * (1 - tNorm);
     }
     default:
       return 12.0;
@@ -2413,20 +2334,19 @@ function getBeamHueAnchorDeg(dataSet, beamId) {
   const baseDeg = hue * 360.0;
   switch (beamId) {
     case BEAM.NITROGEN: {
-      
-      
+
       const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.eGFR, vals);
-      return baseDeg + (p - 0.5) * 160; 
+      return baseDeg + (p - 0.5) * 160;
     }
     case BEAM.CREATININE: {
-      
+
       const vals = healthDataSets.map(d => d.labs.potassium).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.potassium, vals);
-      return baseDeg + (p - 0.5) * 120; 
+      return baseDeg + (p - 0.5) * 120;
     }
     default:
-      return baseDeg; 
+      return baseDeg;
   }
 }
 

@@ -43,6 +43,7 @@ mainJs = mainJs.replace(
 function stripComments(src) {
   src = src.replace(/\/\*[\s\S]*?\*\//g, '');   // block comments
   src = src.replace(/\/\/[^\n]*/g, '');          // line comments
+  src = src.replace(/[ \t]+$/gm, '');            // trailing whitespace
   src = src.replace(/\n{3,}/g, '\n\n');          // collapse blank lines
   return src;
 }

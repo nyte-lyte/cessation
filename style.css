@@ -58,5 +58,5 @@ body {
 #canvas-container:fullscreen {
     width: 100vw;
     height: 100vh;
-    border: clamp(20px, 5vmin, 60px) solid black;
+    border: clamp(12px, 3vmin, 36px) solid black;
 }
