@@ -5,8 +5,8 @@
 const { readFileSync, writeFileSync } = require('fs');
 
 // ── Read source files ─────────────────────────────────────────
-const vertGlsl     = readFileSync('./src/shaders/vertex.glsl',   'utf8');
-const fragGlsl     = readFileSync('./src/shaders/fragment.glsl', 'utf8');
+let   vertGlsl     = readFileSync('./src/shaders/vertex.glsl',   'utf8');
+let   fragGlsl     = readFileSync('./src/shaders/fragment.glsl', 'utf8');
 const css          = readFileSync('./style.css',                  'utf8');
 let   decayLogic   = readFileSync('./data/decay_logic.js',        'utf8');
 let   healthData   = readFileSync('./data/health_data_sets.js',   'utf8');
@@ -38,6 +38,19 @@ mainJs = mainJs.replace(
   /\/\/ load and compile shaders:\n\s*const vertexSrc\s*=\s*await loadShaderSource\("[^"]+"\);\n\s*const fragmentSrc\s*=\s*await loadShaderSource\("[^"]+"\);/,
   `// load and compile shaders (inlined):\n  const vertexSrc   = document.getElementById('vert-shader').textContent.trim();\n  const fragmentSrc = document.getElementById('frag-shader').textContent.trim();`
 );
+
+// ── Strip comments from all sources ─────────────────────────
+function stripComments(src) {
+  src = src.replace(/\/\*[\s\S]*?\*\//g, '');   // block comments
+  src = src.replace(/\/\/[^\n]*/g, '');          // line comments
+  src = src.replace(/\n{3,}/g, '\n\n');          // collapse blank lines
+  return src;
+}
+vertGlsl   = stripComments(vertGlsl);
+fragGlsl   = stripComments(fragGlsl);
+decayLogic = stripComments(decayLogic);
+healthData = stripComments(healthData);
+mainJs     = stripComments(mainJs);
 
 // ── Strip fs-overlay CSS (element removed) ───────────────────
 const cssClean = css
