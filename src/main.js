@@ -374,11 +374,12 @@ async function init() {
   const qrsTAngleMax = Math.max(...allQrsTAngles);
   const sortedQRSTAngleValues = [...allQrsTAngles].sort((a, b) => a - b);
 
-  let currentDataSetIndex = 0;
-
-  // TODO: replace with real chain values
-  const lastTwoHashDigits = 88;
-  const inscriptionUnixSeconds = 1704067200;
+  const currentDataSetIndex      = /*BAKE:DATASET_INDEX*/5;
+  const lastTwoHashDigits        = /*BAKE:HASH_DIGITS*/88;
+  const inscriptionUnixSeconds   = /*BAKE:INSCRIPTION_UNIX*/1704067200;
+  const reanimationCycleSeconds  = /*BAKE:REANIMATE_CYCLE_SECS*/0;
+  const BAKED_IS_LIBERATED       = /*BAKE:IS_LIBERATED*/0.0;
+  const BAKED_VOID_PROGRESS      = /*BAKE:VOID_PROGRESS*/0.0;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
 
   // Inherited hue — piece N inherits piece N-1's glucose hue (from allInheritedHues).
@@ -405,20 +406,21 @@ async function init() {
     return allInheritedHues[p];
   }
 
-  // Entropy pool / reanimation state (dev — set by chain data at mint time)
-  let reanimationProgress = 0.0;
-  let partnerInheritedHueDeg = 0.0;
-  let isLiberated = 0.0;
-  let voidProgress = 0.0;
+  // Entropy pool / reanimation state — baked at mint time, reanimationProgress computed live
+  let partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
+  let isLiberated = BAKED_IS_LIBERATED;
+  let voidProgress = BAKED_VOID_PROGRESS;
   // DEV_START
-  // setReanimation(0..1) — auto-uses correct partner hue for current dataset
+  // setReanimation(0..1) — override reanimation progress for dev preview
+  let __reanimationOverride = null;
   window.setReanimation = (p) => {
-    reanimationProgress = Math.max(0, Math.min(1, Number(p)));
+    __reanimationOverride = Math.max(0, Math.min(1, Number(p)));
     partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
     const pi = getPartnerIndex(currentDataSetIndex);
     if (pi < 0) console.warn('Piece 0 is genesis — no reanimation partner.');
-    else console.log(`Reanimation: piece ${currentDataSetIndex} ↔ piece ${pi} | partner hue: ${partnerInheritedHueDeg.toFixed(1)}°`);
+    else console.log(`Reanimation override: ${__reanimationOverride.toFixed(3)} | piece ${currentDataSetIndex} ↔ piece ${pi} | partner hue: ${partnerInheritedHueDeg.toFixed(1)}°`);
   };
+  window.clearReanimation = () => { __reanimationOverride = null; };
   // setLiberated(bool) — simulate karma exhaustion and liberation (final cycle)
   window.setLiberated = (v) => {
     isLiberated = v ? 1.0 : 0.0;
@@ -674,6 +676,9 @@ async function init() {
     window.__lastT = t;
 
     const nowUnix = Math.floor(Date.now() / 1000);
+    const reanimationProgress = (typeof __reanimationOverride !== 'undefined' && __reanimationOverride !== null)
+      ? __reanimationOverride
+      : (reanimationCycleSeconds > 0 ? clamp((nowUnix - inscriptionUnixSeconds) / reanimationCycleSeconds, 0, 1) : 0.0);
     const baseYears =
       Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
 
