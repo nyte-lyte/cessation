@@ -1675,7 +1675,8 @@ function lifespanYearsFromHashDigits(x /* 0..99 */) {
   if (x < 5) {
     lifespan = 5 + n * 10;
   } else if (x > 95) {
-    lifespan = 40 + n * 25;
+    const base = 5 + Math.pow(95 / 99, 2.5) * 35; // ~36.6 — continuous with main formula at x=95
+    lifespan = base + ((x - 95) / 4) * (65 - base);
   }
 
   return lifespan;
