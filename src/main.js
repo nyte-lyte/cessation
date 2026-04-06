@@ -422,12 +422,19 @@ async function init() {
   window.resetInheritedHue = () => { inheritedHueDegOverride = null; };
   // DEV_END
 
-  // window.PIECE bootstrap — child pieces (1-28) set this before loading inscription 0
-  if (window.PIECE) {
-    currentDataSetIndex    = window.PIECE.datasetIndex;
-    lastTwoHashDigits      = window.PIECE.hashTail;
-    inscriptionUnixSeconds = window.PIECE.inscriptionUnix;
-    if (window.PIECE.inheritedHueDeg != null) inheritedHueDegOverride = window.PIECE.inheritedHueDeg;
+  // URL hash bootstrap — child pieces (1-28) iframe piece 0 with params in the hash.
+  // Format: #idx=N&ht=H&unix=U&hue=D&block=B
+  // Runs inside the iframe (piece 0 context) so /r/children/self still resolves correctly.
+  const _hp = {};
+  window.location.hash.slice(1).split('&').forEach(p => {
+    const eq = p.indexOf('=');
+    if (eq > 0) _hp[p.slice(0, eq)] = p.slice(eq + 1);
+  });
+  if (_hp.idx) {
+    currentDataSetIndex    = parseInt(_hp.idx);
+    lastTwoHashDigits      = parseInt(_hp.ht) || lastTwoHashDigits;
+    inscriptionUnixSeconds = parseInt(_hp.unix) || inscriptionUnixSeconds;
+    if (_hp.hue != null) inheritedHueDegOverride = parseFloat(_hp.hue);
   }
 
   // Precompute inherited hues for all pieces (piece N inherits piece N-1's glucose hue)
@@ -450,9 +457,9 @@ async function init() {
   let partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
   let isLiberated = BAKED_IS_LIBERATED;
   let voidProgress = BAKED_VOID_PROGRESS;
+  let __reanimationOverride = null; // declared outside DEV block so bundle can reference it safely
   // DEV_START
   // setReanimation(0..1) — override reanimation progress for dev preview
-  let __reanimationOverride = null;
   window.setReanimation = (p) => {
     __reanimationOverride = Math.max(0, Math.min(1, Number(p)));
     partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
@@ -649,8 +656,14 @@ async function init() {
   // Main lifecycle init — non-blocking, piece renders immediately with local fallback
   async function initLifecycle() {
     try {
-      const selfInfo = await fetch('/r/inscription/self').then(r => r.json());
-      lc.ownBlockHeight  = selfInfo.height ?? 0;
+      // _hp.block is set by child pieces (1-28) via iframe hash params — use it directly.
+      // Piece 0 fetches its own block height from /r/inscription/self.
+      if (_hp.block) {
+        lc.ownBlockHeight = parseInt(_hp.block);
+      } else {
+        const selfInfo = await fetch('/r/inscription/self').then(r => r.json());
+        lc.ownBlockHeight = selfInfo.height ?? 0;
+      }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
       await lcRefreshSiblings();
@@ -899,7 +912,7 @@ async function init() {
     const nowUnix = Math.floor(Date.now() / 1000);
     // Sync from lifecycle engine each frame
     lcTick(Date.now());
-    const reanimationProgress = (__reanimationOverride !== null)
+    const reanimationProgress = (typeof __reanimationOverride !== 'undefined' && __reanimationOverride !== null)
       ? __reanimationOverride
       : lc.reanimationProgress;
     if (lc.ready) {

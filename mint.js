@@ -8,6 +8,45 @@
 //
 // Output: dist/cessation_piece_XX.html — ready to inscribe.
 // main.js is restored to dev defaults after the build.
+//
+// ── Per-piece thumbnail gradients ────────────────────────────────────────────
+// Set a custom CSS gradient string per piece index, or leave null to use the
+// auto-computed data-driven gradient (glucose hue → dark radial glow).
+// Example: "radial-gradient(ellipse at 40% 55%, #a0246a 0%, #0d0408 70%)"
+// Tracker-matched gradients: linear-gradient(90deg, hex1, hex2)
+// hex1 = circular mean of 8 ECG field hues, hex2 = circular mean of 9 lab field hues.
+// Matches exactly what cessation-tracker shows on each PieceCard thumbnail.
+const CUSTOM_GRADIENTS = {
+  0:  "linear-gradient(90deg, #d12acf, #c2d12a)",  // 2018-07-16
+  1:  "linear-gradient(90deg, #2ad181, #d1bd2a)",  // 2018-10-04
+  2:  "linear-gradient(90deg, #36d12a, #2a43d1)",  // 2019-01-24
+  3:  "linear-gradient(90deg, #56d12a, #2a67d1)",  // 2019-04-24
+  4:  "linear-gradient(90deg, #4ad12a, #d1632a)",  // 2019-07-31
+  5:  "linear-gradient(90deg, #c12ad1, #2a95d1)",  // 2020-02-07
+  6:  "linear-gradient(90deg, #d12ab2, #d12a78)",  // 2020-02-28
+  7:  "linear-gradient(90deg, #d15b2a, #d1452a)",  // 2020-03-13
+  8:  "linear-gradient(90deg, #3b2ad1, #3f2ad1)",  // 2020-05-22
+  9:  "linear-gradient(90deg, #2a44d1, #d12ab3)",  // 2020-08-11
+  10: "linear-gradient(90deg, #d14b2a, #2a9ad1)",  // 2020-11-12
+  11: "linear-gradient(90deg, #c82ad1, #d1a92a)",  // 2021-02-24
+  12: "linear-gradient(90deg, #2ad157, #2c2ad1)",  // 2021-09-01
+  13: "linear-gradient(90deg, #d19c2a, #d1492a)",  // 2021-12-01
+  14: "linear-gradient(90deg, #d12a6d, #d1862a)",  // 2022-02-14
+  15: "linear-gradient(90deg, #2ad170, #d1482a)",  // 2022-05-13
+  16: "linear-gradient(90deg, #d18d2a, #2aafd1)",  // 2022-08-25
+  17: "linear-gradient(90deg, #d12a7b, #d1652a)",  // 2023-06-12
+  18: "linear-gradient(90deg, #2a84d1, #d1672a)",  // 2023-09-05
+  19: "linear-gradient(90deg, #8cd12a, #81d12a)",  // 2023-12-05
+  20: "linear-gradient(90deg, #d12ad0, #2cd12a)",  // 2024-02-05
+  21: "linear-gradient(90deg, #2ad1bf, #91d12a)",  // 2024-06-10
+  22: "linear-gradient(90deg, #d12ab2, #bfd12a)",  // 2024-09-16
+  23: "linear-gradient(90deg, #2a6ed1, #2ad16b)",  // 2024-12-30
+  24: "linear-gradient(90deg, #d12a36, #2ad1a0)",  // 2025-03-26
+  25: "linear-gradient(90deg, #d12a89, #2ad132)",  // 2025-06-18
+  26: "linear-gradient(90deg, #d12a4a, #d18a2a)",  // 2025-09-12
+  27: "linear-gradient(90deg, #2a9fd1, #2a2bd1)",  // 2025-12-11
+  28: "linear-gradient(90deg, #2a35d1, #2ab7d1)",  // 2026-03-20
+};
 
 'use strict';
 const { readFileSync, writeFileSync, copyFileSync, mkdirSync, existsSync } = require('fs');
@@ -110,6 +149,11 @@ const partnerInheritedHueDeg = getPartnerInheritedHue(pieceIndex);
 const BAKED_IS_LIBERATED     = 0.0;
 const BAKED_VOID_PROGRESS    = 0.0;
 
+// Preview gradient — custom override or auto-computed from glucose hue
+const _autoHue = Math.round(computeHSBFromStats(healthDataSets[pieceIndex], healthDataSets).hue * 360);
+const previewGradient = CUSTOM_GRADIENTS[pieceIndex] ||
+  `radial-gradient(ellipse at 50% 60%, hsl(${_autoHue}, 55%, 22%) 0%, hsl(${_autoHue}, 40%, 8%) 70%)`;
+
 const partnerIdx          = getPartnerIndex(pieceIndex);
 const liberationThreshold = computeLiberationThreshold(healthDataSets, minMaxValues);
 let karma = null;
@@ -158,10 +202,10 @@ if (pieceIndex === 0) {
   let mainJs = readFileSync(mainJsPath, 'utf8');
   const mainJsOriginal = mainJs;
 
-  function bakeValue(src, marker, value) {
-    const re = new RegExp(`(/\\*BAKE:${marker}\\*/)([^;,)\\n]+)`);
+  function bakeValue(src, marker, value, all = false) {
+    const re = new RegExp(`(/\\*BAKE:${marker}\\*/)([^;,)\\n]+)`, all ? 'g' : '');
     if (!re.test(src)) throw new Error(`Bake marker not found: BAKE:${marker}`);
-    return src.replace(re, `$1${value}`);
+    return src.replace(new RegExp(`(/\\*BAKE:${marker}\\*/)([^;,)\\n]+)`, all ? 'g' : ''), `$1${value}`);
   }
 
   mainJs = bakeValue(mainJs, 'DATASET_INDEX',    pieceIndex);
@@ -184,7 +228,10 @@ if (pieceIndex === 0) {
 
   const outputName = `cessation_piece_00.html`;
   const outputDest = path.join(distDir, outputName);
-  copyFileSync(path.join(__dirname, 'index_bundle.html'), outputDest);
+  // Inject thumbnail gradient as CSS (visible before WebGL loads, used by ord's renderer)
+  let bundleHtml = readFileSync(path.join(__dirname, 'index_bundle.html'), 'utf8');
+  bundleHtml = bundleHtml.replace('</head>', `<style>#canvas,canvas{background:${previewGradient};}</style></head>`);
+  writeFileSync(outputDest, bundleHtml, 'utf8');
 
   writeFileSync(mainJsPath, mainJsOriginal, 'utf8');
   console.log('Restored src/main.js to dev defaults.\n');
@@ -192,39 +239,35 @@ if (pieceIndex === 0) {
   console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --file dist/${outputName} --json-metadata dist/${metadataName}\n`);
 
 } else {
-  // ── Pieces 1-28: generate thin HTML payload referencing inscription 0 ──────
-  // Usage: node mint.js <index> <hash> <unixTimestamp> <inscription0Id>
+  // ── Pieces 1-28: thin iframe HTML — embeds piece 0 with params in URL hash ──
+  // Usage: node mint.js <index> <hash> <unixTimestamp> <inscription0Id> <blockHeight>
+  //
+  // The iframe loads piece 0's HTML at /content/{piece0Id}#idx=N&ht=H&unix=U&hue=D&block=B
+  // Inside the iframe, piece 0's engine reads the hash and renders as piece N.
+  // /r/children/self inside the iframe resolves to piece 0's children — correct.
   //
   const inscription0Id = process.argv[5];
+  const blockHeight    = parseInt(process.argv[6], 10);
   if (!inscription0Id) {
     console.error('Error: pieces 1-28 require a 4th argument — the inscription 0 ID');
-    console.error('  node mint.js 3 <blockHash> <blockTimestamp> <inscription0Id>');
+    console.error('  node mint.js 3 <blockHash> <blockTimestamp> <inscription0Id> <blockHeight>');
+    process.exit(1);
+  }
+  if (isNaN(blockHeight) || blockHeight < 0) {
+    console.error('Error: pieces 1-28 require a 5th argument — the block height at inscription time');
+    console.error('  node mint.js 3 <blockHash> <blockTimestamp> <inscription0Id> <blockHeight>');
     process.exit(1);
   }
 
-  const inheritedHueDeg = partnerInheritedHueDeg; // piece N inherits piece N-1's glucose hue
-  const thinHtml = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body>
-<script>
-const PIECE = {
-  datasetIndex:    ${pieceIndex},
-  hashTail:        ${lastTwoHashDigits},
-  inscriptionUnix: ${inscriptionUnixSeconds},
-  inheritedHueDeg: ${inheritedHueDeg.toFixed(4)},
-  dataset:         ${JSON.stringify(healthDataSets[pieceIndex])},
-};
-</script>
-<script src="/content/${inscription0Id}"></script>
-</body>
-</html>`;
+  const hue = partnerInheritedHueDeg.toFixed(4);
+  const hashParams = `idx=${pieceIndex}&ht=${lastTwoHashDigits}&unix=${inscriptionUnixSeconds}&hue=${hue}&block=${blockHeight}`;
+  const iframeHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;}body{background:${previewGradient};}iframe{display:block;width:100vw;height:100vh;border:0;}</style></head><body><iframe src="/content/${inscription0Id}#${hashParams}" scrolling="no"></iframe></body></html>`;
 
   const outputName = `cessation_piece_${String(pieceIndex).padStart(2, '0')}.html`;
   const outputDest = path.join(distDir, outputName);
-  writeFileSync(outputDest, thinHtml, 'utf8');
+  writeFileSync(outputDest, iframeHtml, 'utf8');
 
-  console.log(`Thin payload written: dist/${outputName}  (${thinHtml.length} bytes)`);
+  console.log(`iframe payload written: dist/${outputName}  (${iframeHtml.length} bytes)`);
   console.log(`Ready to inscribe: dist/${outputName}`);
   console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --parent ${inscription0Id} --file dist/${outputName} --json-metadata dist/${metadataName}\n`);
 }
