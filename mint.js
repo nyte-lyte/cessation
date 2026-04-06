@@ -104,30 +104,11 @@ function getPartnerInheritedHue(idx) {
   return allInheritedHues[p];
 }
 
-// ── Compute reanimationCycleSeconds ──────────────────────────────────────────
-// Karma of the blended pair determines cycle length.
-// Range: 30 days (healthy pair) → 3 years (heavy disease burden).
+// ── Compute baked values ──────────────────────────────────────────────────────
 
-const CYCLE_MIN_SECS = 30  * 24 * 3600;       // 30 days
-const CYCLE_MAX_SECS = 3 * 365 * 24 * 3600;   // 3 years
-
-function computeReanimationCycleSeconds(idx) {
-  const p = getPartnerIndex(idx);
-  if (p < 0 || p >= healthDataSets.length) return 0; // genesis or unpaired
-  const [a, b] = idx % 2 === 0
-    ? [healthDataSets[idx + 1], healthDataSets[idx]]
-    : [healthDataSets[idx],     healthDataSets[idx - 1]];
-  const blended = blendDatasets(a, b);
-  const karma   = computeKarma(blended, minMaxValues);
-  return Math.round(CYCLE_MIN_SECS + karma * (CYCLE_MAX_SECS - CYCLE_MIN_SECS));
-}
-
-// ── Compute all baked values ──────────────────────────────────────────────────
-
-const partnerInheritedHueDeg  = getPartnerInheritedHue(pieceIndex);
-const reanimationCycleSeconds = computeReanimationCycleSeconds(pieceIndex);
-const BAKED_IS_LIBERATED      = 0.0;
-const BAKED_VOID_PROGRESS     = 0.0;
+const partnerInheritedHueDeg = getPartnerInheritedHue(pieceIndex);
+const BAKED_IS_LIBERATED     = 0.0;
+const BAKED_VOID_PROGRESS    = 0.0;
 
 const partnerIdx          = getPartnerIndex(pieceIndex);
 const liberationThreshold = computeLiberationThreshold(healthDataSets, minMaxValues);
@@ -148,57 +129,102 @@ console.log(`  Block hash (last 2 hex)  : ...${rawHash.slice(-2)} → lastTwoHas
 console.log(`  Inscription Unix time    : ${inscriptionUnixSeconds}  (${new Date(inscriptionUnixSeconds * 1000).toISOString()})`);
 console.log(`  Partner index            : ${partnerIdx >= 0 ? partnerIdx : 'none'}`);
 console.log(`  partnerInheritedHueDeg   : ${partnerInheritedHueDeg.toFixed(2)}°`);
-console.log(`  reanimationCycleSeconds  : ${reanimationCycleSeconds}  (${(reanimationCycleSeconds / 86400).toFixed(1)} days)`);
 if (karma !== null) {
   console.log(`  Pair karma               : ${karma.toFixed(4)}  |  threshold: ${liberationThreshold.toFixed(4)}  |  liberated at full cycle: ${karma < liberationThreshold}`);
 }
 console.log('');
 
-// ── Patch main.js ─────────────────────────────────────────────────────────────
+// ── Shared: generate metadata JSON for --json-metadata flag ───────────────────
+// Stored as CBOR in the inscription's metadata field — readable on-chain via /r/metadata/{id}.
+// pieceIndex + hashTail + inscriptionUnix enable partner cycle computation at runtime.
 
-const mainJsPath = path.join(__dirname, 'src', 'main.js');
-let mainJs = readFileSync(mainJsPath, 'utf8');
-const mainJsOriginal = mainJs;
-
-function bakeValue(src, marker, value) {
-  const re = new RegExp(`(/\\*BAKE:${marker}\\*/)([^;,)\\n]+)`);
-  if (!re.test(src)) throw new Error(`Bake marker not found: BAKE:${marker}`);
-  return src.replace(re, `$1${value}`);
-}
-
-mainJs = bakeValue(mainJs, 'DATASET_INDEX',        pieceIndex);
-mainJs = bakeValue(mainJs, 'HASH_DIGITS',          lastTwoHashDigits);
-mainJs = bakeValue(mainJs, 'INSCRIPTION_UNIX',     inscriptionUnixSeconds);
-mainJs = bakeValue(mainJs, 'REANIMATE_CYCLE_SECS', reanimationCycleSeconds);
-mainJs = bakeValue(mainJs, 'IS_LIBERATED',         BAKED_IS_LIBERATED.toFixed(1));
-mainJs = bakeValue(mainJs, 'VOID_PROGRESS',        BAKED_VOID_PROGRESS.toFixed(1));
-
-writeFileSync(mainJsPath, mainJs, 'utf8');
-console.log('Patched src/main.js.');
-
-// ── Build ─────────────────────────────────────────────────────────────────────
-
-try {
-  execSync(`"${process.execPath}" build.js`, { stdio: 'pipe', cwd: __dirname });
-} catch (e) {
-  // Restore main.js before exiting on build failure
-  writeFileSync(mainJsPath, mainJsOriginal, 'utf8');
-  console.error('\nBuild failed:', e.message);
-  if (e.output) console.error(e.output.map(b => b?.toString()).join('\n'));
-  process.exit(1);
-}
-
-// ── Copy output to dist/ ──────────────────────────────────────────────────────
-
+const metadataObj = {
+  pieceIndex:      pieceIndex,
+  hashTail:        lastTwoHashDigits,
+  inscriptionUnix: inscriptionUnixSeconds,
+  dataset:         healthDataSets[pieceIndex],
+};
+const metadataName = `cessation_piece_${String(pieceIndex).padStart(2, '0')}_metadata.json`;
 const distDir  = path.join(__dirname, 'dist');
 if (!existsSync(distDir)) mkdirSync(distDir);
+writeFileSync(path.join(distDir, metadataName), JSON.stringify(metadataObj, null, 2), 'utf8');
+console.log(`Metadata JSON written: dist/${metadataName}`);
+console.log(`  Use with: ord wallet inscribe --json-metadata dist/${metadataName}\n`);
 
-const outputName = `cessation_piece_${String(pieceIndex).padStart(2, '0')}.html`;
-const outputDest = path.join(distDir, outputName);
-copyFileSync(path.join(__dirname, 'index_bundle.html'), outputDest);
+// ── Piece 0: bake full engine bundle ─────────────────────────────────────────
 
-// ── Restore main.js to dev defaults ──────────────────────────────────────────
+if (pieceIndex === 0) {
+  const mainJsPath = path.join(__dirname, 'src', 'main.js');
+  let mainJs = readFileSync(mainJsPath, 'utf8');
+  const mainJsOriginal = mainJs;
 
-writeFileSync(mainJsPath, mainJsOriginal, 'utf8');
-console.log('Restored src/main.js to dev defaults.\n');
-console.log(`Ready to inscribe: dist/${outputName}\n`);
+  function bakeValue(src, marker, value) {
+    const re = new RegExp(`(/\\*BAKE:${marker}\\*/)([^;,)\\n]+)`);
+    if (!re.test(src)) throw new Error(`Bake marker not found: BAKE:${marker}`);
+    return src.replace(re, `$1${value}`);
+  }
+
+  mainJs = bakeValue(mainJs, 'DATASET_INDEX',    pieceIndex);
+  mainJs = bakeValue(mainJs, 'HASH_DIGITS',      lastTwoHashDigits);
+  mainJs = bakeValue(mainJs, 'INSCRIPTION_UNIX', inscriptionUnixSeconds);
+  mainJs = bakeValue(mainJs, 'IS_LIBERATED',     BAKED_IS_LIBERATED.toFixed(1));
+  mainJs = bakeValue(mainJs, 'VOID_PROGRESS',    BAKED_VOID_PROGRESS.toFixed(1));
+
+  writeFileSync(mainJsPath, mainJs, 'utf8');
+  console.log('Patched src/main.js.');
+
+  try {
+    execSync(`"${process.execPath}" build.js`, { stdio: 'pipe', cwd: __dirname });
+  } catch (e) {
+    writeFileSync(mainJsPath, mainJsOriginal, 'utf8');
+    console.error('\nBuild failed:', e.message);
+    if (e.output) console.error(e.output.map(b => b?.toString()).join('\n'));
+    process.exit(1);
+  }
+
+  const outputName = `cessation_piece_00.html`;
+  const outputDest = path.join(distDir, outputName);
+  copyFileSync(path.join(__dirname, 'index_bundle.html'), outputDest);
+
+  writeFileSync(mainJsPath, mainJsOriginal, 'utf8');
+  console.log('Restored src/main.js to dev defaults.\n');
+  console.log(`Ready to inscribe: dist/${outputName}`);
+  console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --file dist/${outputName} --json-metadata dist/${metadataName}\n`);
+
+} else {
+  // ── Pieces 1-28: generate thin HTML payload referencing inscription 0 ──────
+  // Usage: node mint.js <index> <hash> <unixTimestamp> <inscription0Id>
+  //
+  const inscription0Id = process.argv[5];
+  if (!inscription0Id) {
+    console.error('Error: pieces 1-28 require a 4th argument — the inscription 0 ID');
+    console.error('  node mint.js 3 <blockHash> <blockTimestamp> <inscription0Id>');
+    process.exit(1);
+  }
+
+  const inheritedHueDeg = partnerInheritedHueDeg; // piece N inherits piece N-1's glucose hue
+  const thinHtml = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<script>
+const PIECE = {
+  datasetIndex:    ${pieceIndex},
+  hashTail:        ${lastTwoHashDigits},
+  inscriptionUnix: ${inscriptionUnixSeconds},
+  inheritedHueDeg: ${inheritedHueDeg.toFixed(4)},
+  dataset:         ${JSON.stringify(healthDataSets[pieceIndex])},
+};
+</script>
+<script src="/content/${inscription0Id}"></script>
+</body>
+</html>`;
+
+  const outputName = `cessation_piece_${String(pieceIndex).padStart(2, '0')}.html`;
+  const outputDest = path.join(distDir, outputName);
+  writeFileSync(outputDest, thinHtml, 'utf8');
+
+  console.log(`Thin payload written: dist/${outputName}  (${thinHtml.length} bytes)`);
+  console.log(`Ready to inscribe: dist/${outputName}`);
+  console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --parent ${inscription0Id} --file dist/${outputName} --json-metadata dist/${metadataName}\n`);
+}
