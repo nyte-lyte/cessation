@@ -1,1 +1,3 @@
 memory/*.png
+ord-env/regtest/
+node_modules/
