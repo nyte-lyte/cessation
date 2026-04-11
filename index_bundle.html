@@ -1842,10 +1842,12 @@ async function init() {
   const qrsTAngleMax = Math.max(...allQrsTAngles);
   const sortedQRSTAngleValues = [...allQrsTAngles].sort((a, b) => a - b);
 
-  let currentDataSetIndex = 5;
-
-  const lastTwoHashDigits = 88;
-  const inscriptionUnixSeconds = 1704067200;
+  const currentDataSetIndex      = 5;
+  const lastTwoHashDigits        = 88;
+  const inscriptionUnixSeconds   = 1704067200;
+  const reanimationCycleSeconds  = 0;
+  const BAKED_IS_LIBERATED       = 0.0;
+  const BAKED_VOID_PROGRESS      = 0.0;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
 
   let inheritedHueDegOverride = null;
@@ -1864,10 +1866,9 @@ async function init() {
     return allInheritedHues[p];
   }
 
-  let reanimationProgress = 0.0;
-  let partnerInheritedHueDeg = 0.0;
-  let isLiberated = 0.0;
-  let voidProgress = 0.0;
+  let partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
+  let isLiberated = BAKED_IS_LIBERATED;
+  let voidProgress = BAKED_VOID_PROGRESS;
 
   let _recorder = null;
   window.recordCanvas = (seconds = 10) => {
@@ -2060,6 +2061,9 @@ async function init() {
     window.__lastT = t;
 
     const nowUnix = Math.floor(Date.now() / 1000);
+    const reanimationProgress = (typeof __reanimationOverride !== 'undefined' && __reanimationOverride !== null)
+      ? __reanimationOverride
+      : (reanimationCycleSeconds > 0 ? clamp((nowUnix - inscriptionUnixSeconds) / reanimationCycleSeconds, 0, 1) : 0.0);
     const baseYears =
       Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
 
