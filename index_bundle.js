@@ -1,8 +1,7 @@
 const _selfScript = document.currentScript;
-const _previewGradient = /*BAKE:PREVIEW_GRADIENT*/'linear-gradient(90deg,#888888,#888888)';
 (function(){
 const _style = document.createElement('style');
-_style.textContent = (_selfScript ? '' : 'html,body{background:' + _previewGradient + '}') + `body{margin:0;padding:0;height:100vh;width:100vw;display:flex;justify-content:center;align-items:center;}#canvas-container{box-sizing:border-box;width:min(100vw, 100vh);height:min(100vw, 100vh);display:flex;justify-content:center;align-items:center;border:125px solid black;background-color:black;}#canvas{display:block;aspect-ratio:3 / 2;max-width:100%;max-height:100%;}#canvas-container{position:relative;}#canvas-container:fullscreen{width:100vw;height:100vh;border:clamp(12px, 3vmin, 36px) solid black;}`;
+_style.textContent = 'html,body{background:#000}' + `body{margin:0;padding:0;height:100vh;width:100vw;display:flex;justify-content:center;align-items:center;}#canvas-container{box-sizing:border-box;width:min(100vw, 100vh);height:min(100vw, 100vh);display:flex;justify-content:center;align-items:center;border:125px solid black;background-color:black;}#canvas{display:block;aspect-ratio:3 / 2;max-width:100%;max-height:100%;}#canvas-container{position:relative;}#canvas-container:fullscreen{width:100vw;height:100vh;border:clamp(12px, 3vmin, 36px) solid black;}`;
 (document.head || document.documentElement).appendChild(_style);
 const _cc = document.createElement('div');
 _cc.id = 'canvas-container';
@@ -1813,9 +1812,9 @@ async function init() {
   const qrsTAngleMax = Math.max(...allQrsTAngles);
   const sortedQRSTAngleValues = [...allQrsTAngles].sort((a, b) => a - b);
 
-  let currentDataSetIndex      = /*BAKE:DATASET_INDEX*/0;
-  let lastTwoHashDigits        = /*BAKE:HASH_DIGITS*/25;
-  let inscriptionUnixSeconds   = /*BAKE:INSCRIPTION_UNIX*/1712345678;
+  let currentDataSetIndex      = /*BAKE:DATASET_INDEX*/5;
+  let lastTwoHashDigits        = /*BAKE:HASH_DIGITS*/88;
+  let inscriptionUnixSeconds   = /*BAKE:INSCRIPTION_UNIX*/1704067200;
   const BAKED_IS_LIBERATED     = /*BAKE:IS_LIBERATED*/0.0;
   const BAKED_VOID_PROGRESS    = /*BAKE:VOID_PROGRESS*/0.0;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);

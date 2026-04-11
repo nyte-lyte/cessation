@@ -1,14 +1,15 @@
 # Cessation — To Do
 
-## Pre-Mint (mint target was Easter Sunday April 5 2026 — not yet done as of 2026-04-06)
-- **NEXT: Inscribe piece 0 on Nakamoto sat, then piece 1 as child**
-  - Real mainnet. Bitcoin Core fully synced on laptop.
-  - Use `node mint.js 0 <blockHash> <blockUnixTimestamp>` → `dist/cessation_piece_00.html`
-  - Use `node mint.js 1 <blockHash> <blockTimestamp> <inscription0Id> <blockHeight>` → `dist/cessation_piece_01.html`
-  - Both commands also write metadata JSON for `--json-metadata` flag
-- Replace hardcoded hash tail `88` and unix timestamp `1704067200` with real chain values at mint (mint.js handles this automatically)
-- ~~Test iframe bootstrap + /r/children/self via ord regtest~~ — DONE (2026-04-05): piece 0 + piece 1 inscribed in regtest, CBOR verified on-chain, iframe renders correctly with piece 1's data
-- ~~Build inscription 0 bundle~~ — DONE: build.js → index_bundle.html (93.4 KB uncompressed, rebuilt 2026-04-03 at 64d4e51)
+## Pre-Mint (mint target was Easter Sunday April 5 2026 — not yet done as of 2026-04-11)
+- **NEXT: Mainnet mint sequence**
+  1. Inscribe engine: `ord wallet inscribe --fee-rate <FEE_RATE> --file index_bundle.js` → get engineId
+  2. Piece 0: `node mint.js 0 <blockHash> <blockTimestamp> <engineId> <blockHeight>` → inscribe dist/cessation_piece_00.html (no --parent)
+  3. Pieces 1+: `node mint.js N <blockHash> <blockTimestamp> <engineId> <piece0Id> <blockHeight>` → inscribe with --parent piece0Id
+  - All pieces use --json-metadata for CBOR
+  - Engine is text/javascript (ord infers from .js extension), all pieces are text/html
+- ~~Architecture: separate engine inscription~~ — DONE (2026-04-11): engine=text/javascript, all 29 pieces=HTML, black background, regtest verified
+- ~~Test iframe bootstrap + /r/children/self via ord regtest~~ — DONE (2026-04-05)
+- ~~Build inscription 0 bundle~~ — DONE: build.js → index_bundle.js (86.5 KB uncompressed)
 - ~~Strip dev console API~~ — DONE: DEV_START/DEV_END markers, only F/R/S remain for collectors
 - ~~Decide on Brotli compression~~ — DONE: not compressing
 - ~~Source Nakamoto sat for piece 0~~ — DONE: 2009-01-31 sat acquired

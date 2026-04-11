@@ -94,10 +94,9 @@ const fragEsc = escapeForTemplateLiteral(fragGlsl.trim());
 // When running as a child piece, the child's own HTML sets body background — preamble skips it.
 
 const bundle = `const _selfScript = document.currentScript;
-const _previewGradient = /*BAKE:PREVIEW_GRADIENT*/'linear-gradient(90deg,#888888,#888888)';
 (function(){
 const _style = document.createElement('style');
-_style.textContent = (_selfScript ? '' : 'html,body{background:' + _previewGradient + '}') + \`${cssEscaped}\`;
+_style.textContent = 'html,body{background:#000}' + \`${cssEscaped}\`;
 (document.head || document.documentElement).appendChild(_style);
 const _cc = document.createElement('div');
 _cc.id = 'canvas-container';

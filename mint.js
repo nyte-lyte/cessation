@@ -1,13 +1,17 @@
-// mint.js — Bake per-piece chain values into main.js and build the inscription bundle.
-// Usage: node mint.js <pieceIndex> <blockHash> <blockUnixTimestamp>
-// Example: node mint.js 3 000000000000000000029abc...f7e4 1712345678
+// mint.js — Build per-piece HTML inscription files for Cessation.
+// The engine (index_bundle.js) is a separate text/javascript inscription.
+// All 29 pieces are thin HTML files that load the engine via <script src>.
 //
-// pieceIndex       : 0–28
-// blockHash        : 64-char hex string of the reference block
-// blockUnixTimestamp : Unix seconds of that block (bitcoin block `time` field)
+// Usage:
+//   Piece 0:    node mint.js 0 <blockHash> <blockTimestamp> <engineId> <blockHeight>
+//   Pieces 1+:  node mint.js N <blockHash> <blockTimestamp> <engineId> <piece0Id> <blockHeight>
 //
-// Output: dist/cessation_piece_XX.html — ready to inscribe.
-// main.js is restored to dev defaults after the build.
+// pieceIndex    : 0–N (open-ended — new pieces with new health data can be added)
+// blockHash     : 64-char hex string of the reference block
+// blockTimestamp: Unix seconds of that block
+// engineId      : inscription ID of the engine (text/javascript) inscription
+// piece0Id      : inscription ID of piece 0 (required for pieces 1+, used as --parent)
+// blockHeight   : block height at inscription time
 //
 // ── Per-piece thumbnail gradients ────────────────────────────────────────────
 // Set a custom CSS gradient string per piece index, or leave null to use the
@@ -49,17 +53,20 @@ const CUSTOM_GRADIENTS = {
 };
 
 'use strict';
-const { readFileSync, writeFileSync, copyFileSync, mkdirSync, existsSync } = require('fs');
-const { execSync } = require('child_process');
+const { readFileSync, writeFileSync, mkdirSync, existsSync } = require('fs');
 const path = require('path');
 
 // ── Parse + validate CLI args ─────────────────────────────────────────────────
 
-const [,, rawIndex, rawHash, rawTimestamp] = process.argv;
+const [,, rawIndex, rawHash, rawTimestamp, engineId] = process.argv;
 
 const pieceIndex = parseInt(rawIndex, 10);
-if (isNaN(pieceIndex) || pieceIndex < 0 || pieceIndex > 28) {
-  console.error('Error: pieceIndex must be 0–28');
+if (isNaN(pieceIndex) || pieceIndex < 0) {
+  console.error('Error: pieceIndex must be 0 or greater');
+  process.exit(1);
+}
+if (!engineId) {
+  console.error('Error: engineId (5th argument) is required — the inscription ID of the engine');
   process.exit(1);
 }
 if (!/^[0-9a-fA-F]{64}$/.test(rawHash)) {
@@ -105,7 +112,8 @@ setupFn(scope);
 const { healthDataSets, minMaxValues, computeKarma, computeLiberationThreshold, blendDatasets } = scope;
 
 if (pieceIndex >= healthDataSets.length) {
-  console.error(`Error: pieceIndex ${pieceIndex} out of range (${healthDataSets.length} datasets)`);
+  console.error(`Error: pieceIndex ${pieceIndex} out of range — only ${healthDataSets.length} datasets in health_data_sets.js`);
+  console.error('Add the new health record to data/health_data_sets.js first.');
   process.exit(1);
 }
 
@@ -195,81 +203,48 @@ writeFileSync(path.join(distDir, metadataName), JSON.stringify(metadataObj, null
 console.log(`Metadata JSON written: dist/${metadataName}`);
 console.log(`  Use with: ord wallet inscribe --json-metadata dist/${metadataName}\n`);
 
-// ── Piece 0: bake full engine bundle ─────────────────────────────────────────
+// ── All pieces: thin HTML — loads engine via <script src="/content/{engineId}"> ──
+// Piece 0 : no piece0Id/blockHeight needed (it IS the parent)
+// Pieces 1+: require piece0Id (for --parent) and blockHeight
+
+const hue = partnerInheritedHueDeg.toFixed(4);
+
+let piece0Id   = null;
+let blockHeight = 0;
 
 if (pieceIndex === 0) {
-  const mainJsPath = path.join(__dirname, 'src', 'main.js');
-  let mainJs = readFileSync(mainJsPath, 'utf8');
-  const mainJsOriginal = mainJs;
-
-  // bakeValue: replaces /*BAKE:MARKER*/value in src.
-  // Handles both unquoted (numbers) and single-quoted string values.
-  function bakeValue(src, marker, value, all = false) {
-    const pat = `(/\\*BAKE:${marker}\\*/)(?:'[^']*'|[^;,)\\n]+)`;
-    const re = new RegExp(pat, all ? 'g' : '');
-    if (!re.test(src)) throw new Error(`Bake marker not found: BAKE:${marker}`);
-    return src.replace(new RegExp(pat, all ? 'g' : ''), `$1${value}`);
-  }
-
-  mainJs = bakeValue(mainJs, 'DATASET_INDEX',    pieceIndex);
-  mainJs = bakeValue(mainJs, 'HASH_DIGITS',      lastTwoHashDigits);
-  mainJs = bakeValue(mainJs, 'INSCRIPTION_UNIX', inscriptionUnixSeconds);
-  mainJs = bakeValue(mainJs, 'IS_LIBERATED',     BAKED_IS_LIBERATED.toFixed(1));
-  mainJs = bakeValue(mainJs, 'VOID_PROGRESS',    BAKED_VOID_PROGRESS.toFixed(1));
-
-  writeFileSync(mainJsPath, mainJs, 'utf8');
-  console.log('Patched src/main.js.');
-
-  try {
-    execSync(`"${process.execPath}" build.js`, { stdio: 'pipe', cwd: __dirname });
-  } catch (e) {
-    writeFileSync(mainJsPath, mainJsOriginal, 'utf8');
-    console.error('\nBuild failed:', e.message);
-    if (e.output) console.error(e.output.map(b => b?.toString()).join('\n'));
+  blockHeight = parseInt(process.argv[6], 10);
+  if (isNaN(blockHeight) || blockHeight < 0) {
+    console.error('Error: piece 0 requires blockHeight as 6th argument');
+    console.error('  node mint.js 0 <blockHash> <blockTimestamp> <engineId> <blockHeight>');
     process.exit(1);
   }
-
-  // Bake the preview gradient into the JS bundle (used when piece 0 is viewed directly)
-  const outputName = `cessation_piece_00.js`;
-  const outputDest = path.join(distDir, outputName);
-  let bundleJs = readFileSync(path.join(__dirname, 'index_bundle.js'), 'utf8');
-  bundleJs = bakeValue(bundleJs, 'PREVIEW_GRADIENT', `'${previewGradient}'`);
-  writeFileSync(outputDest, bundleJs, 'utf8');
-
-  writeFileSync(mainJsPath, mainJsOriginal, 'utf8');
-  console.log('Restored src/main.js to dev defaults.\n');
-  console.log(`Ready to inscribe: dist/${outputName}`);
-  console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --file dist/${outputName} --json-metadata dist/${metadataName}\n`);
-
 } else {
-  // ── Pieces 1-28: thin HTML — loads piece 0 JS engine via <script> tag ──────
-  // Usage: node mint.js <index> <hash> <unixTimestamp> <inscription0Id> <blockHeight>
-  //
-  // Piece 0 is a text/javascript file. Child pieces load it as a script, passing
-  // piece params as HTML attributes on the <script> tag. document.currentScript
-  // inside the engine reads them. /r/children/self resolves to piece 0's children.
-  //
-  const inscription0Id = process.argv[5];
-  const blockHeight    = parseInt(process.argv[6], 10);
-  if (!inscription0Id) {
-    console.error('Error: pieces 1-28 require a 4th argument — the inscription 0 ID');
-    console.error('  node mint.js 3 <blockHash> <blockTimestamp> <inscription0Id> <blockHeight>');
+  piece0Id    = process.argv[6];
+  blockHeight = parseInt(process.argv[7], 10);
+  if (!piece0Id) {
+    console.error('Error: pieces 1+ require piece0Id as 6th argument');
+    console.error('  node mint.js N <blockHash> <blockTimestamp> <engineId> <piece0Id> <blockHeight>');
     process.exit(1);
   }
   if (isNaN(blockHeight) || blockHeight < 0) {
-    console.error('Error: pieces 1-28 require a 5th argument — the block height at inscription time');
-    console.error('  node mint.js 3 <blockHash> <blockTimestamp> <inscription0Id> <blockHeight>');
+    console.error('Error: pieces 1+ require blockHeight as 7th argument');
+    console.error('  node mint.js N <blockHash> <blockTimestamp> <engineId> <piece0Id> <blockHeight>');
     process.exit(1);
   }
+}
 
-  const hue = partnerInheritedHueDeg.toFixed(4);
-  const scriptHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:${previewGradient}}</style></head><body><script t="${pieceIndex}" ht="${lastTwoHashDigits}" unix="${inscriptionUnixSeconds}" hue="${hue}" block="${blockHeight}" src="/content/${inscription0Id}"><\/script></body></html>`;
+const scriptHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}</style></head><body><script t="${pieceIndex}" ht="${lastTwoHashDigits}" unix="${inscriptionUnixSeconds}" hue="${hue}" block="${blockHeight}" src="/content/${engineId}"><\/script></body></html>`;
 
-  const outputName = `cessation_piece_${String(pieceIndex).padStart(2, '0')}.html`;
-  const outputDest = path.join(distDir, outputName);
-  writeFileSync(outputDest, scriptHtml, 'utf8');
+const outputName = `cessation_piece_${String(pieceIndex).padStart(2, '0')}.html`;
+const outputDest = path.join(distDir, outputName);
+writeFileSync(outputDest, scriptHtml, 'utf8');
 
-  console.log(`Script payload written: dist/${outputName}  (${scriptHtml.length} bytes)`);
-  console.log(`Ready to inscribe: dist/${outputName}`);
-  console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --parent ${inscription0Id} --file dist/${outputName} --json-metadata dist/${metadataName}\n`);
+console.log(`HTML written: dist/${outputName}  (${scriptHtml.length} bytes)`);
+console.log(`Ready to inscribe: dist/${outputName}`);
+if (pieceIndex === 0) {
+  console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --file dist/${outputName} --json-metadata dist/${metadataName}`);
+  console.log(`\nNote: inscribe the engine (index_bundle.js) as text/javascript BEFORE piece 0.`);
+} else {
+  console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --parent ${piece0Id} --file dist/${outputName} --json-metadata dist/${metadataName}`);
 }
