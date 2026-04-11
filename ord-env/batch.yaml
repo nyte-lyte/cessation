@@ -1,0 +1,18 @@
+mode: separate-outputs
+parents: []
+reinscribe: false
+inscriptions:
+- title: null
+  traits: {}
+  file: env/inscription.txt
+  gallery: []
+etching:
+  rune: FOO
+  symbol: '¢'
+  divisibility: 0
+  supply: '2000'
+  premine: '1000'
+  terms:
+    amount: '1000'
+    cap: 1
+  turbo: false

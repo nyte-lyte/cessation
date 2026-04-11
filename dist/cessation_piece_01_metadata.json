@@ -1,0 +1,30 @@
+{
+  "pieceIndex": 1,
+  "hashTail": 27,
+  "inscriptionUnix": 1775444017,
+  "dataset": {
+    "date": "2018-10-04",
+    "ecg": {
+      "ventRate": 60,
+      "prInterval": 158,
+      "qrsInterval": 85,
+      "qtInterval": 428,
+      "qtcInterval": 428,
+      "pAxis": 49,
+      "rAxis": 76,
+      "tAxis": 58
+    },
+    "labs": {
+      "glucose": 105,
+      "nitrogen": 16,
+      "creatinine": 0.58,
+      "eGFR": 118,
+      "sodium": 140,
+      "potassium": 4.1,
+      "chloride": 107,
+      "carbonDioxide": 25,
+      "calcium": 9.1
+    },
+    "healthIndex": 0.6444685314685316
+  }
+}

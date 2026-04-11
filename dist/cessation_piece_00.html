@@ -1518,6 +1518,9 @@ healthDataSets.forEach((dataSet) => {
 });
 
 const canvas = document.getElementById("canvas");
+
+const _previewHue = 321;
+canvas.style.background = 'radial-gradient(ellipse at 50% 60%, hsl(' + _previewHue + ', 55%, 22%) 0%, hsl(' + _previewHue + ', 40%, 8%) 70%)';
 const gl = canvas.getContext("webgl2");
 if (!gl) {
   alert("WebGL2 is not available in your browser.");
@@ -1872,9 +1875,9 @@ async function init() {
   const qrsTAngleMax = Math.max(...allQrsTAngles);
   const sortedQRSTAngleValues = [...allQrsTAngles].sort((a, b) => a - b);
 
-  let currentDataSetIndex      = 5;
-  let lastTwoHashDigits        = 88;
-  let inscriptionUnixSeconds   = 1704067200;
+  let currentDataSetIndex      = 0;
+  let lastTwoHashDigits        = 27;
+  let inscriptionUnixSeconds   = 1775444017;
   const BAKED_IS_LIBERATED     = 0.0;
   const BAKED_VOID_PROGRESS    = 0.0;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);

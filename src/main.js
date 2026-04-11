@@ -214,6 +214,39 @@ function chlorideHueDeg(baseHueDeg, pCl /* 0..1 */) {
   return cand;
 }
 
+// ── Minimal CBOR decoder (no dependencies) ──────────────────────────────────
+// Handles maps, strings, ints, floats (16/32/64), arrays, and tags.
+// Used to decode hex-encoded ordinals metadata from /r/metadata/{id}.
+function cborDecode(hex) {
+  const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+  let i = 0;
+  function read() {
+    const b = bytes[i++];
+    const mt = b >> 5, ai = b & 0x1f;
+    // Float special cases before arg decode (float16/32/64 bytes are the payload)
+    if (mt === 7 && ai === 25) { const v = (bytes[i] << 8) | bytes[i+1]; i += 2; const e = (v >> 10) & 0x1f, m = v & 0x3ff, s = v >> 15 ? -1 : 1; return s * (e === 31 ? (m ? NaN : Infinity) : e === 0 ? m * 5.9604644775e-8 : Math.pow(2, e - 15) * (1 + m / 1024)); }
+    if (mt === 7 && ai === 26) { const dv = new DataView(bytes.buffer, i, 4); i += 4; return dv.getFloat32(0, false); }
+    if (mt === 7 && ai === 27) { const dv = new DataView(bytes.buffer, i, 8); i += 8; return dv.getFloat64(0, false); }
+    // Decode argument length/value
+    let n = ai;
+    if (ai === 24) n = bytes[i++];
+    else if (ai === 25) { n = (bytes[i] << 8) | bytes[i+1]; i += 2; }
+    else if (ai === 26) { n = ((bytes[i] * 16777216) + (bytes[i+1] << 16) + (bytes[i+2] << 8) + bytes[i+3]); i += 4; }
+    else if (ai === 27) { i += 8; n = 0; } // 8-byte length not expected in our metadata
+    switch (mt) {
+      case 0: return n;
+      case 1: return -1 - n;
+      case 2: { const sl = bytes.slice(i, i + n); i += n; return sl; }
+      case 3: { let s = '', e = i + n; while (i < e) { const c = bytes[i++]; if (c < 0x80) s += String.fromCharCode(c); else if (c < 0xE0) s += String.fromCharCode((c & 0x1F) << 6 | bytes[i++] & 0x3F); else { const b2 = bytes[i++]; s += String.fromCharCode((c & 0x0F) << 12 | (b2 & 0x3F) << 6 | bytes[i++] & 0x3F); } } return s; }
+      case 4: { const arr = []; for (let k = 0; k < n; k++) arr.push(read()); return arr; }
+      case 5: { const obj = {}; for (let k = 0; k < n; k++) { const key = read(); obj[key] = read(); } return obj; }
+      case 6: return read(); // tag — decode tagged item
+      case 7: { if (ai === 20) return false; if (ai === 21) return true; if (ai === 22) return null; return undefined; }
+    }
+  }
+  return read();
+}
+
 // Link vertex + fragment into a program
 function createProgram(gl, vertexSrc, fragmentSrc) {
   const program = gl.createProgram();
@@ -374,12 +407,11 @@ async function init() {
   const qrsTAngleMax = Math.max(...allQrsTAngles);
   const sortedQRSTAngleValues = [...allQrsTAngles].sort((a, b) => a - b);
 
-  const currentDataSetIndex      = /*BAKE:DATASET_INDEX*/5;
-  const lastTwoHashDigits        = /*BAKE:HASH_DIGITS*/88;
-  const inscriptionUnixSeconds   = /*BAKE:INSCRIPTION_UNIX*/1704067200;
-  const reanimationCycleSeconds  = /*BAKE:REANIMATE_CYCLE_SECS*/0;
-  const BAKED_IS_LIBERATED       = /*BAKE:IS_LIBERATED*/0.0;
-  const BAKED_VOID_PROGRESS      = /*BAKE:VOID_PROGRESS*/0.0;
+  let currentDataSetIndex      = /*BAKE:DATASET_INDEX*/5;
+  let lastTwoHashDigits        = /*BAKE:HASH_DIGITS*/88;
+  let inscriptionUnixSeconds   = /*BAKE:INSCRIPTION_UNIX*/1704067200;
+  const BAKED_IS_LIBERATED     = /*BAKE:IS_LIBERATED*/0.0;
+  const BAKED_VOID_PROGRESS    = /*BAKE:VOID_PROGRESS*/0.0;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
 
   // Inherited hue — piece N inherits piece N-1's glucose hue (from allInheritedHues).
@@ -389,6 +421,21 @@ async function init() {
   window.setInheritedHue = (deg) => { inheritedHueDegOverride = ((deg % 360) + 360) % 360; };
   window.resetInheritedHue = () => { inheritedHueDegOverride = null; };
   // DEV_END
+
+  // URL hash bootstrap — child pieces (1-28) iframe piece 0 with params in the hash.
+  // Format: #idx=N&ht=H&unix=U&hue=D&block=B
+  // Runs inside the iframe (piece 0 context) so /r/children/self still resolves correctly.
+  const _hp = {};
+  window.location.hash.slice(1).split('&').forEach(p => {
+    const eq = p.indexOf('=');
+    if (eq > 0) _hp[p.slice(0, eq)] = p.slice(eq + 1);
+  });
+  if (_hp.idx) {
+    currentDataSetIndex    = parseInt(_hp.idx);
+    lastTwoHashDigits      = parseInt(_hp.ht) || lastTwoHashDigits;
+    inscriptionUnixSeconds = parseInt(_hp.unix) || inscriptionUnixSeconds;
+    if (_hp.hue != null) inheritedHueDegOverride = parseFloat(_hp.hue);
+  }
 
   // Precompute inherited hues for all pieces (piece N inherits piece N-1's glucose hue)
   const allInheritedHues = healthDataSets.map((_, i) =>
@@ -410,9 +457,9 @@ async function init() {
   let partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
   let isLiberated = BAKED_IS_LIBERATED;
   let voidProgress = BAKED_VOID_PROGRESS;
+  let __reanimationOverride = null; // declared outside DEV block so bundle can reference it safely
   // DEV_START
   // setReanimation(0..1) — override reanimation progress for dev preview
-  let __reanimationOverride = null;
   window.setReanimation = (p) => {
     __reanimationOverride = Math.max(0, Math.min(1, Number(p)));
     partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
@@ -442,6 +489,193 @@ async function init() {
     return blended;
   };
   // DEV_END
+
+  // ── Lifecycle Engine ──────────────────────────────────────────────────────
+  // Block-native: cessation, reanimation, liberation, and void are determined
+  // by Bitcoin block height. All transitions autonomous — no human triggers.
+
+  const BLOCKS_PER_YEAR = 52596;   // 144 blocks/day × 365.25 days
+  const BLOCK_WINDOW_MS = 600000;  // ~10 min block window for transitions
+
+  const lc = {
+    ready:                false,
+    ownBlockHeight:       0,
+    currentBlockHeight:   0,
+    cessationBlock:       0,
+    cycleCount:           0,
+    cycleDataset:         null,    // blended dataset for current reanimated cycle
+    reanimationTriggerMs: null,
+    voidTriggerMs:        null,
+    reanimationProgress:  0.0,
+    isLiberated:          false,
+    voidProgress:         0.0,
+    collectionDatasets:   [],      // [{id, pieceIndex, dataset, hashTail, inscriptionUnix}]
+    _siblingPollCount:    0,
+  };
+
+  // Per-frame: interpolate reanimation and void transition progress values
+  function lcTick(nowMs) {
+    if (lc.reanimationTriggerMs !== null) {
+      lc.reanimationProgress = Math.min(1.0, (nowMs - lc.reanimationTriggerMs) / BLOCK_WINDOW_MS);
+    } else if (!lc.isLiberated) {
+      lc.reanimationProgress = 0.0;
+    }
+    if (lc.voidTriggerMs !== null) {
+      lc.voidProgress = Math.min(1.0, (nowMs - lc.voidTriggerMs) / BLOCK_WINDOW_MS);
+    }
+  }
+
+  // Dataset to use for current cycle (original or blended from prior reanimation)
+  function lcCycleDataset() {
+    return lc.cycleDataset ?? healthDataSets[currentDataSetIndex];
+  }
+
+  // Collection for karma/threshold computation — live siblings preferred, local fallback
+  function lcEffectiveCollection() {
+    return lc.collectionDatasets.length > 0
+      ? lc.collectionDatasets.map(d => d.dataset)
+      : healthDataSets;
+  }
+
+  // Partner's dataset from living collection, fallback to local healthDataSets
+  function lcGetPartnerDataset(partnerIdx) {
+    const found = lc.collectionDatasets.find(d => d.pieceIndex === partnerIdx);
+    if (found) return found.dataset;
+    if (partnerIdx >= 0 && partnerIdx < healthDataSets.length) return healthDataSets[partnerIdx];
+    return null;
+  }
+
+  // Fetch and load all sibling datasets from /r/children/self (with pagination)
+  async function lcRefreshSiblings() {
+    let page = 0, more = true;
+    const fetched = [];
+    while (more) {
+      let resp;
+      try { resp = await fetch(`/r/children/self/inscriptions/${page}`).then(r => r.json()); }
+      catch (e) { break; }
+      for (const id of (resp.ids ?? [])) {
+        try {
+          const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.text());
+          if (!metaHex || !metaHex.trim()) continue;
+          const meta = cborDecode(metaHex.trim());
+          if (meta && meta.dataset) {
+            fetched.push({
+              id,
+              pieceIndex:      meta.pieceIndex      ?? null,
+              dataset:         meta.dataset,
+              hashTail:        meta.hashTail         ?? null,
+              inscriptionUnix: meta.inscriptionUnix  ?? null,
+            });
+          }
+        } catch (e) { /* skip this sibling */ }
+      }
+      more = resp.more ?? false;
+      page++;
+    }
+    if (fetched.length > 0) lc.collectionDatasets = fetched;
+  }
+
+  // Check if partner has also reached final cessation — trigger void if so
+  async function lcCheckVoid() {
+    const partnerIdx = getPartnerIndex(currentDataSetIndex);
+    if (partnerIdx < 0) { lc.voidTriggerMs = Date.now(); return; } // genesis — no partner
+    const pd = lc.collectionDatasets.find(d => d.pieceIndex === partnerIdx);
+    if (!pd || pd.hashTail == null) return;
+    try {
+      const pInfo = await fetch(`/r/inscription/${pd.id}`).then(r => r.json());
+      const pCessation = (pInfo.height ?? 0) + Math.round(lifespanYearsFromHashDigits(pd.hashTail) * BLOCKS_PER_YEAR);
+      if (lc.currentBlockHeight >= pCessation) {
+        lc.voidTriggerMs = Date.now();
+        console.log('[lc] VOID — both partners reached final cessation');
+      }
+    } catch (e) { /* partner cessation unknown — void pending */ }
+  }
+
+  // Poll block height, detect cessation, trigger reanimation or liberation
+  async function lcPoll() {
+    try { lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json()); }
+    catch (e) { return; }
+
+    if (lc.currentBlockHeight >= lc.cessationBlock && !lc.isLiberated && lc.reanimationTriggerMs === null) {
+      const partnerIdx = getPartnerIndex(currentDataSetIndex);
+      if (partnerIdx < 0) {
+        lc.isLiberated = true;
+        await lcCheckVoid();
+        return;
+      }
+      const partnerDs  = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
+      const blended    = blendDatasets(lcCycleDataset(), partnerDs);
+      const threshold  = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
+      const karma      = computeKarma(blended, minMaxValues);
+
+      if (karma < threshold) {
+        lc.isLiberated  = true;
+        lc.cycleDataset = blended;
+        console.log(`[lc] LIBERATED — karma ${karma.toFixed(4)} < threshold ${threshold.toFixed(4)}`);
+        await lcCheckVoid();
+      } else {
+        lc.reanimationTriggerMs = Date.now();
+        lc.cycleCount++;
+        lc.cycleDataset = blended;
+        try {
+          const bi = await fetch(`/r/blockinfo/${lc.cessationBlock}`).then(r => r.json());
+          const ht = Math.round(parseInt(bi.hash.slice(-2), 16) * 99 / 255);
+          lc.cessationBlock += Math.round(lifespanYearsFromHashDigits(ht) * BLOCKS_PER_YEAR);
+        } catch (e) {
+          lc.cessationBlock += Math.round(lifespanYears * BLOCKS_PER_YEAR);
+        }
+        console.log(`[lc] REANIMATION cycle ${lc.cycleCount} — next cessation block ${lc.cessationBlock}`);
+      }
+    }
+
+    if (lc.isLiberated && lc.voidTriggerMs === null) await lcCheckVoid();
+
+    if (++lc._siblingPollCount % 10 === 0) lcRefreshSiblings().catch(() => {});
+  }
+
+  // Fast-forward through past cycles on first load (handles pieces loaded years after mint)
+  async function lcFastForward() {
+    while (lc.currentBlockHeight >= lc.cessationBlock && !lc.isLiberated) {
+      const partnerIdx = getPartnerIndex(currentDataSetIndex);
+      if (partnerIdx < 0) { lc.isLiberated = true; break; }
+      const partnerDs = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
+      const blended   = blendDatasets(lcCycleDataset(), partnerDs);
+      const threshold = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
+      const karma     = computeKarma(blended, minMaxValues);
+      if (karma < threshold) { lc.isLiberated = true; lc.cycleDataset = blended; break; }
+      lc.cycleCount++;
+      lc.cycleDataset = blended;
+      try {
+        const bi = await fetch(`/r/blockinfo/${lc.cessationBlock}`).then(r => r.json());
+        const ht = Math.round(parseInt(bi.hash.slice(-2), 16) * 99 / 255);
+        lc.cessationBlock += Math.round(lifespanYearsFromHashDigits(ht) * BLOCKS_PER_YEAR);
+      } catch (e) { lc.cessationBlock += Math.round(lifespanYears * BLOCKS_PER_YEAR); break; }
+    }
+  }
+
+  // Main lifecycle init — non-blocking, piece renders immediately with local fallback
+  async function initLifecycle() {
+    try {
+      // _hp.block is set by child pieces (1-28) via iframe hash params — use it directly.
+      // Piece 0 fetches its own block height from /r/inscription/self.
+      if (_hp.block) {
+        lc.ownBlockHeight = parseInt(_hp.block);
+      } else {
+        const selfInfo = await fetch('/r/inscription/self').then(r => r.json());
+        lc.ownBlockHeight = selfInfo.height ?? 0;
+      }
+      lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
+      lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
+      await lcRefreshSiblings();
+      await lcFastForward();
+      if (lc.isLiberated && lc.voidTriggerMs === null) await lcCheckVoid();
+      setInterval(lcPoll, 60000);
+      lc.ready = true;
+      console.log(`[lc] ready — block ${lc.currentBlockHeight}, cessation ${lc.cessationBlock}, cycle ${lc.cycleCount}, liberated: ${lc.isLiberated}`);
+    } catch (e) {
+      console.warn('[lc] lifecycle engine inactive (not in ord env)');
+    }
+  }
 
   // recordCanvas(seconds) — captures directly from the WebGL canvas to a .webm download
   let _recorder = null;
@@ -676,9 +910,15 @@ async function init() {
     window.__lastT = t;
 
     const nowUnix = Math.floor(Date.now() / 1000);
+    // Sync from lifecycle engine each frame
+    lcTick(Date.now());
     const reanimationProgress = (typeof __reanimationOverride !== 'undefined' && __reanimationOverride !== null)
       ? __reanimationOverride
-      : (reanimationCycleSeconds > 0 ? clamp((nowUnix - inscriptionUnixSeconds) / reanimationCycleSeconds, 0, 1) : 0.0);
+      : lc.reanimationProgress;
+    if (lc.ready) {
+      isLiberated  = lc.isLiberated ? 1.0 : (BAKED_IS_LIBERATED > 0 ? 1.0 : 0.0);
+      voidProgress = lc.voidProgress;
+    }
     const baseYears =
       Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
 
@@ -836,6 +1076,9 @@ async function init() {
 
   gl.clearColor(0, 0, 0, 1);
   draw();
+
+  // Start lifecycle engine after rendering — non-blocking, fails silently outside ord env
+  initLifecycle().catch(() => {});
 
   // DEV_START
   // manually switch datasets in the console
