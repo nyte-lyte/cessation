@@ -1,6 +1,11 @@
-// build.js — generates index_bundle.html
-// Inlines all shaders, JS, data, and CSS into a single self-contained HTML file.
+// build.js — generates index_bundle.js
+// Inlines all shaders, JS, data, and CSS into a single self-contained JS file.
 // Usage: node build.js
+//
+// Output is text/javascript. Piece 0 is inscribed as a JS file.
+// Child pieces (1-28) load it via: <script t=N ht=H unix=U hue=D block=B src="/content/{piece0Id}">
+// When loaded as a child, document.currentScript carries the piece params.
+// When loaded directly (piece 0 viewing itself), document.currentScript is null → genesis defaults.
 
 const { readFileSync, writeFileSync } = require('fs');
 
@@ -14,100 +19,110 @@ let   mainJs       = readFileSync('./src/main.js',                'utf8');
 
 // ── Strip ES module syntax ────────────────────────────────────
 
-// decay_logic.js — remove export statement at bottom
 decayLogic = decayLogic.replace(/^export\s*\{[^}]+\};\s*$/m, '');
 
-// health_data_sets.js — remove import line at top, export at bottom
 healthData = healthData.replace(/^import\s+.*$/m, '');
 healthData = healthData.replace(/^export\s*\{[^}]+\};\s*$/m, '');
 
-// main.js — remove import lines at top
 mainJs = mainJs.replace(/^import\s+.*\n/gm, '');
 
-// main.js — strip dev tool blocks
+// ── Strip dev tool blocks ─────────────────────────────────────
 mainJs = mainJs.replace(/[ \t]*\/\/ DEV_START[\s\S]*?\/\/ DEV_END\n?/g, '');
 
-// main.js — remove duplicate normalize() (decay_logic.js provides it)
+// ── Remove duplicate normalize() (decay_logic.js provides it) ─
 mainJs = mainJs.replace(/\nfunction normalize\(value, min, max\) \{[\s\S]*?\n\}\n/, '\n');
 
-// main.js — remove loadShaderSource function (no longer needed)
+// ── Remove loadShaderSource (shaders inlined as JS variables) ─
 mainJs = mainJs.replace(/async function loadShaderSource[\s\S]*?\n\}\n/, '');
 
-// main.js — replace fetch-based shader loading with inline DOM access
+// ── Replace shader loading with inline variable references ────
 mainJs = mainJs.replace(
   /\/\/ load and compile shaders:\n\s*const vertexSrc\s*=\s*await loadShaderSource\("[^"]+"\);\n\s*const fragmentSrc\s*=\s*await loadShaderSource\("[^"]+"\);/,
-  `// load and compile shaders (inlined):\n  const vertexSrc   = document.getElementById('vert-shader').textContent.trim();\n  const fragmentSrc = document.getElementById('frag-shader').textContent.trim();`
+  `// shaders inlined as JS variables (see bundle preamble):\n  const vertexSrc   = _vertSrc;\n  const fragmentSrc = _fragSrc;`
 );
 
-// ── Strip comments from all sources ─────────────────────────
+// ── Strip comments from all sources ──────────────────────────
 function stripComments(src) {
-  src = src.replace(/\/\*[\s\S]*?\*\//g, '');   // block comments
+  src = src.replace(/\/\*[\s\S]*?\*\//g, '');   // block comments (NOTE: removes BAKE markers too — add them after)
   src = src.replace(/\/\/[^\n]*/g, '');          // line comments
   src = src.replace(/[ \t]+$/gm, '');            // trailing whitespace
   src = src.replace(/\n{3,}/g, '\n\n');          // collapse blank lines
   return src;
 }
+
+// Strip comments from everything except mainJs — mainJs keeps BAKE markers (block comments)
 vertGlsl   = stripComments(vertGlsl);
 fragGlsl   = stripComments(fragGlsl);
 decayLogic = stripComments(decayLogic);
 healthData = stripComments(healthData);
-mainJs     = stripComments(mainJs);
+// mainJs: strip only line comments and whitespace, preserve BAKE block comments
+mainJs = mainJs.replace(/\/\/[^\n]*/g, '');
+mainJs = mainJs.replace(/[ \t]+$/gm, '');
+mainJs = mainJs.replace(/\n{3,}/g, '\n\n');
 
-// ── Strip fs-overlay CSS (element removed) ───────────────────
+// ── Build CSS string for injection (strip #fs-overlay rules) ─
 const cssClean = css
-  .replace(/#fs-overlay[\s\S]*?(?=\n\n|\n#|$)/g, '')
-  .replace(/#canvas-container:hover #fs-overlay[\s\S]*?\}/g, '')
+  // Remove entire rules that reference #fs-overlay (including their selectors)
+  .replace(/[^\n]*#fs-overlay[^\{]*\{[^\}]*\}/g, '')
+  // Remove body background-color — controlled by _previewGradient in preamble
+  .replace(/background-color:\s*#000000;?\s*/g, '')
+  .trim()
+  // Minify
+  .replace(/\s*\{\s*/g, '{').replace(/\s*\}\s*/g, '}')
+  .replace(/\s*:\s*/g, ':').replace(/\s*;\s*/g, ';')
+  .replace(/\s*\/\*[^*]*\*\/\s*/g, '')  // strip any remaining comments
+  .replace(/\n+/g, '')
+  .replace(/\s{2,}/g, ' ')
   .trim();
 
+// Escape backticks and backslashes in CSS for use in template literal
+const cssEscaped = cssClean.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+
+// ── Escape shaders for JS template literals ───────────────────
+function escapeForTemplateLiteral(src) {
+  return src.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+}
+const vertEsc = escapeForTemplateLiteral(vertGlsl.trim());
+const fragEsc = escapeForTemplateLiteral(fragGlsl.trim());
+
 // ── Assemble bundle ───────────────────────────────────────────
-const bundle = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cessation</title>
-  <link rel="icon" href="data:," />
-  <style>
-${cssClean}
-  </style>
-</head>
-<body>
-  <div id="canvas-container">
-    <canvas id="canvas"></canvas>
-  </div>
+// _selfScript: captured synchronously before any async code.
+//   null  → piece 0 viewing itself directly (genesis)
+//   set   → child piece loading this as <script src>, reads t/ht/unix/hue/block attributes
+//
+// BAKE:PREVIEW_GRADIENT is replaced by mint.js with the actual gradient string for piece 0.
+// When running as a child piece, the child's own HTML sets body background — preamble skips it.
 
-  <!-- Shaders -->
-  <script id="vert-shader" type="x-shader/x-vertex">
-${vertGlsl.trim()}
-  </script>
-  <script id="frag-shader" type="x-shader/x-fragment">
-${fragGlsl.trim()}
-  </script>
+const bundle = `const _selfScript = document.currentScript;
+const _previewGradient = /*BAKE:PREVIEW_GRADIENT*/'linear-gradient(90deg,#888888,#888888)';
+(function(){
+const _style = document.createElement('style');
+_style.textContent = (_selfScript ? '' : 'html,body{background:' + _previewGradient + '}') + \`${cssEscaped}\`;
+(document.head || document.documentElement).appendChild(_style);
+const _cc = document.createElement('div');
+_cc.id = 'canvas-container';
+const _cv = document.createElement('canvas');
+_cv.id = 'canvas';
+_cc.appendChild(_cv);
+document.body.appendChild(_cc);
+document.addEventListener('keydown', function(e) {
+  if (e.key.toUpperCase() === 'F') {
+    var c = document.getElementById('canvas-container');
+    if (!document.fullscreenElement) c.requestFullscreen();
+    else document.exitFullscreen();
+  }
+});
+const _vertSrc = \`${vertEsc}\`;
+const _fragSrc = \`${fragEsc}\`;
 
-  <!-- Fullscreen key binding -->
-  <script>
-    document.addEventListener('keydown', (e) => {
-      if (e.key.toUpperCase() === 'F') {
-        const c = document.getElementById('canvas-container');
-        if (!document.fullscreenElement) { c.requestFullscreen(); }
-        else { document.exitFullscreen(); }
-      }
-    });
-  </script>
-
-  <!-- Engine -->
-  <script>
 ${decayLogic.trim()}
 
 ${healthData.trim()}
 
 ${mainJs.trim()}
-  </script>
-</body>
-</html>`;
+})();`;
 
-writeFileSync('./index_bundle.html', bundle, 'utf8');
+writeFileSync('./index_bundle.js', bundle, 'utf8');
 
 const kb = (buffer) => (Buffer.byteLength(buffer, 'utf8') / 1024).toFixed(1);
-console.log(`Built index_bundle.html — ${kb(bundle)} KB uncompressed`);
+console.log(`Built index_bundle.js — ${kb(bundle)} KB uncompressed`);

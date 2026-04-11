@@ -422,19 +422,34 @@ async function init() {
   window.resetInheritedHue = () => { inheritedHueDegOverride = null; };
   // DEV_END
 
-  // URL hash bootstrap — child pieces (1-28) iframe piece 0 with params in the hash.
-  // Format: #idx=N&ht=H&unix=U&hue=D&block=B
-  // Runs inside the iframe (piece 0 context) so /r/children/self still resolves correctly.
-  const _hp = {};
-  window.location.hash.slice(1).split('&').forEach(p => {
-    const eq = p.indexOf('=');
-    if (eq > 0) _hp[p.slice(0, eq)] = p.slice(eq + 1);
-  });
-  if (_hp.idx) {
-    currentDataSetIndex    = parseInt(_hp.idx);
-    lastTwoHashDigits      = parseInt(_hp.ht) || lastTwoHashDigits;
-    inscriptionUnixSeconds = parseInt(_hp.unix) || inscriptionUnixSeconds;
-    if (_hp.hue != null) inheritedHueDegOverride = parseFloat(_hp.hue);
+  // Bootstrap — read piece params from script tag attributes (bundle) or URL hash (dev).
+  // In bundle: _selfScript is captured by preamble before this code runs.
+  //   Child pieces pass: t=N ht=H unix=U hue=D block=B as attributes on the <script> tag.
+  //   Piece 0 direct: _selfScript is null → use baked defaults.
+  // In dev (index.html ES module): _selfScript is undefined → fall back to URL hash.
+  const _sc = (typeof _selfScript !== 'undefined') ? _selfScript : null;
+  if (_sc) {
+    const _t = _sc.getAttribute('t');
+    if (_t !== null) {
+      currentDataSetIndex    = parseInt(_t)                          || currentDataSetIndex;
+      lastTwoHashDigits      = parseInt(_sc.getAttribute('ht'))      || lastTwoHashDigits;
+      inscriptionUnixSeconds = parseInt(_sc.getAttribute('unix'))    || inscriptionUnixSeconds;
+      const _hue = _sc.getAttribute('hue');
+      if (_hue !== null) inheritedHueDegOverride = parseFloat(_hue);
+    }
+  } else {
+    // Dev fallback: URL hash params (#idx=N&ht=H&unix=U&hue=D)
+    const _hp = {};
+    window.location.hash.slice(1).split('&').forEach(p => {
+      const eq = p.indexOf('=');
+      if (eq > 0) _hp[p.slice(0, eq)] = p.slice(eq + 1);
+    });
+    if (_hp.idx) {
+      currentDataSetIndex    = parseInt(_hp.idx);
+      lastTwoHashDigits      = parseInt(_hp.ht)   || lastTwoHashDigits;
+      inscriptionUnixSeconds = parseInt(_hp.unix) || inscriptionUnixSeconds;
+      if (_hp.hue != null) inheritedHueDegOverride = parseFloat(_hp.hue);
+    }
   }
 
   // Precompute inherited hues for all pieces (piece N inherits piece N-1's glucose hue)
@@ -656,10 +671,11 @@ async function init() {
   // Main lifecycle init — non-blocking, piece renders immediately with local fallback
   async function initLifecycle() {
     try {
-      // _hp.block is set by child pieces (1-28) via iframe hash params — use it directly.
-      // Piece 0 fetches its own block height from /r/inscription/self.
-      if (_hp.block) {
-        lc.ownBlockHeight = parseInt(_hp.block);
+      // Child pieces pass block height as an attribute on the <script> tag.
+      // Piece 0 (or dev) fetches its own block height from /r/inscription/self.
+      const _blk = _sc ? _sc.getAttribute('block') : null;
+      if (_blk) {
+        lc.ownBlockHeight = parseInt(_blk);
       } else {
         const selfInfo = await fetch('/r/inscription/self').then(r => r.json());
         lc.ownBlockHeight = selfInfo.height ?? 0;

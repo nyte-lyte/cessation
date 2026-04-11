@@ -202,10 +202,13 @@ if (pieceIndex === 0) {
   let mainJs = readFileSync(mainJsPath, 'utf8');
   const mainJsOriginal = mainJs;
 
+  // bakeValue: replaces /*BAKE:MARKER*/value in src.
+  // Handles both unquoted (numbers) and single-quoted string values.
   function bakeValue(src, marker, value, all = false) {
-    const re = new RegExp(`(/\\*BAKE:${marker}\\*/)([^;,)\\n]+)`, all ? 'g' : '');
+    const pat = `(/\\*BAKE:${marker}\\*/)(?:'[^']*'|[^;,)\\n]+)`;
+    const re = new RegExp(pat, all ? 'g' : '');
     if (!re.test(src)) throw new Error(`Bake marker not found: BAKE:${marker}`);
-    return src.replace(new RegExp(`(/\\*BAKE:${marker}\\*/)([^;,)\\n]+)`, all ? 'g' : ''), `$1${value}`);
+    return src.replace(new RegExp(pat, all ? 'g' : ''), `$1${value}`);
   }
 
   mainJs = bakeValue(mainJs, 'DATASET_INDEX',    pieceIndex);
@@ -226,12 +229,12 @@ if (pieceIndex === 0) {
     process.exit(1);
   }
 
-  const outputName = `cessation_piece_00.html`;
+  // Bake the preview gradient into the JS bundle (used when piece 0 is viewed directly)
+  const outputName = `cessation_piece_00.js`;
   const outputDest = path.join(distDir, outputName);
-  // Inject thumbnail gradient as CSS (visible before WebGL loads, used by ord's renderer)
-  let bundleHtml = readFileSync(path.join(__dirname, 'index_bundle.html'), 'utf8');
-  bundleHtml = bundleHtml.replace('</head>', `<style>#canvas,canvas{background:${previewGradient};}</style></head>`);
-  writeFileSync(outputDest, bundleHtml, 'utf8');
+  let bundleJs = readFileSync(path.join(__dirname, 'index_bundle.js'), 'utf8');
+  bundleJs = bakeValue(bundleJs, 'PREVIEW_GRADIENT', `'${previewGradient}'`);
+  writeFileSync(outputDest, bundleJs, 'utf8');
 
   writeFileSync(mainJsPath, mainJsOriginal, 'utf8');
   console.log('Restored src/main.js to dev defaults.\n');
@@ -239,12 +242,12 @@ if (pieceIndex === 0) {
   console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --file dist/${outputName} --json-metadata dist/${metadataName}\n`);
 
 } else {
-  // ── Pieces 1-28: thin iframe HTML — embeds piece 0 with params in URL hash ──
+  // ── Pieces 1-28: thin HTML — loads piece 0 JS engine via <script> tag ──────
   // Usage: node mint.js <index> <hash> <unixTimestamp> <inscription0Id> <blockHeight>
   //
-  // The iframe loads piece 0's HTML at /content/{piece0Id}#idx=N&ht=H&unix=U&hue=D&block=B
-  // Inside the iframe, piece 0's engine reads the hash and renders as piece N.
-  // /r/children/self inside the iframe resolves to piece 0's children — correct.
+  // Piece 0 is a text/javascript file. Child pieces load it as a script, passing
+  // piece params as HTML attributes on the <script> tag. document.currentScript
+  // inside the engine reads them. /r/children/self resolves to piece 0's children.
   //
   const inscription0Id = process.argv[5];
   const blockHeight    = parseInt(process.argv[6], 10);
@@ -260,14 +263,13 @@ if (pieceIndex === 0) {
   }
 
   const hue = partnerInheritedHueDeg.toFixed(4);
-  const hashParams = `idx=${pieceIndex}&ht=${lastTwoHashDigits}&unix=${inscriptionUnixSeconds}&hue=${hue}&block=${blockHeight}`;
-  const iframeHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;}body{background:${previewGradient};}iframe{display:block;width:100vw;height:100vh;border:0;}</style></head><body><iframe src="/content/${inscription0Id}#${hashParams}" scrolling="no"></iframe></body></html>`;
+  const scriptHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:${previewGradient}}</style></head><body><script t="${pieceIndex}" ht="${lastTwoHashDigits}" unix="${inscriptionUnixSeconds}" hue="${hue}" block="${blockHeight}" src="/content/${inscription0Id}"><\/script></body></html>`;
 
   const outputName = `cessation_piece_${String(pieceIndex).padStart(2, '0')}.html`;
   const outputDest = path.join(distDir, outputName);
-  writeFileSync(outputDest, iframeHtml, 'utf8');
+  writeFileSync(outputDest, scriptHtml, 'utf8');
 
-  console.log(`iframe payload written: dist/${outputName}  (${iframeHtml.length} bytes)`);
+  console.log(`Script payload written: dist/${outputName}  (${scriptHtml.length} bytes)`);
   console.log(`Ready to inscribe: dist/${outputName}`);
   console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --parent ${inscription0Id} --file dist/${outputName} --json-metadata dist/${metadataName}\n`);
 }
