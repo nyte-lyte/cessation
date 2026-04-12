@@ -16,7 +16,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    border: 125px solid black;
+    border: clamp(8px, 8vmin, 80px) solid black;
     background-color: black;
 }
 
@@ -55,8 +55,3 @@ body {
     color: rgba(255, 255, 255, 0.7);
 }
 
-#canvas-container:fullscreen {
-    width: 100vw;
-    height: 100vh;
-    border: clamp(12px, 3vmin, 36px) solid black;
-}
