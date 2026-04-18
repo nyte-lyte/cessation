@@ -1481,19 +1481,15 @@ function compileShader(gl, source, type) {
 }
 
 function lifespanYearsFromHashDigits(x /* 0..99 */) {
-  const n = x / 99;
-  const offset = Math.pow(n, 2.5);
 
-  let lifespan = 5 + offset * 35;
-
-  if (x < 5) {
-    lifespan = 5 + n * 10;
-  } else if (x > 95) {
-    const base = 5 + Math.pow(95 / 99, 2.5) * 35;
-    lifespan = base + ((x - 95) / 4) * (65 - base);
+  const t = x / 99;
+  const a = 3, b = 100, c = 28;
+  const F_c = (c - a) / (b - a);
+  if (t <= F_c) {
+    return a + Math.sqrt(t * (b - a) * (c - a));
+  } else {
+    return b - Math.sqrt((1 - t) * (b - a) * (b - c));
   }
-
-  return lifespan;
 }
 
 function clamp(v, lo, hi) {
