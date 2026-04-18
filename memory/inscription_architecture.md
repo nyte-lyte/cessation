@@ -1,115 +1,106 @@
 # Inscription Architecture
 
-## Living Collection — Dynamic Sibling Discovery (PREFERRED)
-Rather than hardcoding sibling datasets into each piece at mint time, every piece is inscribed as a **child of inscription 0**. This creates an on-chain family tree.
+## Current Architecture (as of 2026-04-11 — regtest verified)
 
-At runtime, any piece can call `/r/children/{inscription_0_id}` to discover ALL siblings — including ones minted after it. Then for each sibling it calls `/r/metadata/{sibling_id}` to fetch their health dataset.
+Two-inscription model. Engine and pieces are separate inscriptions.
 
-This means:
-- Piece 1 minted in month 3 will automatically know about piece 27 minted in year 7
-- No hardcoding, no manual updates to existing pieces
-- New pieces automatically shift the min/max and rendering of all existing pieces
-- Fully trustless and on-chain — the chain does the work
+### Engine inscription
+- File: `index_bundle.js` (text/javascript)
+- Inscribed once, no parent, no metadata
+- Holds the entire rendering engine: shaders, main.js, health_data_sets.js, decay_logic.js, CSS, DOM creation
+- Creates its own DOM (canvas-container, canvas) and injects CSS as a style element
+- Reads piece parameters from `document.currentScript` attributes
 
-**Runtime flow:**
-1. Piece loads, calls `/r/children/{inscription_0_id}` → gets all sibling IDs
-2. For each sibling, calls `/r/metadata/{sibling_id}` → gets their dataset
-3. Builds full collection, computes min/max from all known pieces
-4. Renders — aware of the entire living collection
-
-**Reanimation runtime flow (extends above):**
-5. Read current block height → determine which lifecycle cycle the piece is in
-6. Identify partner by piece number from sibling list (pairing: (0,1), (2,3)...)
-7. Partner dataset already fetched in step 2 via `/r/metadata/{partner_id}`
-8. Compute blended dataset from own + partner datasets
-9. Compute karma from blend → check against 25th percentile of all sibling karmas → determine if liberated
-10. Each cycle's lifespan derived from the hash of the previous cessation block (`/r/blockinfo/{cessation_height}`)
-11. Frozen partner rule: if partner is piece 0 (no reanimation) or has already liberated, use partner's last known dataset as permanent anchor
-
-**At mint time**, each piece stores its health dataset in the ordinals **metadata field** (CBOR format) — a dedicated machine-readable slot accessible via `/r/metadata/{id}`. The HTML payload stays clean.
-
-## Structure
-- **Inscription 0** — genesis piece. Holds the entire rendering engine:
-  - fragment.glsl + vertex.glsl inlined
-  - main.js (all helpers, beam configs, decay logic) inlined
-  - No inherited hue (genesis), no partner piece, no reanimation
-- **Pieces 1–N** — thin HTML payload + reference back to inscription 0
-
-## Per-Piece Payload
-Each piece after 0 is inscribed as a small HTML file:
+### Piece inscriptions (all 29)
+- All pieces are thin HTML files (~300 bytes)
+- Each loads the engine via `<script src="/content/{engineId}">`
+- Piece params passed as HTML attributes on the script tag: `t` (pieceIndex), `ht` (hashTail), `unix` (inscriptionUnixSeconds), `hue` (inheritedHueDeg), `block` (blockHeight)
+- Example:
 ```html
-<script>
-  const PIECE = {
-    datasetIndex: 5,
-    dataset: { /* this piece's own ECG/lab data */ },
-    hashTail: 62,
-    inscriptionUnix: 1741234567,
-    inheritedHueDeg: 218.4,
-  };
-</script>
-<script src="/content/{inscription_0_id}"></script>
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}</style></head><body><script t="1" ht="61" unix="1775938686" hue="321.4286" block="204" src="/content/{engineId}"></script></body></html>
 ```
+- Piece 0: `t="0"`, no parent at inscribe time (genesis piece)
+- Pieces 1+: inscribed with `--parent {piece0Id}` — makes them children of piece 0
 
-The dataset is also stored in the inscription's metadata field (CBOR) so siblings can fetch it via `/r/metadata/{id}`. No sibling array needed in the payload — discovery happens dynamically at runtime.
-
-**CRITICAL: the `dataset` field must be present in the CBOR metadata of every child inscription.** The engine's sibling discovery reads `m.dataset` from each sibling's metadata to build `lc.collectionDatasets` — the dynamic collection that drives `getAgedDataset`, `applyCollectionInfluence`, and all percentile calculations. If `dataset` is absent from a child's metadata, the engine falls back to the local `healthDataSets[idx]` entry for that piece, but new pieces minted after inscription 0 have no local fallback and will be silently excluded from the collection influence. A child inscription without `dataset` in its metadata is invisible to the living collection.
-
-## Boot Logic
-Inscription 0 checks for `window.PIECE` on load:
-- If absent → piece 0, genesis defaults
-- If present → use PIECE.hashTail, PIECE.inscriptionUnix, PIECE.inheritedHueDeg, fetch all siblings dynamically
-
-## Min/Max — Living Collection (INTENTIONAL)
-- Min/max is NOT frozen. Each piece computes it dynamically from all sibling datasets.
-- New pieces shift the color/percentile relationships of all existing pieces.
-- By design — a new lifespan entering affects all the others.
-
-## Ord CLI — Key Commands
-
-**Inscribe piece 0 (genesis, no parent):**
-```bash
-ord wallet inscribe --fee-rate <FEE_RATE> --file index.html --json-metadata dataset.json
+### Engine boot logic (`document.currentScript`)
+The engine reads params synchronously at load time:
+```js
+const _selfScript = document.currentScript;
 ```
+- `_selfScript` null → piece 0 loading itself directly as text/javascript (shouldn't happen in prod)
+- `_selfScript` set → child HTML loaded it as `<script src>`, reads `t/ht/unix/hue/block` attributes
+- `main.js` uses these to set `currentDataSetIndex`, `lc.pieceIndex`, `lc.hashTail`, `inscriptionUnixSeconds`, `inheritedHueDegOverride` synchronously before any async calls
 
-**Inscribe piece N (child of inscription 0):**
+### Sibling discovery (living collection)
+- Pieces 1+ are children of piece 0 via `--parent`
+- At runtime, engine calls `/r/children/{piece0Id}` to discover ALL siblings
+- For each sibling, fetches `/r/metadata/{sibling_id}` to get their health dataset (CBOR)
+- Builds `lc.collectionDatasets` — drives `getAgedDataset`, `applyCollectionInfluence`, percentile calculations
+- New mints automatically propagate via `lcRefreshSiblings()` on every block poll — no reload needed
+
+## Mint Sequence
+
 ```bash
-ord wallet inscribe --fee-rate <FEE_RATE> --parent <INSCRIPTION_0_ID> --file piece.html --json-metadata dataset.json
+# 1. Inscribe engine (once, text/javascript)
+ord wallet inscribe --fee-rate <FEE> --file index_bundle.js
+# → engineId
+
+# 2. Generate piece 0 HTML
+node mint.js 0 <blockHash> <blockTimestamp> <engineId> <blockHeight>
+# → dist/cessation_piece_00.html + dist/cessation_piece_00_metadata.json
+
+# 3. Inscribe piece 0 (no parent, with metadata)
+ord wallet inscribe --fee-rate <FEE> --file dist/cessation_piece_00.html --json-metadata dist/cessation_piece_00_metadata.json
+# → piece0Id
+
+# 4. Generate piece N HTML (N = 1..28)
+node mint.js N <blockHash> <blockTimestamp> <engineId> <piece0Id> <blockHeight>
+# → dist/cessation_piece_0N.html + dist/cessation_piece_0N_metadata.json
+
+# 5. Inscribe piece N (--parent piece0Id)
+ord wallet inscribe --fee-rate <FEE> --parent <piece0Id> --file dist/cessation_piece_0N.html --json-metadata dist/cessation_piece_0N_metadata.json
 ```
 
 **CRITICAL: `--parent` must be declared at mint time — cannot be added retroactively.**
 
 ## Metadata Format
-- Stored as CBOR (tag 5), accessible via `/r/metadata/{id}`
+- Stored as CBOR, accessible via `/r/metadata/{id}`
 - CLI flag: `--json-metadata <file>` for single inscriptions
-- 520 byte limit per data push — auto-concatenated if split, larger datasets still work
 - Response is hex-encoded CBOR — client must decode
+- **Every child piece MUST have `dataset` in its metadata** — engine reads `m.dataset` from each sibling. Without it, the piece is invisible to the living collection.
+
+## MIME Types
+- Engine: `text/javascript` (ord infers from `.js` extension)
+- All pieces: `text/html` (ord infers from `.html` extension)
+- **Reason for separate engine**: `.js` inscriptions show as raw code in ord's preview UI. All piece `.html` files render correctly as art.
+
+## Living Collection — Dynamic Sibling Discovery
+- Each piece at runtime discovers all siblings by querying `/r/children/{piece0Id}`
+- Fetches `/r/metadata/{sibling_id}` for each to get health datasets
+- New pieces minted post-collection shift percentiles for ALL existing pieces automatically
+- Piece 0 is permanently in the sibling list (genesis influences everything)
+- Pagination: `/r/children/{id}/inscriptions/{page}` — 100 per page, check `more` boolean
+
+## Self Keyword
+- `/r/children/self/inscriptions/0` — piece 0 can list its children without knowing its own ID
+- `/r/inscription/self`, `/r/metadata/self`, `/r/parents/self` also work
 
 ## Blockhash On-Chain
 - `/r/blockinfo/{height_or_hash}` returns full block data including `hash`
-- Hash tail readable directly on-chain — no external lookup needed
-- Use `/r/inscription/self` → `height` field to get own block, then fetch that block
+- Lifespan derived from block hash at mint — the `block` attribute in the script tag gives height
 
-## Pagination
-- `/r/children/{id}/inscriptions/{page}` — 100 per page
-- Check `more` boolean in response to determine if more pages exist
-- Must loop through all pages once collection exceeds 100 pieces
-- Children returned in deterministic blockchain order — guaranteed stable
+## Thumbnail Gradients
+- Each piece HTML has body `background:#000` (always)
+- The gradient background for piece 0 standalone viewing is baked via `BAKE:PREVIEW_GRADIENT` marker in the engine — replaced by `mint.js` with `CUSTOM_GRADIENTS[0]`
+- Tracker-matched gradients in `CUSTOM_GRADIENTS` in `mint.js`
 
-## Self Keyword
-- Inscription 0 uses `/r/children/self/inscriptions/0` to list all children without knowing its own ID
-- Also works for: `/r/inscription/self`, `/r/metadata/self`, `/r/parents/self`
-
-## Mint Day Checklist (per piece)
-1. Take new ECG/lab snapshot
-2. Compute inheritedHueDeg from piece N-1's glucose hue
-3. Prepare dataset JSON for metadata field
-4. Inscribe with `--parent {inscription_0_id}` and `--json-metadata dataset.json`
-5. Bitcoin returns blockhash and timestamp
-6. Extract hashTail from last two hex chars of blockhash (convert to 0-99)
-7. Blockhash also readable on-chain via `/r/blockinfo/{height}`
-8. Update tracker: swap HASH=88 and inscriptionUnix placeholders in PieceViewer.tsx
+## Min/Max — Living Collection (Intentional)
+- Min/max is NOT frozen at mint time
+- Each piece computes it dynamically from all sibling datasets
+- New pieces shift the color/percentile relationships of all existing pieces
+- By design — a new lifespan entering affects all the others
 
 ## Collection Growth
 - New piece every ~3 months as new ECG/lab data is taken
-- Partner pairing: (0,1), (2,3)... — piece 0 has no partner
-- Inherited hue computed at mint time from piece N-1's glucose hue, hardcoded into payload
+- Partner pairing: (0,1), (2,3)... — piece 0 liberates directly (no karma check)
+- Inherited hue computed at mint time from piece N-1's glucose hue, baked into `hue` attribute

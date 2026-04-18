@@ -92,7 +92,7 @@ Nothing is wall-clock timed. No human triggers. The chain breathes and the piece
 ## Canvas Format & Display (committed)
 - Aspect ratio: 3:2 (landscape, like 35mm film negative)
 - UV correction: `uv = vec2((v_uv.x - 0.5) * aspect + 0.5, v_uv.y)` using u_resolution
-- Frame: 125px solid black border (film strip), black background
+- Frame: `clamp(8px, 8vmin, 80px)` solid black border (proportional film strip) — replaces old fixed 125px (2026-04-12)
 - Fullscreen: F key toggles fullscreen on canvas-container. Hover icon removed.
 - Tracker: same 3:2 canvas, same shader, black background wrapper
 
@@ -151,28 +151,28 @@ Full details in `memory/nirvana.md`.
 - Piece 0 void partner = piece 1 (special-cased in lcCheckVoid)
 - **Living collection**: sibling CBOR metadata fetched at boot, datasets extracted into `lc.collectionDatasets`. draw() uses this for getAgedDataset, applyCollectionInfluence, computeHSBFromStats, winsorizedPercentileForLab. Falls back to local healthDataSets in dev mode or if dataset absent from metadata.
 - **Boot rendering**: piece renders correctly from local healthDataSets at frame 1. lc.collectionDatasets loads in background (2-3s). Color is correct immediately because local data IS the first-29 collection. Visual shift only occurs when piece 30+ is minted.
-- **URL hash bootstrap** (replaced window.PIECE 2026-04-05): `#idx=N&ht=H&unix=U&hue=D&block=B` parsed synchronously in init(). Eliminates piece-0-flash on child inscriptions. `_hp.block` supplies child's inscription block height directly so lcFastForward uses the correct cessation block.
+- **`document.currentScript` bootstrap** (replaced URL hash 2026-04-11): engine reads `t/ht/unix/hue/block` attributes from the `<script>` tag synchronously. Eliminates piece-0-flash. `block` attribute supplies child's inscription block height for lcFastForward.
 - **Autonomous new-mint propagation** (built 2026-03-22): `lcRefreshSiblings()` called on every new block in `lcPoll()`. Fetches only newly-seen sibling ids, extends `lc.datasetByIdx` + `lc.siblingIdMap` incrementally, rebuilds `lc.collectionDatasets`, recomputes liberation threshold. No reload needed — collection stays live for wall-mounted use. `lc` tracks `parentId`, `knownSiblingCount`, `datasetByIdx`.
 
 ## Inscription Architecture
 Full details in `memory/inscription_architecture.md`.
-- Inscription 0 holds the entire engine (shaders, main.js, helpers)
-- Pieces 1-28: thin iframe HTML — `<iframe src="/content/{piece0Id}#{params}">`. Can't use `<script src>` because HTML inscriptions are served as text/html (MIME mismatch).
-- URL hash params: `#idx=N&ht=H&unix=U&hue=D&block=B` — piece 0 reads these on load, overrides baked defaults
-- Inside iframe, /r/children/self resolves to piece 0's children (all siblings) — correct by design
-- CBOR metadata written via `--json-metadata` flag, contains pieceIndex, hashTail, inscriptionUnix, dataset
-- Thumbnail gradient: injected as `<style>` tag in HTML so ord thumbnail renderer captures it before JS/WebGL loads
+- **Two-inscription model** (finalized 2026-04-11, regtest verified): engine + pieces are separate
+- Engine: `index_bundle.js` inscribed as `text/javascript` — holds entire rendering engine, creates its own DOM
+- All 29 pieces: thin HTML files (~300 bytes) loading engine via `<script t=N ht=H unix=U hue=D block=B src="/content/{engineId}">`
+- Engine reads piece params from `document.currentScript` attributes (synchronous, no URL hash, no iframe, no window.PIECE)
+- Piece 0: inscribed with no parent. Pieces 1-28: inscribed with `--parent {piece0Id}` — makes them children for sibling discovery
+- Sibling discovery: `/r/children/{piece0Id}` at runtime → fetches metadata for each → builds living collection
+- CBOR metadata per piece via `--json-metadata` flag — `dataset` field required for living collection
 - `CUSTOM_GRADIENTS` in mint.js: all 29 pieces use tracker-matched `linear-gradient(90deg, hex1, hex2)`
-- Regtest end-to-end verified 2026-04-05: piece 0 + piece 1 inscribed, CBOR decoded correctly on-chain
 - Min/max computed dynamically from all known siblings — intentional, new pieces shift existing ones
 
 ## Mint Timeline
-- **Target was Easter Sunday, April 5 2026** — not yet inscribed as of 2026-04-06
+- **Target was Easter Sunday, April 5 2026** — not yet inscribed as of 2026-04-18
 - 29th (final) dataset added 2026-03-20 — ready to mint
 - Fees currently very low (1-4 sat/vB)
-- Bundle: `index_bundle.html` 93.4 KB uncompressed (rebuilt 2026-04-03 at commit `64d4e51`)
-- Regtest testing complete 2026-04-05 — iframe architecture, CBOR, lifecycle all verified
-- **Ready to inscribe.** Run `node mint.js 0 <hash> <unixTs>` → `dist/cessation_piece_00.html`, then piece 1 as child.
+- Engine: `index_bundle.js` 86.5 KB uncompressed (rebuilt 2026-04-11 with OCM-style arch)
+- Regtest verified 2026-04-11 — engine + piece 0 + piece 1 render correctly
+- **Ready to inscribe.** Sequence: inscribe engine → get engineId → inscribe piece 0 → get piece0Id → inscribe pieces 1-28 as children of piece0Id
 
 ## Rare Sats
 - All 29 pieces will be inscribed on **Omega black uncommon sats** — last sat of a block, never previously inscribed

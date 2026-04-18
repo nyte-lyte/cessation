@@ -1941,6 +1941,29 @@ async function init() {
     if (fetched.length > 0) lc.collectionDatasets = fetched;
   }
 
+  async function lcIsPartnerLiberated(pd, pInscriptionHeight) {
+    const CAP = 50;
+    let pCessationBlock = pInscriptionHeight + Math.round(lifespanYearsFromHashDigits(pd.hashTail) * BLOCKS_PER_YEAR);
+    let pCycleDs = pd.dataset;
+    const myDs = lcCycleDataset();
+    const collection = lcEffectiveCollection();
+    for (let i = 0; i < CAP; i++) {
+      if (lc.currentBlockHeight < pCessationBlock) return false;
+      const blended   = blendDatasets(pCycleDs, myDs);
+      const threshold = computeLiberationThreshold(collection, minMaxValues);
+      const karma     = computeKarma(blended, minMaxValues);
+      if (karma < threshold) return true;
+
+      pCycleDs = blended;
+      try {
+        const bi = await fetch(`/r/blockinfo/${pCessationBlock}`).then(r => r.json());
+        const ht = Math.round(parseInt(bi.hash.slice(-2), 16) * 99 / 255);
+        pCessationBlock += Math.round(lifespanYearsFromHashDigits(ht) * BLOCKS_PER_YEAR);
+      } catch (e) { return false; }
+    }
+    return false;
+  }
+
   async function lcCheckVoid() {
     const partnerIdx = getPartnerIndex(currentDataSetIndex);
     if (partnerIdx < 0) { lc.voidTriggerMs = Date.now(); return; }
@@ -1948,12 +1971,12 @@ async function init() {
     if (!pd || pd.hashTail == null) return;
     try {
       const pInfo = await fetch(`/r/inscription/${pd.id}`).then(r => r.json());
-      const pCessation = (pInfo.height ?? 0) + Math.round(lifespanYearsFromHashDigits(pd.hashTail) * BLOCKS_PER_YEAR);
-      if (lc.currentBlockHeight >= pCessation) {
+      const partnerLiberated = await lcIsPartnerLiberated(pd, pInfo.height ?? 0);
+      if (partnerLiberated) {
         lc.voidTriggerMs = Date.now();
-        console.log('[lc] VOID — both partners reached final cessation');
+        console.log('[lc] VOID — both partners liberated');
       }
-    } catch (e) { /* partner cessation unknown — void pending */ }
+    } catch (e) { /* partner state unknown — void pending */ }
   }
 
   async function lcPoll() {

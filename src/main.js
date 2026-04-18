@@ -591,19 +591,48 @@ async function init() {
   }
 
   // Check if partner has also reached final cessation — trigger void if so
+  // Simulate the partner's full cycle history to determine if they are truly liberated.
+  // Mirrors lcFastForward but from the partner's perspective:
+  //   blendDatasets(partnerCycleDs, thisDs) — partner is successor (70%), this piece is predecessor (30%).
+  // Fetches cessation block hashes on-chain to derive each new lifespan, capped at 50 cycles.
+  // Returns true only if the partner has exhausted karma and reached their final state.
+  async function lcIsPartnerLiberated(pd, pInscriptionHeight) {
+    const CAP = 50;
+    let pCessationBlock = pInscriptionHeight + Math.round(lifespanYearsFromHashDigits(pd.hashTail) * BLOCKS_PER_YEAR);
+    let pCycleDs = pd.dataset;
+    const myDs = lcCycleDataset();
+    const collection = lcEffectiveCollection();
+    for (let i = 0; i < CAP; i++) {
+      if (lc.currentBlockHeight < pCessationBlock) return false; // partner still alive in this cycle
+      const blended   = blendDatasets(pCycleDs, myDs);
+      const threshold = computeLiberationThreshold(collection, minMaxValues);
+      const karma     = computeKarma(blended, minMaxValues);
+      if (karma < threshold) return true; // partner liberated
+      // Partner reanimates — advance to next cessation
+      pCycleDs = blended;
+      try {
+        const bi = await fetch(`/r/blockinfo/${pCessationBlock}`).then(r => r.json());
+        const ht = Math.round(parseInt(bi.hash.slice(-2), 16) * 99 / 255);
+        pCessationBlock += Math.round(lifespanYearsFromHashDigits(ht) * BLOCKS_PER_YEAR);
+      } catch (e) { return false; } // block info unavailable — assume not yet liberated
+    }
+    return false; // cap reached
+  }
+
+  // Check if partner has also reached final liberation — trigger void if so.
   async function lcCheckVoid() {
     const partnerIdx = getPartnerIndex(currentDataSetIndex);
-    if (partnerIdx < 0) { lc.voidTriggerMs = Date.now(); return; } // genesis — no partner
+    if (partnerIdx < 0) { lc.voidTriggerMs = Date.now(); return; } // piece 0: no partner, void immediately
     const pd = lc.collectionDatasets.find(d => d.pieceIndex === partnerIdx);
-    if (!pd || pd.hashTail == null) return;
+    if (!pd || pd.hashTail == null) return; // partner metadata not yet available — will retry on next poll
     try {
       const pInfo = await fetch(`/r/inscription/${pd.id}`).then(r => r.json());
-      const pCessation = (pInfo.height ?? 0) + Math.round(lifespanYearsFromHashDigits(pd.hashTail) * BLOCKS_PER_YEAR);
-      if (lc.currentBlockHeight >= pCessation) {
+      const partnerLiberated = await lcIsPartnerLiberated(pd, pInfo.height ?? 0);
+      if (partnerLiberated) {
         lc.voidTriggerMs = Date.now();
-        console.log('[lc] VOID — both partners reached final cessation');
+        console.log('[lc] VOID — both partners liberated');
       }
-    } catch (e) { /* partner cessation unknown — void pending */ }
+    } catch (e) { /* partner state unknown — void pending */ }
   }
 
   // Poll block height, detect cessation, trigger reanimation or liberation
