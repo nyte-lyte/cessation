@@ -55,7 +55,7 @@ Nothing is wall-clock timed. No human triggers. The chain breathes and the piece
 
 ## Decay Model
 - **No artificial brightness decay** — the data itself evolves over the lifetime (chronological drift, collection influence). That IS the decay. Exponential dimming was removed as meaningless on top of real data evolution.
-- Lifespan determined at mint by Bitcoin block hash
+- **Lifespan distribution** (2026-04-18): triangular inverse CDF, min=3, max=100, mode=28. Skews young — median ~42 years, long tail to 100. Most pieces die before they "should." Replaces old n^2.5 power curve (was clustered 5–20 years, max 65). Same function in cessation main.js and tracker pieceUtils.ts.
 - `driftMul` grows 0.5→1.3 with lifeFraction — movement amplitude increases with age
 - Final cycle (liberated): late phase dissolves toward radial light instead of darkening
 
@@ -73,7 +73,7 @@ Nothing is wall-clock timed. No human triggers. The chain breathes and the piece
 - Beam arrival gates: Na/Cl present from birth at data-driven floor, grow at arrival gate
 - Beam tempos: N by BUN (7-10s), Cr by PR (9-15s), CO2 by eGFR (12-20s), Ca by tAxis (18-30s)
 - DPR: both cessation and tracker render at physical pixels
-- **Current safe state: cessation `64d4e51`, tracker `9ee8fe5`**
+- **Current safe state: cessation `0e027cf`, tracker `9d0b0b9`**
 
 ## Visual Progress (2026-04-03 — current)
 - 17-field data-driven anchors committed and approved. User loves this system.
@@ -147,8 +147,8 @@ Full details in `memory/nirvana.md`.
 - Dev mode: lcSelf() fails gracefully → uses hardcoded defaults, lc.ready = true, lc.onChain = false
 - On-chain: fetches own CBOR metadata, discovers ALL siblings (paginated), computes cessationBlock, polls every 60s
 - Transition: reanimationProgress interpolates 0→1 over LC_BLOCK_WIN_MS (600s) per frame via lcTick()
-- **Void detection built**: `lcIsPartnerLiberated()` simulates partner's full cycle history (fetches cessation block hashes iteratively, cap 50 cycles). `lcCheckVoid()` fires at own liberation and every subsequent block poll while liberated. Both partners must liberate independently before void triggers.
-- Piece 0 void partner = piece 1 (special-cased in lcCheckVoid)
+- **Void detection built**: `lcIsPartnerLiberated()` simulates partner's full cycle history iteratively (blend, karma check, fetch next cessation block hash — no cap, exits via return false/true or fetch failure). `lcCheckVoid()` fires at own liberation and every subsequent block poll while liberated. Both partners must liberate independently before void triggers.
+- Piece 0 void partner = piece 1 (getPartnerIndex handles this)
 - **Living collection**: sibling CBOR metadata fetched at boot, datasets extracted into `lc.collectionDatasets`. draw() uses this for getAgedDataset, applyCollectionInfluence, computeHSBFromStats, winsorizedPercentileForLab. Falls back to local healthDataSets in dev mode or if dataset absent from metadata.
 - **Boot rendering**: piece renders correctly from local healthDataSets at frame 1. lc.collectionDatasets loads in background (2-3s). Color is correct immediately because local data IS the first-29 collection. Visual shift only occurs when piece 30+ is minted.
 - **`document.currentScript` bootstrap** (replaced URL hash 2026-04-11): engine reads `t/ht/unix/hue/block` attributes from the `<script>` tag synchronously. Eliminates piece-0-flash. `block` attribute supplies child's inscription block height for lcFastForward.
@@ -156,28 +156,30 @@ Full details in `memory/nirvana.md`.
 
 ## Inscription Architecture
 Full details in `memory/inscription_architecture.md`.
-- **Two-inscription model** (finalized 2026-04-11, regtest verified): engine + pieces are separate
-- Engine: `index_bundle.js` inscribed as `text/javascript` — holds entire rendering engine, creates its own DOM
-- All 29 pieces: thin HTML files (~300 bytes) loading engine via `<script t=N ht=H unix=U hue=D block=B src="/content/{engineId}">`
-- Engine reads piece params from `document.currentScript` attributes (synchronous, no URL hash, no iframe, no window.PIECE)
-- Piece 0: inscribed with no parent. Pieces 1-28: inscribed with `--parent {piece0Id}` — makes them children for sibling discovery
-- Sibling discovery: `/r/children/{piece0Id}` at runtime → fetches metadata for each → builds living collection
+- **Two-inscription model** (finalized 2026-04-18): engine is root, all 29 pieces are its children
+- Engine: `index_bundle.js` inscribed as `text/javascript` — no parent, no metadata. Root inscription.
+- All 29 pieces: thin HTML files (~300 bytes) loading engine via `<script t=N ht=H unix=U hue=D block=B src="/content/{engineId}">` — ALL use `--parent engineId`
+- Engine reads piece params from `document.currentScript` attributes synchronously
+- **Sibling discovery**: engineId extracted from `_sc.getAttribute('src')` at runtime → `/r/children/{engineId}` returns all 29 pieces for any piece running the engine. Works identically for every piece including piece 0.
+- Piece 0 is the genesis art piece, NOT the inscription parent. It's a child of the engine like all others.
+- New pieces (30+): mint with `--parent engineId` → automatically appear in `/r/children/{engineId}` → picked up by `lcRefreshSiblings` within ~10 minutes. Collection grows without any changes to existing pieces.
 - CBOR metadata per piece via `--json-metadata` flag — `dataset` field required for living collection
 - `CUSTOM_GRADIENTS` in mint.js: all 29 pieces use tracker-matched `linear-gradient(90deg, hex1, hex2)`
 - Min/max computed dynamically from all known siblings — intentional, new pieces shift existing ones
 
 ## Mint Timeline
-- **Target was Easter Sunday, April 5 2026** — not yet inscribed as of 2026-04-18
-- 29th (final) dataset added 2026-03-20 — ready to mint
-- Fees currently very low (1-4 sat/vB)
-- Engine: `index_bundle.js` 86.5 KB uncompressed (rebuilt 2026-04-11 with OCM-style arch)
-- Regtest verified 2026-04-11 — engine + piece 0 + piece 1 render correctly
-- **Ready to inscribe.** Sequence: inscribe engine → get engineId → inscribe piece 0 → get piece0Id → inscribe pieces 1-28 as children of piece0Id
+- **Minting today (2026-04-18)** — laptop environment confirmed: Node v25.9.0, Bitcoin Core v30.2.0, ord 0.27.1
+- Engine: `index_bundle.js` 87.4 KB uncompressed (current, last rebuilt 2026-04-18)
+- **Mint sequence** (unified for all pieces):
+  1. `ord wallet inscribe --fee-rate <FEE> --file index_bundle.js` → engineId
+  2. For each piece 0–28: `node mint.js <N> <BLOCK_HASH> <BLOCK_TIME> <ENGINE_ID> <BLOCK_HEIGHT>`
+  3. `ord wallet inscribe --fee-rate <FEE> --sat <SAT> --parent <ENGINE_ID> --file dist/cessation_piece_0N.html --json-metadata dist/cessation_piece_0N_metadata.json`
+- **Sats**: 29 sats held in UniSat wallet across 18 UTXOs — must transfer to ord wallet before inscribing. Use `ord wallet sats` after transfer to map sat numbers and satpoints before touching anything.
 
 ## Rare Sats
 - All 29 pieces will be inscribed on **Omega black uncommon sats** — last sat of a block, never previously inscribed
 - **Piece 0 (genesis)** will be inscribed on a **Nakamoto sat** mined 2009-01-31 — 28 days after the genesis block, when Satoshi was the only miner. Never moved.
-- **All sats already sourced and held in ord wallet** ✓
+- Sats sourced and held in **UniSat wallet** across 18 UTXOs — transfer to ord wallet before minting. Some UTXOs contain multiple rare sats; ord will separate them correctly during inscription via satpoint tracking.
 
 ## Visual Problems — Resolved / Pending
 Full diagnosis in `memory/visual_diagnosis.md`. Images saved in `memory/` — see `visual_reference.md`.
