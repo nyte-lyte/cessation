@@ -558,13 +558,19 @@ async function init() {
     return null;
   }
 
-  // Fetch and load all sibling datasets from /r/children/self (with pagination)
+  // engineId extracted from the script tag src attribute — same for all 29 pieces.
+  // All pieces are children of the engine inscription, so /r/children/{engineId}
+  // returns all siblings regardless of which piece is running.
+  const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
+
+  // Fetch and load all sibling datasets from /r/children/{engineId} (with pagination)
   async function lcRefreshSiblings() {
+    if (!_engineId) return; // dev mode — no engine id available
     let page = 0, more = true;
     const fetched = [];
     while (more) {
       let resp;
-      try { resp = await fetch(`/r/children/self/inscriptions/${page}`).then(r => r.json()); }
+      try { resp = await fetch(`/r/children/${_engineId}/inscriptions/${page}`).then(r => r.json()); }
       catch (e) { break; }
       for (const id of (resp.ids ?? [])) {
         try {
@@ -595,26 +601,26 @@ async function init() {
   // Fetches cessation block hashes on-chain to derive each new lifespan, capped at 50 cycles.
   // Returns true only if the partner has exhausted karma and reached their final state.
   async function lcIsPartnerLiberated(pd, pInscriptionHeight) {
-    const CAP = 50;
     let pCessationBlock = pInscriptionHeight + Math.round(lifespanYearsFromHashDigits(pd.hashTail) * BLOCKS_PER_YEAR);
     let pCycleDs = pd.dataset;
     const myDs = lcCycleDataset();
     const collection = lcEffectiveCollection();
-    for (let i = 0; i < CAP; i++) {
+    // Loop exits via: return false (partner alive), return true (partner liberated),
+    // or return false (fetch failed — retry on next poll). No artificial cap.
+    while (true) {
       if (lc.currentBlockHeight < pCessationBlock) return false; // partner still alive in this cycle
       const blended   = blendDatasets(pCycleDs, myDs);
       const threshold = computeLiberationThreshold(collection, minMaxValues);
       const karma     = computeKarma(blended, minMaxValues);
       if (karma < threshold) return true; // partner liberated
-      // Partner reanimates — advance to next cessation
+      // Partner reanimates — fetch next cessation block hash to derive new lifespan
       pCycleDs = blended;
       try {
         const bi = await fetch(`/r/blockinfo/${pCessationBlock}`).then(r => r.json());
         const ht = Math.round(parseInt(bi.hash.slice(-2), 16) * 99 / 255);
         pCessationBlock += Math.round(lifespanYearsFromHashDigits(ht) * BLOCKS_PER_YEAR);
-      } catch (e) { return false; } // block info unavailable — assume not yet liberated
+      } catch (e) { return false; } // block info unavailable — assume not yet liberated, retry next poll
     }
-    return false; // cap reached
   }
 
   // Check if partner has also reached final liberation — trigger void if so.

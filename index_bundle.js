@@ -1908,12 +1908,15 @@ async function init() {
     return null;
   }
 
+  const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
+
   async function lcRefreshSiblings() {
+    if (!_engineId) return;
     let page = 0, more = true;
     const fetched = [];
     while (more) {
       let resp;
-      try { resp = await fetch(`/r/children/self/inscriptions/${page}`).then(r => r.json()); }
+      try { resp = await fetch(`/r/children/${_engineId}/inscriptions/${page}`).then(r => r.json()); }
       catch (e) { break; }
       for (const id of (resp.ids ?? [])) {
         try {
@@ -1938,12 +1941,12 @@ async function init() {
   }
 
   async function lcIsPartnerLiberated(pd, pInscriptionHeight) {
-    const CAP = 50;
     let pCessationBlock = pInscriptionHeight + Math.round(lifespanYearsFromHashDigits(pd.hashTail) * BLOCKS_PER_YEAR);
     let pCycleDs = pd.dataset;
     const myDs = lcCycleDataset();
     const collection = lcEffectiveCollection();
-    for (let i = 0; i < CAP; i++) {
+
+    while (true) {
       if (lc.currentBlockHeight < pCessationBlock) return false;
       const blended   = blendDatasets(pCycleDs, myDs);
       const threshold = computeLiberationThreshold(collection, minMaxValues);
@@ -1957,7 +1960,6 @@ async function init() {
         pCessationBlock += Math.round(lifespanYearsFromHashDigits(ht) * BLOCKS_PER_YEAR);
       } catch (e) { return false; }
     }
-    return false;
   }
 
   async function lcCheckVoid() {

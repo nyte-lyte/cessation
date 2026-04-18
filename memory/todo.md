@@ -3,8 +3,10 @@
 ## Pre-Mint (mint target was Easter Sunday April 5 2026 — not yet done as of 2026-04-11)
 - **NEXT: Mainnet mint sequence**
   1. Inscribe engine: `ord wallet inscribe --fee-rate <FEE_RATE> --file index_bundle.js` → get engineId
-  2. Piece 0: `node mint.js 0 <blockHash> <blockTimestamp> <engineId> <blockHeight>` → inscribe dist/cessation_piece_00.html (no --parent)
-  3. Pieces 1+: `node mint.js N <blockHash> <blockTimestamp> <engineId> <piece0Id> <blockHeight>` → inscribe with --parent piece0Id
+  2. All 29 pieces: `node mint.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>` → inscribe with --parent engineId
+  - All pieces are children of the engine. Engine is the root inscription.
+  - Piece 0 is genesis art piece, not the inscription parent.
+  - Sibling discovery at runtime uses /r/children/{engineId} (engineId extracted from script src).
   - All pieces use --json-metadata for CBOR
   - Engine is text/javascript (ord infers from .js extension), all pieces are text/html
 - ~~Architecture: separate engine inscription~~ — DONE (2026-04-11): engine=text/javascript, all 29 pieces=HTML, black background, regtest verified

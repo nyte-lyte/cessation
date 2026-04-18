@@ -204,34 +204,17 @@ console.log(`Metadata JSON written: dist/${metadataName}`);
 console.log(`  Use with: ord wallet inscribe --json-metadata dist/${metadataName}\n`);
 
 // ── All pieces: thin HTML — loads engine via <script src="/content/{engineId}"> ──
-// Piece 0 : no piece0Id/blockHeight needed (it IS the parent)
-// Pieces 1+: require piece0Id (for --parent) and blockHeight
+// All 29 pieces are children of the engine inscription (--parent engineId).
+// The engine is the root. Piece 0 is the genesis art piece, not the inscription parent.
+// Sibling discovery at runtime: extract engineId from _sc.src, fetch /r/children/{engineId}.
 
 const hue = partnerInheritedHueDeg.toFixed(4);
 
-let piece0Id   = null;
-let blockHeight = 0;
-
-if (pieceIndex === 0) {
-  blockHeight = parseInt(process.argv[6], 10);
-  if (isNaN(blockHeight) || blockHeight < 0) {
-    console.error('Error: piece 0 requires blockHeight as 6th argument');
-    console.error('  node mint.js 0 <blockHash> <blockTimestamp> <engineId> <blockHeight>');
-    process.exit(1);
-  }
-} else {
-  piece0Id    = process.argv[6];
-  blockHeight = parseInt(process.argv[7], 10);
-  if (!piece0Id) {
-    console.error('Error: pieces 1+ require piece0Id as 6th argument');
-    console.error('  node mint.js N <blockHash> <blockTimestamp> <engineId> <piece0Id> <blockHeight>');
-    process.exit(1);
-  }
-  if (isNaN(blockHeight) || blockHeight < 0) {
-    console.error('Error: pieces 1+ require blockHeight as 7th argument');
-    console.error('  node mint.js N <blockHash> <blockTimestamp> <engineId> <piece0Id> <blockHeight>');
-    process.exit(1);
-  }
+const blockHeight = parseInt(process.argv[6], 10);
+if (isNaN(blockHeight) || blockHeight < 0) {
+  console.error('Error: blockHeight required as 6th argument');
+  console.error('  node mint.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>');
+  process.exit(1);
 }
 
 const scriptHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}</style></head><body><script t="${pieceIndex}" ht="${lastTwoHashDigits}" unix="${inscriptionUnixSeconds}" hue="${hue}" block="${blockHeight}" src="/content/${engineId}"><\/script></body></html>`;
@@ -242,9 +225,4 @@ writeFileSync(outputDest, scriptHtml, 'utf8');
 
 console.log(`HTML written: dist/${outputName}  (${scriptHtml.length} bytes)`);
 console.log(`Ready to inscribe: dist/${outputName}`);
-if (pieceIndex === 0) {
-  console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --file dist/${outputName} --json-metadata dist/${metadataName}`);
-  console.log(`\nNote: inscribe the engine (index_bundle.js) as text/javascript BEFORE piece 0.`);
-} else {
-  console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --parent ${piece0Id} --file dist/${outputName} --json-metadata dist/${metadataName}`);
-}
+console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --parent ${engineId} --file dist/${outputName} --json-metadata dist/${metadataName}`);
