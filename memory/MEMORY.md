@@ -195,8 +195,15 @@ Full list in `memory/todo.md`.
 
 ## Tracker Site
 Full details in `memory/tracker.md`.
-- Live: https://cessation-tracker.vercel.app
+- Live: https://cessation-tracker.vercel.app — homepage redirects to /piece/0 (grid removed)
+- Nav: COLLECTION (→/piece/0) · ABOUT · ANALYTICS · nytelyte.xyz right side
 - Stack: Next.js 16 + TypeScript + Tailwind v4 + Vercel, deployed from ~/cessation-tracker
+
+## nytelyte.xyz — Live
+- Artist portfolio site at https://nytelyte.xyz, repo ~/nytelyte (github: nyte-lyte/nytelyte)
+- Homepage: live random piece embed (iframe) left text + right piece layout
+- Nav: nytelyte · Projects · About · Contact (Resend contact form → hillyerjess@gmail.com)
+- "View collection" links to cessation-tracker.vercel.app/piece/0
 
 ## User Preferences
 - Communication: concise, direct, no emojis
