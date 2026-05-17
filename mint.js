@@ -180,7 +180,8 @@ console.log(`  Dataset date             : ${healthDataSets[pieceIndex].date}`);
 console.log(`  Block hash (last 2 hex)  : ...${rawHash.slice(-2)} → lastTwoHashDigits = ${lastTwoHashDigits}`);
 console.log(`  Inscription Unix time    : ${inscriptionUnixSeconds}  (${new Date(inscriptionUnixSeconds * 1000).toISOString()})`);
 console.log(`  Partner index            : ${partnerIdx >= 0 ? partnerIdx : 'none'}`);
-console.log(`  partnerInheritedHueDeg   : ${partnerInheritedHueDeg.toFixed(2)}°`);
+console.log(`  inheritedHueDeg (baked)  : ${allInheritedHues[pieceIndex].toFixed(2)}°`);
+console.log(`  partnerInheritedHueDeg   : ${partnerInheritedHueDeg.toFixed(2)}°  (engine computes live, not baked)`);
 if (karma !== null) {
   console.log(`  Pair karma               : ${karma.toFixed(4)}  |  threshold: ${liberationThreshold.toFixed(4)}  |  liberated at full cycle: ${karma < liberationThreshold}`);
 }
@@ -208,7 +209,10 @@ console.log(`  Use with: ord wallet inscribe --json-metadata dist/${metadataName
 // The engine is the root. Piece 0 is the genesis art piece, not the inscription parent.
 // Sibling discovery at runtime: extract engineId from _sc.src, fetch /r/children/{engineId}.
 
-const hue = partnerInheritedHueDeg.toFixed(4);
+// Piece's own inherited hue (glucose hue of dataset[N-1], or own hue for piece 0).
+// NOTE: partnerInheritedHueDeg above is the PARTNER's hue — used for display only,
+// not baked here. The engine computes it live at runtime via getPartnerInheritedHue().
+const hue = allInheritedHues[pieceIndex].toFixed(4);
 
 const blockHeight = parseInt(process.argv[6], 10);
 if (isNaN(blockHeight) || blockHeight < 0) {
