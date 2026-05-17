@@ -2,16 +2,16 @@
 // The engine (index_bundle.js) is a separate text/javascript inscription.
 // All 29 pieces are thin HTML files that load the engine via <script src>.
 //
-// Usage:
-//   Piece 0:    node mint.js 0 <blockHash> <blockTimestamp> <engineId> <blockHeight>
-//   Pieces 1+:  node mint.js N <blockHash> <blockTimestamp> <engineId> <piece0Id> <blockHeight>
+// Usage (same for all pieces):
+//   node mint.js <pieceIndex> <blockHash> <blockTimestamp> <engineId> <blockHeight>
 //
 // pieceIndex    : 0–N (open-ended — new pieces with new health data can be added)
 // blockHash     : 64-char hex string of the reference block
 // blockTimestamp: Unix seconds of that block
 // engineId      : inscription ID of the engine (text/javascript) inscription
-// piece0Id      : inscription ID of piece 0 (required for pieces 1+, used as --parent)
 // blockHeight   : block height at inscription time
+//
+// All 29 pieces use --parent engineId. Fill in PIECE_SATS before running.
 //
 // ── Per-piece thumbnail gradients ────────────────────────────────────────────
 // Set a custom CSS gradient string per piece index, or leave null to use the
@@ -50,6 +50,42 @@ const CUSTOM_GRADIENTS = {
   26: "linear-gradient(90deg, #d12a4a, #d18a2a)",  // 2025-09-12
   27: "linear-gradient(90deg, #2a9fd1, #2a2bd1)",  // 2025-12-11
   28: "linear-gradient(90deg, #2a35d1, #2ab7d1)",  // 2026-03-20
+};
+
+// ── Per-piece sat numbers ─────────────────────────────────────────────────────
+// REQUIRED — fill in the sat ordinal number for each piece before minting.
+// Piece 0: Nakamoto sat (2009-01-31). Pieces 1–28: Omega black uncommon sats.
+// Leave null to get an error rather than silently inscribing on the wrong sat.
+const PIECE_SATS = {
+  0:  null,  // Nakamoto sat — 2009-01-31
+  1:  null,  // Omega black uncommon sat
+  2:  null,
+  3:  null,
+  4:  null,
+  5:  null,
+  6:  null,
+  7:  null,
+  8:  null,
+  9:  null,
+  10: null,
+  11: null,
+  12: null,
+  13: null,
+  14: null,
+  15: null,
+  16: null,
+  17: null,
+  18: null,
+  19: null,
+  20: null,
+  21: null,
+  22: null,
+  23: null,
+  24: null,
+  25: null,
+  26: null,
+  27: null,
+  28: null,
 };
 
 'use strict';
@@ -221,6 +257,12 @@ if (isNaN(blockHeight) || blockHeight < 0) {
   process.exit(1);
 }
 
+const satNumber = PIECE_SATS[pieceIndex];
+if (satNumber === null || satNumber === undefined) {
+  console.error(`Error: PIECE_SATS[${pieceIndex}] is not set — fill in the sat ordinal number in mint.js before minting.`);
+  process.exit(1);
+}
+
 const scriptHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}</style></head><body><script t="${pieceIndex}" ht="${lastTwoHashDigits}" unix="${inscriptionUnixSeconds}" hue="${hue}" block="${blockHeight}" src="/content/${engineId}"><\/script></body></html>`;
 
 const outputName = `cessation_piece_${String(pieceIndex).padStart(2, '0')}.html`;
@@ -229,4 +271,4 @@ writeFileSync(outputDest, scriptHtml, 'utf8');
 
 console.log(`HTML written: dist/${outputName}  (${scriptHtml.length} bytes)`);
 console.log(`Ready to inscribe: dist/${outputName}`);
-console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --parent ${engineId} --file dist/${outputName} --json-metadata dist/${metadataName}`);
+console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --sat ${satNumber} --parent ${engineId} --file dist/${outputName} --json-metadata dist/${metadataName}`);
