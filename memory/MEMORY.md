@@ -127,8 +127,9 @@ Full details in `memory/data_mappings.md`.
 
 ## Ancestor Hue
 - Hardcoded at mint from Bitcoin chain (on-chain recursion). Not computed dynamically.
-- Per-piece: piece N uses piece N-1's glucose hue. Piece 0 uses its own.
+- Per-piece: piece N uses piece N-1's glucose hue (`allInheritedHues[N]`). Piece 0 uses its own.
 - Two-field and blended approaches were tried and reverted — competed with piece's own color identity.
+- **Bug fixed (2026-05-17)**: mint.js was using `getPartnerInheritedHue(pieceIndex)` (returns partner's inherited hue) instead of `allInheritedHues[pieceIndex]`. Even pieces 2+ got their own glucose hue; odd pieces 3+ got two steps back. Piece 1 was accidentally correct. Now fixed: `hue = allInheritedHues[pieceIndex].toFixed(4)`.
 
 ## Collection Structure & Lifecycle
 - Collection grows indefinitely — new piece minted every ~3 months as new ECG/lab data is taken, as long as creator is alive. The collection is literally tied to continued survival.
@@ -164,16 +165,18 @@ Full details in `memory/inscription_architecture.md`.
 - Piece 0 is the genesis art piece, NOT the inscription parent. It's a child of the engine like all others.
 - New pieces (30+): mint with `--parent engineId` → automatically appear in `/r/children/{engineId}` → picked up by `lcRefreshSiblings` within ~10 minutes. Collection grows without any changes to existing pieces.
 - CBOR metadata per piece via `--json-metadata` flag — `dataset` field required for living collection
-- `CUSTOM_GRADIENTS` in mint.js: all 29 pieces use tracker-matched `linear-gradient(90deg, hex1, hex2)`
+- `PIECE_SATS` in mint.js: lookup table (null placeholders) — fill in sat ordinal numbers before minting. Script errors loudly if any sat is null. Generated command includes `--sat <satNumber>`.
+- `CUSTOM_GRADIENTS` removed from mint.js (2026-05-17) — was dead code, `previewGradient` was never used in HTML output.
 - Min/max computed dynamically from all known siblings — intentional, new pieces shift existing ones
 
 ## Mint Timeline
-- **Minting today (2026-04-18)** — laptop environment confirmed: Node v25.9.0, Bitcoin Core v30.2.0, ord 0.27.1
+- **Blocked — ord re-indexing** (as of 2026-05-17): first indexing attempt was done without `--index-sats` flag. Had to restart from scratch (two weeks wasted). Currently at ~805k/947k blocks. `--index-sats` is required to track individual sat locations for `--sat` inscriptions.
+- Environment confirmed: Node v25.9.0, Bitcoin Core v30.2.0, ord 0.27.1
 - Engine: `index_bundle.js` 87.4 KB uncompressed (current, last rebuilt 2026-04-18)
-- **Mint sequence** (unified for all pieces):
+- **Mint sequence** (unified for all pieces — fill `PIECE_SATS` in mint.js first):
   1. `ord wallet inscribe --fee-rate <FEE> --file index_bundle.js` → engineId
   2. For each piece 0–28: `node mint.js <N> <BLOCK_HASH> <BLOCK_TIME> <ENGINE_ID> <BLOCK_HEIGHT>`
-  3. `ord wallet inscribe --fee-rate <FEE> --sat <SAT> --parent <ENGINE_ID> --file dist/cessation_piece_0N.html --json-metadata dist/cessation_piece_0N_metadata.json`
+  3. Run the generated command (includes `--sat`, `--parent engineId`, `--json-metadata`)
 - **Sats**: 29 sats held in UniSat wallet across 18 UTXOs — must transfer to ord wallet before inscribing. Use `ord wallet sats` after transfer to map sat numbers and satpoints before touching anything.
 
 ## Rare Sats
