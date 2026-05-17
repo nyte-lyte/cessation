@@ -19,8 +19,8 @@ Two-inscription model. Engine and pieces are separate inscriptions.
 ```html
 <!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}</style></head><body><script t="1" ht="61" unix="1775938686" hue="321.4286" block="204" src="/content/{engineId}"></script></body></html>
 ```
-- Piece 0: `t="0"`, no parent at inscribe time (genesis piece)
-- Pieces 1+: inscribed with `--parent {piece0Id}` — makes them children of piece 0
+- **All 29 pieces inscribed with `--parent {engineId}`** — engine is the root inscription
+- Piece 0 is the genesis art piece, not the inscription parent
 
 ### Engine boot logic (`document.currentScript`)
 The engine reads params synchronously at load time:
@@ -32,8 +32,9 @@ const _selfScript = document.currentScript;
 - `main.js` uses these to set `currentDataSetIndex`, `lc.pieceIndex`, `lc.hashTail`, `inscriptionUnixSeconds`, `inheritedHueDegOverride` synchronously before any async calls
 
 ### Sibling discovery (living collection)
-- Pieces 1+ are children of piece 0 via `--parent`
-- At runtime, engine calls `/r/children/{piece0Id}` to discover ALL siblings
+- All pieces are children of the engine via `--parent {engineId}`
+- At runtime, engine calls `/r/children/{engineId}` to discover ALL siblings
+- Engine extracts engineId from `document.currentScript.src` — same for all 29 pieces
 - For each sibling, fetches `/r/metadata/{sibling_id}` to get their health dataset (CBOR)
 - Builds `lc.collectionDatasets` — drives `getAgedDataset`, `applyCollectionInfluence`, percentile calculations
 - New mints automatically propagate via `lcRefreshSiblings()` on every block poll — no reload needed
@@ -41,27 +42,21 @@ const _selfScript = document.currentScript;
 ## Mint Sequence
 
 ```bash
-# 1. Inscribe engine (once, text/javascript)
+# 1. Inscribe engine (once, text/javascript, no parent)
 ord wallet inscribe --fee-rate <FEE> --file index_bundle.js
 # → engineId
 
-# 2. Generate piece 0 HTML
-node mint.js 0 <blockHash> <blockTimestamp> <engineId> <blockHeight>
-# → dist/cessation_piece_00.html + dist/cessation_piece_00_metadata.json
-
-# 3. Inscribe piece 0 (no parent, with metadata)
-ord wallet inscribe --fee-rate <FEE> --file dist/cessation_piece_00.html --json-metadata dist/cessation_piece_00_metadata.json
-# → piece0Id
-
-# 4. Generate piece N HTML (N = 1..28)
-node mint.js N <blockHash> <blockTimestamp> <engineId> <piece0Id> <blockHeight>
+# 2. Generate piece HTML (same command for all 29 pieces)
+node mint.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>
 # → dist/cessation_piece_0N.html + dist/cessation_piece_0N_metadata.json
+# mint.js errors if PIECE_SATS[N] is not filled in
 
-# 5. Inscribe piece N (--parent piece0Id)
-ord wallet inscribe --fee-rate <FEE> --parent <piece0Id> --file dist/cessation_piece_0N.html --json-metadata dist/cessation_piece_0N_metadata.json
+# 3. Inscribe piece (all 29 use --parent engineId, --sat from PIECE_SATS)
+ord wallet inscribe --fee-rate <FEE> --sat <satNumber> --parent <engineId> --file dist/cessation_piece_0N.html --json-metadata dist/cessation_piece_0N_metadata.json
 ```
 
 **CRITICAL: `--parent` must be declared at mint time — cannot be added retroactively.**
+**CRITICAL: Fill in `PIECE_SATS` in mint.js before running — wrong sat = permanently wrong sat.**
 
 ## Metadata Format
 - Stored as CBOR, accessible via `/r/metadata/{id}`
