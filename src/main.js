@@ -626,7 +626,20 @@ async function init() {
   // Check if partner has also reached final liberation — trigger void if so.
   async function lcCheckVoid() {
     const partnerIdx = getPartnerIndex(currentDataSetIndex);
-    if (partnerIdx < 0) { lc.voidTriggerMs = Date.now(); return; } // piece 0: no partner, void immediately
+    // piece 0 is genesis — liberates immediately but void requires piece 1 to also be liberated
+    if (partnerIdx < 0) {
+      const pd1 = lc.collectionDatasets.find(d => d.pieceIndex === 1);
+      if (!pd1 || pd1.hashTail == null) return;
+      try {
+        const pInfo = await fetch(`/r/inscription/${pd1.id}`).then(r => r.json());
+        const partnerLiberated = await lcIsPartnerLiberated(pd1, pInfo.height ?? 0);
+        if (partnerLiberated) {
+          lc.voidTriggerMs = Date.now();
+          console.log('[lc] VOID — piece 0 genesis: piece 1 liberated');
+        }
+      } catch (e) { /* piece 1 state unknown — void pending */ }
+      return;
+    }
     const pd = lc.collectionDatasets.find(d => d.pieceIndex === partnerIdx);
     if (!pd || pd.hashTail == null) return; // partner metadata not yet available — will retry on next poll
     try {
