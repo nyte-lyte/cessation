@@ -31,27 +31,10 @@ body {
     position: relative;
 }
 
-#fs-overlay {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.2s;
-    cursor: pointer;
-}
 
-#canvas-container:hover #fs-overlay {
-    opacity: 1;
-}
-
-#fs-overlay svg {
-    width: 20px;
-    height: 20px;
-    color: rgba(255, 255, 255, 0.7);
+#canvas-container:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    border: clamp(12px, 3vmin, 36px) solid black;
 }
 
