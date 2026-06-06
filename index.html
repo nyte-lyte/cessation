@@ -15,18 +15,6 @@
     <div id="canvas-container">
         <canvas id="canvas"></canvas>
     </div>
-    <script>
-        const container = document.getElementById('canvas-container');
-        document.addEventListener('keydown', (e) => {
-            if (e.key.toUpperCase() === 'F') {
-                if (!document.fullscreenElement) {
-                    container.requestFullscreen();
-                } else {
-                    document.exitFullscreen();
-                }
-            }
-        });
-    </script>
 
     <!-- then load your main app logic as a module, which will fetch vertex.glsl & fragment.glsl -->
     <script type="module" src="src/main.js"></script>

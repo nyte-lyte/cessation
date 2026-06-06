@@ -2,7 +2,16 @@
 // main.js
 // ---------------------------------------------
 import { healthDataSets, minMaxValues } from "../data/health_data_sets.js";
-import { blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence } from "../data/decay_logic.js";
+import { blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence, computeMinMaxValues } from "../data/decay_logic.js";
+
+// minMaxValues starts from the baked-in mint dataset, then is refreshed in place from
+// the full sibling collection as it's discovered/grows — the collection is a living
+// organism; only the starting datasets are fixed at mint. Mutated in place (not
+// reassigned) since it's an imported binding shared by every function that closes over it.
+function refreshMinMaxValues(allDatasets) {
+  const fresh = computeMinMaxValues(allDatasets);
+  for (const key in fresh) minMaxValues[key] = fresh[key];
+}
 
 const canvas = document.getElementById("canvas");
 const gl = canvas.getContext("webgl2");
@@ -429,13 +438,15 @@ async function init() {
   if (_sc) {
     const _t = _sc.getAttribute('t');
     if (_t !== null) {
-      currentDataSetIndex    = parseInt(_t)                          || currentDataSetIndex;
-      lastTwoHashDigits      = parseInt(_sc.getAttribute('ht'))      || lastTwoHashDigits;
-      inscriptionUnixSeconds = parseInt(_sc.getAttribute('unix'))    || inscriptionUnixSeconds;
+      currentDataSetIndex    = parseInt(_t);
+      lastTwoHashDigits      = parseInt(_sc.getAttribute('ht'));
+      inscriptionUnixSeconds = parseInt(_sc.getAttribute('unix'));
       const _hue = _sc.getAttribute('hue');
       if (_hue !== null) inheritedHueDegOverride = parseFloat(_hue);
     }
-  } else {
+  }
+  // DEV_START
+  if (!_sc) {
     // Dev fallback: URL hash params (#idx=N&ht=H&unix=U&hue=D)
     const _hp = {};
     window.location.hash.slice(1).split('&').forEach(p => {
@@ -449,6 +460,7 @@ async function init() {
       if (_hp.hue != null) inheritedHueDegOverride = parseFloat(_hp.hue);
     }
   }
+  // DEV_END
 
   // Precompute inherited hues for all pieces (piece N inherits piece N-1's glucose hue)
   const allInheritedHues = healthDataSets.map((_, i) =>
@@ -491,13 +503,13 @@ async function init() {
   // karma tools — inspect the reanimation system
   const liberationThreshold = computeLiberationThreshold(healthDataSets, minMaxValues);
   window.getKarma = (idxA, idxB) => {
-    const blended = blendDatasets(healthDataSets[idxA], healthDataSets[idxB]);
+    const blended = blendDatasets(healthDataSets[idxA], healthDataSets[idxB], minMaxValues);
     const karma = computeKarma(blended, minMaxValues);
     console.log(`Pair (${idxA}, ${idxB}) karma: ${karma.toFixed(4)} | threshold: ${liberationThreshold.toFixed(4)} | liberated: ${karma < liberationThreshold}`);
     return karma;
   };
   window.getBlend = (idxA, idxB) => {
-    const blended = blendDatasets(healthDataSets[idxA], healthDataSets[idxB]);
+    const blended = blendDatasets(healthDataSets[idxA], healthDataSets[idxB], minMaxValues);
     console.log('Blended dataset:', blended);
     return blended;
   };
@@ -543,11 +555,25 @@ async function init() {
     return lc.cycleDataset ?? healthDataSets[currentDataSetIndex];
   }
 
-  // Collection for karma/threshold computation — live siblings preferred, local fallback
+  // Collection for karma/threshold computation — live siblings preferred, local fallback.
+  // Sorted by pieceIndex so array position stays a valid index — currentDataSetIndex
+  // must point at this piece's own dataset for getAgedDataset to drift correctly.
   function lcEffectiveCollection() {
-    return lc.collectionDatasets.length > 0
-      ? lc.collectionDatasets.map(d => d.dataset)
-      : healthDataSets;
+    if (lc.collectionDatasets.length === 0) return healthDataSets;
+    return [...lc.collectionDatasets]
+      .sort((a, b) => (a.pieceIndex ?? 999) - (b.pieceIndex ?? 999))
+      .map(d => d.dataset);
+  }
+
+  // Collection used for rendering — effective collection with this piece's own
+  // position replaced by the post-reanimation blend (lc.cycleDataset), so chronological
+  // drift continues forward from the piece's evolved data, not its original snapshot.
+  function getDrawCollection() {
+    const base = lcEffectiveCollection();
+    if (!lc.cycleDataset) return base;
+    const arr = [...base];
+    arr[currentDataSetIndex] = lc.cycleDataset;
+    return arr;
   }
 
   // Partner's dataset from living collection, fallback to local healthDataSets
@@ -591,7 +617,11 @@ async function init() {
       more = resp.more ?? false;
       page++;
     }
-    if (fetched.length > 0) lc.collectionDatasets = fetched;
+    if (fetched.length > 0) {
+      lc.collectionDatasets = fetched;
+      // Living organism: min/max ranges recompute from the live collection as it grows.
+      refreshMinMaxValues(lcEffectiveCollection());
+    }
   }
 
   // Check if partner has also reached final cessation — trigger void if so
@@ -609,7 +639,7 @@ async function init() {
     // or return false (fetch failed — retry on next poll). No artificial cap.
     while (true) {
       if (lc.currentBlockHeight < pCessationBlock) return false; // partner still alive in this cycle
-      const blended   = blendDatasets(pCycleDs, myDs);
+      const blended   = blendDatasets(pCycleDs, myDs, minMaxValues);
       const threshold = computeLiberationThreshold(collection, minMaxValues);
       const karma     = computeKarma(blended, minMaxValues);
       if (karma < threshold) return true; // partner liberated
@@ -665,7 +695,7 @@ async function init() {
         return;
       }
       const partnerDs  = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
-      const blended    = blendDatasets(lcCycleDataset(), partnerDs);
+      const blended    = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold  = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
       const karma      = computeKarma(blended, minMaxValues);
 
@@ -700,7 +730,7 @@ async function init() {
       const partnerIdx = getPartnerIndex(currentDataSetIndex);
       if (partnerIdx < 0) { lc.isLiberated = true; break; }
       const partnerDs = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
-      const blended   = blendDatasets(lcCycleDataset(), partnerDs);
+      const blended   = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
       const karma     = computeKarma(blended, minMaxValues);
       if (karma < threshold) { lc.isLiberated = true; lc.cycleDataset = blended; break; }
@@ -992,12 +1022,16 @@ async function init() {
       (params.overrideYears !== null ? params.overrideYears : baseYears) *
       (params.timeWarp || 1);
 
-    // Chronological drift: piece ages through the real health timeline each frame
+    // Chronological drift: piece ages through the real health timeline each frame.
+    // drawCollection is the live sibling collection (own position replaced by the
+    // post-reanimation blend) — falls back to local healthDataSets in dev/early boot.
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
+    const drawCollection = getDrawCollection();
     const activeDataSet = applyCollectionInfluence(
-      getAgedDataset(currentDataSetIndex, lifeFraction, healthDataSets),
-      healthDataSets,
-      lifeFraction
+      getAgedDataset(currentDataSetIndex, lifeFraction, drawCollection, minMaxValues),
+      drawCollection,
+      lifeFraction,
+      minMaxValues
     );
     setHSBUniforms(activeDataSet);
 
@@ -1082,14 +1116,14 @@ async function init() {
     if (uVoidProgressLoc) gl.uniform1f(uVoidProgressLoc, voidProgress);
 
     // Compute base hue
-    const baseHSB = computeHSBFromStats(activeDataSet, healthDataSets); // 0..1
+    const baseHSB = computeHSBFromStats(activeDataSet, drawCollection); // 0..1
     let baseHueDeg = baseHSB.hue * 360.0;
 
     // Beam phases advance on real-wall-clock dt for smooth animation regardless
     // of totalYears speed. Decay ripple pulses and cross-beam deps pre-computed.
     co2Pulse *= Math.exp(-dt / 18.0);
     caPulse  *= Math.exp(-dt / 26.0);
-    const pCO2 = winsorizedPercentileForLab(activeDataSet, 'carbonDioxide', healthDataSets);
+    const pCO2 = winsorizedPercentileForLab(activeDataSet, 'carbonDioxide', drawCollection);
     const pPR = clamp(
       (activeDataSet.ecg.prInterval - minMaxValues.prInterval.min) /
       Math.max(1e-6, minMaxValues.prInterval.max - minMaxValues.prInterval.min),
@@ -1112,7 +1146,7 @@ async function init() {
         beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet))) % 1;
       }
       const ph = beamPhases[cfg.phaseKey];
-      const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, healthDataSets);
+      const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, drawCollection);
       const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
       if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);

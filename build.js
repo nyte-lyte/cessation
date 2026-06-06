@@ -104,13 +104,6 @@ const _cv = document.createElement('canvas');
 _cv.id = 'canvas';
 _cc.appendChild(_cv);
 document.body.appendChild(_cc);
-document.addEventListener('keydown', function(e) {
-  if (e.key.toUpperCase() === 'F') {
-    var c = document.getElementById('canvas-container');
-    if (!document.fullscreenElement) c.requestFullscreen();
-    else document.exitFullscreen();
-  }
-});
 const _vertSrc = \`${vertEsc}\`;
 const _fragSrc = \`${fragEsc}\`;
 

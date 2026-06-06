@@ -9,13 +9,6 @@ const _cv = document.createElement('canvas');
 _cv.id = 'canvas';
 _cc.appendChild(_cv);
 document.body.appendChild(_cc);
-document.addEventListener('keydown', function(e) {
-  if (e.key.toUpperCase() === 'F') {
-    var c = document.getElementById('canvas-container');
-    if (!document.fullscreenElement) c.requestFullscreen();
-    else document.exitFullscreen();
-  }
-});
 const _vertSrc = `#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
@@ -461,7 +454,27 @@ function normalize(val, min, max) {
   return (val - min) / (max - min);
 }
 
-function blendDatasets(a, b) {
+const ECG_KEYS = ['ventRate', 'prInterval', 'qrsInterval', 'qtInterval', 'qtcInterval', 'pAxis', 'rAxis', 'tAxis'];
+const LAB_KEYS = ['glucose', 'nitrogen', 'creatinine', 'eGFR', 'sodium', 'potassium', 'chloride', 'carbonDioxide', 'calcium'];
+
+function computeMinMaxValues(allDatasets) {
+  const result = {};
+  for (const k of ECG_KEYS) result[k] = { min: Infinity, max: -Infinity };
+  for (const k of LAB_KEYS) result[k] = { min: Infinity, max: -Infinity };
+  for (const d of allDatasets) {
+    for (const k of ECG_KEYS) {
+      result[k].min = Math.min(result[k].min, d.ecg[k]);
+      result[k].max = Math.max(result[k].max, d.ecg[k]);
+    }
+    for (const k of LAB_KEYS) {
+      result[k].min = Math.min(result[k].min, d.labs[k]);
+      result[k].max = Math.max(result[k].max, d.labs[k]);
+    }
+  }
+  return result;
+}
+
+function blendDatasets(a, b, minMaxValues) {
   const blend = (x, y) => x * 0.70 + y * 0.30;
   const blended = {
     date: `blended`,
@@ -486,8 +499,8 @@ function blendDatasets(a, b) {
       carbonDioxide: blend(a.labs.carbonDioxide, b.labs.carbonDioxide),
       calcium:       blend(a.labs.calcium,       b.labs.calcium),
     },
-    healthIndex: blend(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5),
   };
+  blended.healthIndex = minMaxValues ? calculateHealthIndex(blended, minMaxValues) : blend(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5);
   return blended;
 }
 
@@ -500,7 +513,7 @@ function computeKarma(dataset, minMaxValues) {
   return nQTc * 0.35 + nCreat * 0.25 + (1 - nEGFR) * 0.20 + nGlucose * 0.15 + nVentRate * 0.05;
 }
 
-function getAgedDataset(startIdx, lifeFraction, allDatasets) {
+function getAgedDataset(startIdx, lifeFraction, allDatasets, minMaxValues) {
   const span    = allDatasets.length * 0.20;
   const maxSpan = Math.max(0, allDatasets.length - 1 - startIdx);
   const pos     = startIdx + lifeFraction * Math.min(span, maxSpan);
@@ -511,7 +524,7 @@ function getAgedDataset(startIdx, lifeFraction, allDatasets) {
   const a = allDatasets[lo];
   const b = allDatasets[hi];
   const lerp = (x, y) => x + (y - x) * t;
-  return {
+  const aged = {
     date: 'aged',
     ecg: {
       ventRate:    lerp(a.ecg.ventRate,    b.ecg.ventRate),
@@ -534,17 +547,18 @@ function getAgedDataset(startIdx, lifeFraction, allDatasets) {
       carbonDioxide: lerp(a.labs.carbonDioxide, b.labs.carbonDioxide),
       calcium:       lerp(a.labs.calcium,       b.labs.calcium),
     },
-    healthIndex: lerp(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5),
   };
+  aged.healthIndex = minMaxValues ? calculateHealthIndex(aged, minMaxValues) : lerp(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5);
+  return aged;
 }
 
-function applyCollectionInfluence(dataset, allDatasets, lifeFraction, influence = 0.05) {
+function applyCollectionInfluence(dataset, allDatasets, lifeFraction, minMaxValues, influence = 0.05) {
   const n      = allDatasets.length;
   const pull   = influence * lifeFraction;
   const lerp   = (x, y) => x + (y - x) * pull;
   const avgLab = (key) => allDatasets.reduce((s, d) => s + d.labs[key], 0) / n;
   const avgEcg = (key) => allDatasets.reduce((s, d) => s + d.ecg[key],  0) / n;
-  return {
+  const influenced = {
     date: dataset.date,
     ecg: {
       ventRate:    lerp(dataset.ecg.ventRate,    avgEcg('ventRate')),
@@ -567,8 +581,11 @@ function applyCollectionInfluence(dataset, allDatasets, lifeFraction, influence 
       carbonDioxide: lerp(dataset.labs.carbonDioxide, avgLab('carbonDioxide')),
       calcium:       lerp(dataset.labs.calcium,       avgLab('calcium')),
     },
-    healthIndex: lerp(dataset.healthIndex ?? 0.5, allDatasets.reduce((s, d) => s + (d.healthIndex ?? 0.5), 0) / n),
   };
+  influenced.healthIndex = minMaxValues
+    ? calculateHealthIndex(influenced, minMaxValues)
+    : lerp(dataset.healthIndex ?? 0.5, allDatasets.reduce((s, d) => s + (d.healthIndex ?? 0.5), 0) / n);
+  return influenced;
 }
 
 function computeLiberationThreshold(allDatasets, minMaxValues) {
@@ -576,6 +593,25 @@ function computeLiberationThreshold(allDatasets, minMaxValues) {
     .map(d => computeKarma(d, minMaxValues))
     .sort((a, b) => a - b);
   return sorted[Math.floor(0.25 * sorted.length)];
+}
+
+function calculateHealthIndex(data, minMaxValues) {
+  const nQTc  = normalize(data.ecg.qtcInterval,    minMaxValues.qtcInterval.min,   minMaxValues.qtcInterval.max);
+  const nEGFR = normalize(data.labs.eGFR,          minMaxValues.eGFR.min,          minMaxValues.eGFR.max);
+  const nCr   = normalize(data.labs.creatinine,    minMaxValues.creatinine.min,    minMaxValues.creatinine.max);
+  const nVent = normalize(data.ecg.ventRate,       minMaxValues.ventRate.min,      minMaxValues.ventRate.max);
+  const nK    = normalize(data.labs.potassium,     minMaxValues.potassium.min,     minMaxValues.potassium.max);
+  const nCO2  = normalize(data.labs.carbonDioxide, minMaxValues.carbonDioxide.min, minMaxValues.carbonDioxide.max);
+  const nQRS  = normalize(data.ecg.qrsInterval,    minMaxValues.qrsInterval.min,   minMaxValues.qrsInterval.max);
+  return (
+    (1 - nQTc)  * 0.30 +
+    nEGFR       * 0.25 +
+    (1 - nCr)   * 0.15 +
+    (1 - nVent) * 0.10 +
+    nK          * 0.07 +
+    nCO2        * 0.07 +
+    (1 - nQRS)  * 0.06
+  );
 }
 
 let healthDataSets = [
@@ -1457,6 +1493,11 @@ healthDataSets.forEach((dataSet) => {
   dataSet.healthIndex = calculateHealthIndex(dataSet);
 });
 
+function refreshMinMaxValues(allDatasets) {
+  const fresh = computeMinMaxValues(allDatasets);
+  for (const key in fresh) minMaxValues[key] = fresh[key];
+}
+
 const canvas = document.getElementById("canvas");
 const gl = canvas.getContext("webgl2");
 if (!gl) {
@@ -1821,24 +1862,11 @@ async function init() {
   if (_sc) {
     const _t = _sc.getAttribute('t');
     if (_t !== null) {
-      currentDataSetIndex    = parseInt(_t)                          || currentDataSetIndex;
-      lastTwoHashDigits      = parseInt(_sc.getAttribute('ht'))      || lastTwoHashDigits;
-      inscriptionUnixSeconds = parseInt(_sc.getAttribute('unix'))    || inscriptionUnixSeconds;
+      currentDataSetIndex    = parseInt(_t);
+      lastTwoHashDigits      = parseInt(_sc.getAttribute('ht'));
+      inscriptionUnixSeconds = parseInt(_sc.getAttribute('unix'));
       const _hue = _sc.getAttribute('hue');
       if (_hue !== null) inheritedHueDegOverride = parseFloat(_hue);
-    }
-  } else {
-
-    const _hp = {};
-    window.location.hash.slice(1).split('&').forEach(p => {
-      const eq = p.indexOf('=');
-      if (eq > 0) _hp[p.slice(0, eq)] = p.slice(eq + 1);
-    });
-    if (_hp.idx) {
-      currentDataSetIndex    = parseInt(_hp.idx);
-      lastTwoHashDigits      = parseInt(_hp.ht)   || lastTwoHashDigits;
-      inscriptionUnixSeconds = parseInt(_hp.unix) || inscriptionUnixSeconds;
-      if (_hp.hue != null) inheritedHueDegOverride = parseFloat(_hp.hue);
     }
   }
 
@@ -1896,9 +1924,18 @@ async function init() {
   }
 
   function lcEffectiveCollection() {
-    return lc.collectionDatasets.length > 0
-      ? lc.collectionDatasets.map(d => d.dataset)
-      : healthDataSets;
+    if (lc.collectionDatasets.length === 0) return healthDataSets;
+    return [...lc.collectionDatasets]
+      .sort((a, b) => (a.pieceIndex ?? 999) - (b.pieceIndex ?? 999))
+      .map(d => d.dataset);
+  }
+
+  function getDrawCollection() {
+    const base = lcEffectiveCollection();
+    if (!lc.cycleDataset) return base;
+    const arr = [...base];
+    arr[currentDataSetIndex] = lc.cycleDataset;
+    return arr;
   }
 
   function lcGetPartnerDataset(partnerIdx) {
@@ -1937,7 +1974,11 @@ async function init() {
       more = resp.more ?? false;
       page++;
     }
-    if (fetched.length > 0) lc.collectionDatasets = fetched;
+    if (fetched.length > 0) {
+      lc.collectionDatasets = fetched;
+
+      refreshMinMaxValues(lcEffectiveCollection());
+    }
   }
 
   async function lcIsPartnerLiberated(pd, pInscriptionHeight) {
@@ -1948,7 +1989,7 @@ async function init() {
 
     while (true) {
       if (lc.currentBlockHeight < pCessationBlock) return false;
-      const blended   = blendDatasets(pCycleDs, myDs);
+      const blended   = blendDatasets(pCycleDs, myDs, minMaxValues);
       const threshold = computeLiberationThreshold(collection, minMaxValues);
       const karma     = computeKarma(blended, minMaxValues);
       if (karma < threshold) return true;
@@ -2002,7 +2043,7 @@ async function init() {
         return;
       }
       const partnerDs  = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
-      const blended    = blendDatasets(lcCycleDataset(), partnerDs);
+      const blended    = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold  = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
       const karma      = computeKarma(blended, minMaxValues);
 
@@ -2036,7 +2077,7 @@ async function init() {
       const partnerIdx = getPartnerIndex(currentDataSetIndex);
       if (partnerIdx < 0) { lc.isLiberated = true; break; }
       const partnerDs = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
-      const blended   = blendDatasets(lcCycleDataset(), partnerDs);
+      const blended   = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
       const karma     = computeKarma(blended, minMaxValues);
       if (karma < threshold) { lc.isLiberated = true; lc.cycleDataset = blended; break; }
@@ -2285,10 +2326,12 @@ async function init() {
       (params.timeWarp || 1);
 
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
+    const drawCollection = getDrawCollection();
     const activeDataSet = applyCollectionInfluence(
-      getAgedDataset(currentDataSetIndex, lifeFraction, healthDataSets),
-      healthDataSets,
-      lifeFraction
+      getAgedDataset(currentDataSetIndex, lifeFraction, drawCollection, minMaxValues),
+      drawCollection,
+      lifeFraction,
+      minMaxValues
     );
     setHSBUniforms(activeDataSet);
 
@@ -2370,12 +2413,12 @@ async function init() {
     if (uIsLiberatedLoc) gl.uniform1f(uIsLiberatedLoc, isLiberated);
     if (uVoidProgressLoc) gl.uniform1f(uVoidProgressLoc, voidProgress);
 
-    const baseHSB = computeHSBFromStats(activeDataSet, healthDataSets);
+    const baseHSB = computeHSBFromStats(activeDataSet, drawCollection);
     let baseHueDeg = baseHSB.hue * 360.0;
 
     co2Pulse *= Math.exp(-dt / 18.0);
     caPulse  *= Math.exp(-dt / 26.0);
-    const pCO2 = winsorizedPercentileForLab(activeDataSet, 'carbonDioxide', healthDataSets);
+    const pCO2 = winsorizedPercentileForLab(activeDataSet, 'carbonDioxide', drawCollection);
     const pPR = clamp(
       (activeDataSet.ecg.prInterval - minMaxValues.prInterval.min) /
       Math.max(1e-6, minMaxValues.prInterval.max - minMaxValues.prInterval.min),
@@ -2395,7 +2438,7 @@ async function init() {
         beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet))) % 1;
       }
       const ph = beamPhases[cfg.phaseKey];
-      const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, healthDataSets);
+      const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, drawCollection);
       const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
       if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);

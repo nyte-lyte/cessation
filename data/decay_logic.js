@@ -6,13 +6,39 @@ function normalize(val, min, max) {
   return (val - min) / (max - min);
 }
 
+const ECG_KEYS = ['ventRate', 'prInterval', 'qrsInterval', 'qtInterval', 'qtcInterval', 'pAxis', 'rAxis', 'tAxis'];
+const LAB_KEYS = ['glucose', 'nitrogen', 'creatinine', 'eGFR', 'sodium', 'potassium', 'chloride', 'carbonDioxide', 'calcium'];
+
+// Derive min/max ranges fresh from any dataset collection.
+// The collection is a living organism — only the starting datasets are fixed at mint.
+// Everything derived from them (minMaxValues, percentiles, healthIndex, karma) should
+// be recomputed from the live collection as it grows with new mints.
+function computeMinMaxValues(allDatasets) {
+  const result = {};
+  for (const k of ECG_KEYS) result[k] = { min: Infinity, max: -Infinity };
+  for (const k of LAB_KEYS) result[k] = { min: Infinity, max: -Infinity };
+  for (const d of allDatasets) {
+    for (const k of ECG_KEYS) {
+      result[k].min = Math.min(result[k].min, d.ecg[k]);
+      result[k].max = Math.max(result[k].max, d.ecg[k]);
+    }
+    for (const k of LAB_KEYS) {
+      result[k].min = Math.min(result[k].min, d.labs[k]);
+      result[k].max = Math.max(result[k].max, d.labs[k]);
+    }
+  }
+  return result;
+}
+
 // Blend two datasets — all values average toward midpoint.
 // Each reanimation cycle produces a genuinely new dataset that has drifted
 // further from the originals. Extreme disease markers smooth out over lifetimes.
-// blendDatasets(successor, predecessor)
+// blendDatasets(successor, predecessor, minMaxValues)
 // Succession blend: successor (a) retains 70% of its own data,
 // predecessor (b) leaves a 30% impression. N+1 dominant.
-function blendDatasets(a, b) {
+// healthIndex is recomputed fresh from the blended values (using live minMaxValues)
+// rather than blended from the originals' stale healthIndex numbers.
+function blendDatasets(a, b, minMaxValues) {
   const blend = (x, y) => x * 0.70 + y * 0.30;
   const blended = {
     date: `blended`,
@@ -37,8 +63,8 @@ function blendDatasets(a, b) {
       carbonDioxide: blend(a.labs.carbonDioxide, b.labs.carbonDioxide),
       calcium:       blend(a.labs.calcium,       b.labs.calcium),
     },
-    healthIndex: blend(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5),
   };
+  blended.healthIndex = minMaxValues ? calculateHealthIndex(blended, minMaxValues) : blend(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5);
   return blended;
 }
 
@@ -58,7 +84,7 @@ function computeKarma(dataset, minMaxValues) {
 // Piece starts at its own snapshot and drifts forward proportionally to collection size.
 // Drift span = 20% of collection size, growing as new pieces are added.
 // Waxing and waning emerge naturally from the real biological trajectory.
-function getAgedDataset(startIdx, lifeFraction, allDatasets) {
+function getAgedDataset(startIdx, lifeFraction, allDatasets, minMaxValues) {
   const span    = allDatasets.length * 0.20;
   const maxSpan = Math.max(0, allDatasets.length - 1 - startIdx);
   const pos     = startIdx + lifeFraction * Math.min(span, maxSpan);
@@ -69,7 +95,7 @@ function getAgedDataset(startIdx, lifeFraction, allDatasets) {
   const a = allDatasets[lo];
   const b = allDatasets[hi];
   const lerp = (x, y) => x + (y - x) * t;
-  return {
+  const aged = {
     date: 'aged',
     ecg: {
       ventRate:    lerp(a.ecg.ventRate,    b.ecg.ventRate),
@@ -92,20 +118,21 @@ function getAgedDataset(startIdx, lifeFraction, allDatasets) {
       carbonDioxide: lerp(a.labs.carbonDioxide, b.labs.carbonDioxide),
       calcium:       lerp(a.labs.calcium,       b.labs.calcium),
     },
-    healthIndex: lerp(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5),
   };
+  aged.healthIndex = minMaxValues ? calculateHealthIndex(aged, minMaxValues) : lerp(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5);
+  return aged;
 }
 
 // Systemic collection influence — gentle pull toward collection average.
 // New healthy pieces joining lift existing pieces; sick data pulls the other way.
 // influence = 0.05 means 5% pull toward the average each evaluation.
-function applyCollectionInfluence(dataset, allDatasets, lifeFraction, influence = 0.05) {
+function applyCollectionInfluence(dataset, allDatasets, lifeFraction, minMaxValues, influence = 0.05) {
   const n      = allDatasets.length;
   const pull   = influence * lifeFraction;
   const lerp   = (x, y) => x + (y - x) * pull;
   const avgLab = (key) => allDatasets.reduce((s, d) => s + d.labs[key], 0) / n;
   const avgEcg = (key) => allDatasets.reduce((s, d) => s + d.ecg[key],  0) / n;
-  return {
+  const influenced = {
     date: dataset.date,
     ecg: {
       ventRate:    lerp(dataset.ecg.ventRate,    avgEcg('ventRate')),
@@ -128,8 +155,11 @@ function applyCollectionInfluence(dataset, allDatasets, lifeFraction, influence 
       carbonDioxide: lerp(dataset.labs.carbonDioxide, avgLab('carbonDioxide')),
       calcium:       lerp(dataset.labs.calcium,       avgLab('calcium')),
     },
-    healthIndex: lerp(dataset.healthIndex ?? 0.5, allDatasets.reduce((s, d) => s + (d.healthIndex ?? 0.5), 0) / n),
   };
+  influenced.healthIndex = minMaxValues
+    ? calculateHealthIndex(influenced, minMaxValues)
+    : lerp(dataset.healthIndex ?? 0.5, allDatasets.reduce((s, d) => s + (d.healthIndex ?? 0.5), 0) / n);
+  return influenced;
 }
 
 // Liberation threshold — 25th percentile of karma across the full collection.
@@ -141,4 +171,27 @@ function computeLiberationThreshold(allDatasets, minMaxValues) {
   return sorted[Math.floor(0.25 * sorted.length)];
 }
 
-export { normalize, blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence };
+// Health index — higher = healthier/calmer, lower = more disease burden = more intense visually.
+// Primary markers: QTc (LVNC), eGFR + creatinine (kidney/med safety), vent rate (cardiac load).
+// Bad markers are inverted so that stress pushes the index down.
+// Derived from raw labs + current minMaxValues — recomputes when the living collection grows.
+function calculateHealthIndex(data, minMaxValues) {
+  const nQTc  = normalize(data.ecg.qtcInterval,    minMaxValues.qtcInterval.min,   minMaxValues.qtcInterval.max);
+  const nEGFR = normalize(data.labs.eGFR,          minMaxValues.eGFR.min,          minMaxValues.eGFR.max);
+  const nCr   = normalize(data.labs.creatinine,    minMaxValues.creatinine.min,    minMaxValues.creatinine.max);
+  const nVent = normalize(data.ecg.ventRate,       minMaxValues.ventRate.min,      minMaxValues.ventRate.max);
+  const nK    = normalize(data.labs.potassium,     minMaxValues.potassium.min,     minMaxValues.potassium.max);
+  const nCO2  = normalize(data.labs.carbonDioxide, minMaxValues.carbonDioxide.min, minMaxValues.carbonDioxide.max);
+  const nQRS  = normalize(data.ecg.qrsInterval,    minMaxValues.qrsInterval.min,   minMaxValues.qrsInterval.max);
+  return (
+    (1 - nQTc)  * 0.30 +
+    nEGFR       * 0.25 +
+    (1 - nCr)   * 0.15 +
+    (1 - nVent) * 0.10 +
+    nK          * 0.07 +
+    nCO2        * 0.07 +
+    (1 - nQRS)  * 0.06
+  );
+}
+
+export { normalize, blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence, calculateHealthIndex, computeMinMaxValues };
