@@ -58,6 +58,59 @@ ord wallet inscribe --fee-rate <FEE> --sat <satNumber> --parent <engineId> --fil
 **CRITICAL: `--parent` must be declared at mint time — cannot be added retroactively.**
 **CRITICAL: Fill in `PIECE_SATS` in mint.js before running — wrong sat = permanently wrong sat.**
 
+## Sat Inventory (in ord wallet as of 2026-06-06)
+
+All sats held at receive address `bc1p36tnmumxf9qz0z9umufgra27qs4ee9spav9qarwu7m7cqjzhewys6v30sm`.
+Plus 2 funding UTXOs (10,350 sats common) at `bc1purcsf4pxtznjha05mgpp229q7eqe9erynqp990rvkf5dhpwx0tzqmuasvt` for inscription fees.
+
+**1 Nakamoto-era UTXO** (909 sats from Satoshi-era block 2485 — all 909 sats are Nakamoto-rare; pick one for piece 0):
+
+| Name | Sat # | Block | UTXO | Size | Offset |
+|---|---|---|---|---|---|
+| ntlqhrjbmxb | 12425429610010 | 2485 | ccab20ce9075c7...:0 | 909 | 0 (range start) |
+
+**34 Black Uncommon sats** (last sat of block; the next sat is uncommon):
+
+| Name | Sat # | Block | UTXO | Size | Offset |
+|---|---|---|---|---|---|
+| ggaofldnaso | 1073492499999999 | 219396 | 5ec2e32a13fbac...:0 | 330 | 329 |
+| geegozsvhly | 1083577499999999 | 223430 | 266671f0e01187...:3 | 546 | 0 |
+| gasmtandsqk | 1102322499999999 | 230928 | 33c1f44521bbb8...:1 | 546 | 545 |
+| fswrmtkmsde | 1144884999999999 | 247953 | 266671f0e01187...:7 | 546 | 545 |
+| fpdqkiwtjgc | 1165149999999999 | 256059 | af3e7cd733214a...:1 | 330 | 0 |
+| fdzzclsqgnq | 1225639999999999 | 280255 | 930fdd98313e68...:0 | 1600 | 600 |
+| fcebtbyphkc | 1235642499999999 | 284256 | 266671f0e01187...:4 | 546 | 0 |
+| ezyfkmhfbio | 1247724999999999 | 289089 | 33c1f44521bbb8...:0 | 546 | 545 |
+| eyourxqckxm | 1255119999999999 | 292047 | 86e744eac81ac8...:0 | 330 | 329 |
+| ewsmtjurgus | 1265207499999999 | 296082 | 266671f0e01187...:8 | 546 | 545 |
+| esopiujojcc | 1287739999999999 | 305095 | 266671f0e01187...:5 | 546 | 0 |
+| epptzdzeziw | 1303782499999999 | 311512 | 86e744eac81ac8...:1 | 330 | 329 |
+| eodakrzsxew | 1311874999999999 | 314749 | 86e744eac81ac8...:3 | 330 | 329 |
+| eoceaafyvvu | 1312054999999999 | 314821 | 86e744eac81ac8...:2 | 330 | 329 |
+| eiqhfztjjyo | 1341682499999999 | 326672 | af3e7cd733214a...:0 | 330 | 329 |
+| djxqrjryauc | 1475882499999999 | 380352 | af3e7cd733214a...:4 | 546 | 0 |
+| dbtaiujpvdq | 1520284999999999 | 398113 | 3d9befa8398e45...:1 | 546 | 0 |
+| dbrvfnaybyg | 1520534999999999 | 398213 | 3d9befa8398e45...:0 | 546 | 0 |
+| dahbajgrwjq | 1528214999999999 | 401285 | af3e7cd733214a...:5 | 546 | 0 |
+| ctrlbuazpyg | 1564052499999999 | 415620 | 3d9befa8398e45...:2 | 546 | 0 |
+| cedznsnbrdq | 1648302499999999 | 478641 | 266671f0e01187...:2 | 546 | 0 |
+| cbevdkdbery | 1664417499999999 | 491533 | af3e7cd733214a...:2 | 330 | 0 |
+| beqznfjhipm | 1786754999999999 | 589403 | 266671f0e01187...:0 | 546 | 0 |
+| bbbsmbaumcw | 1806232499999999 | 604985 | 3d9befa8398e45...:4 | 546 | 0 |
+| avndjbdkrqw | 1836424999999999 | 629139 | 3d9befa8398e45...:6 | 546 | 0 |
+| arrnapijeso | 1857229999999999 | 661567 | 266671f0e01187...:6 | 546 | 0 |
+| ajyzbtminrm | 1899107499999999 | 728571 | 3d9befa8398e45...:7 | 546 | 0 |
+| afnovbhsioo | 1923204999999999 | 767127 | 3d9befa8398e45...:5 | 546 | 0 |
+| afeksbckasw | 1925117499999999 | 770187 | 3d9befa8398e45...:8 | 546 | 0 |
+| adrzwervqle | 1933139999999999 | 783023 | 266671f0e01187...:1 | 546 | 0 |
+| adrejuehvqo | 1933312499999999 | 783299 | 33c1f44521bbb8...:2 | 546 | 0 |
+| adkoglpialm | 1934694999999999 | 785511 | 3d9befa8398e45...:9 | 546 | 0 |
+| abigrncmehu | 1946032499999999 | 803651 | 3d9befa8398e45...:3 | 546 | 0 |
+| aaexuaaadws | 1952159999999999 | 813455 | af3e7cd733214a...:3 | 546 | 0 |
+
+Per project plan: piece 0 → one Nakamoto sat from block 2485; pieces 1–N → one Black Uncommon each.
+Use `ord wallet inscribe --sat <sat_number>` — ord splits the host UTXO around the target sat automatically.
+
 ## Metadata Format
 - Stored as CBOR, accessible via `/r/metadata/{id}`
 - CLI flag: `--json-metadata <file>` for single inscriptions
