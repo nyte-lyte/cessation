@@ -42,9 +42,9 @@ const _selfScript = document.currentScript;
 ## Mint Sequence
 
 ```bash
-# 1. Inscribe engine (once, text/javascript, no parent)
-ord wallet inscribe --fee-rate <FEE> --file index_bundle.js
-# → engineId
+# 1. Inscribe engine on the Nakamoto sat (once, text/javascript, no parent)
+ord wallet inscribe --fee-rate <FEE> --sat 12425429610918 --file index_bundle.js
+# → engineId  (engine sits on last sat of UTXO ccab20ce:0, block 2485)
 
 # 2. Generate piece HTML (same command for all 29 pieces)
 node mint.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>
@@ -63,7 +63,7 @@ ord wallet inscribe --fee-rate <FEE> --sat <satNumber> --parent <engineId> --fil
 All sats held at receive address `bc1p36tnmumxf9qz0z9umufgra27qs4ee9spav9qarwu7m7cqjzhewys6v30sm`.
 Plus 2 funding UTXOs (10,350 sats common) at `bc1purcsf4pxtznjha05mgpp229q7eqe9erynqp990rvkf5dhpwx0tzqmuasvt` for inscription fees.
 
-**1 Nakamoto-era UTXO** (909 sats from Satoshi-era block 2485 — all 909 sats are Nakamoto-rare; pick one for piece 0):
+**1 Nakamoto-era UTXO** (909 sats from Satoshi-era block 2485 — **engine inscribed on sat 12425429610918**, the last sat of the range):
 
 | Name | Sat # | Block | UTXO | Size | Offset |
 |---|---|---|---|---|---|
@@ -108,7 +108,13 @@ Plus 2 funding UTXOs (10,350 sats common) at `bc1purcsf4pxtznjha05mgpp229q7eqe9e
 | abigrncmehu | 1946032499999999 | 803651 | 3d9befa8398e45...:3 | 546 | 0 |
 | aaexuaaadws | 1952159999999999 | 813455 | af3e7cd733214a...:3 | 546 | 0 |
 
-Per project plan: piece 0 → one Nakamoto sat from block 2485; pieces 1–N → one Black Uncommon each.
+Assignments (see `mint.js` PIECE_SATS for the full map):
+- **Engine** → Nakamoto sat 12425429610918 (last sat of UTXO ccab20ce:0)
+- **Pieces 0–28** → Black Uncommons in chronological-by-block order, starting from `ggaofldnaso` (block 219396) through `afeksbckasw` (block 770187)
+- **5 spare BUs** in wallet for future pieces 29+: `adrzwervqle, adrejuehvqo, adkoglpialm, abigrncmehu, aaexuaaadws` (blocks 783023, 783299, 785511, 803651, 813455)
+
+For future growth: chronological-by-block won't strictly hold — newly acquired BUs may come from any block. The 29 initial pieces lock the early chronology; later pieces just use whichever BU is acquired next.
+
 Use `ord wallet inscribe --sat <sat_number>` — ord splits the host UTXO around the target sat automatically.
 
 ## Metadata Format

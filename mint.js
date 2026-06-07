@@ -18,36 +18,40 @@
 // REQUIRED — fill in the sat ordinal number for each piece before minting.
 // Piece 0: Nakamoto sat (2009-01-31). Pieces 1–28: Omega black uncommon sats.
 // Leave null to get an error rather than silently inscribing on the wrong sat.
+// Engine is inscribed on Nakamoto sat 12425429610918 (last sat of UTXO ccab20ce:0, block 2485).
+// Pieces 0–28 use Black Uncommons in chronological-by-block order.
 const PIECE_SATS = {
-  0:  null,  // Nakamoto sat — 2009-01-31
-  1:  null,  // Omega black uncommon sat
-  2:  null,
-  3:  null,
-  4:  null,
-  5:  null,
-  6:  null,
-  7:  null,
-  8:  null,
-  9:  null,
-  10: null,
-  11: null,
-  12: null,
-  13: null,
-  14: null,
-  15: null,
-  16: null,
-  17: null,
-  18: null,
-  19: null,
-  20: null,
-  21: null,
-  22: null,
-  23: null,
-  24: null,
-  25: null,
-  26: null,
-  27: null,
-  28: null,
+  0:  1073492499999999,  // ggaofldnaso  block 219396
+  1:  1083577499999999,  // geegozsvhly  block 223430
+  2:  1102322499999999,  // gasmtandsqk  block 230928
+  3:  1144884999999999,  // fswrmtkmsde  block 247953
+  4:  1165149999999999,  // fpdqkiwtjgc  block 256059
+  5:  1225639999999999,  // fdzzclsqgnq  block 280255
+  6:  1235642499999999,  // fcebtbyphkc  block 284256
+  7:  1247724999999999,  // ezyfkmhfbio  block 289089
+  8:  1255119999999999,  // eyourxqckxm  block 292047
+  9:  1265207499999999,  // ewsmtjurgus  block 296082
+  10: 1287739999999999,  // esopiujojcc  block 305095
+  11: 1303782499999999,  // epptzdzeziw  block 311512
+  12: 1311874999999999,  // eodakrzsxew  block 314749
+  13: 1312054999999999,  // eoceaafyvvu  block 314821
+  14: 1341682499999999,  // eiqhfztjjyo  block 326672
+  15: 1475882499999999,  // djxqrjryauc  block 380352
+  16: 1520284999999999,  // dbtaiujpvdq  block 398113
+  17: 1520534999999999,  // dbrvfnaybyg  block 398213
+  18: 1528214999999999,  // dahbajgrwjq  block 401285
+  19: 1564052499999999,  // ctrlbuazpyg  block 415620
+  20: 1648302499999999,  // cedznsnbrdq  block 478641
+  21: 1664417499999999,  // cbevdkdbery  block 491533
+  22: 1786754999999999,  // beqznfjhipm  block 589403
+  23: 1806232499999999,  // bbbsmbaumcw  block 604985
+  24: 1836424999999999,  // avndjbdkrqw  block 629139
+  25: 1857229999999999,  // arrnapijeso  block 661567
+  26: 1899107499999999,  // ajyzbtminrm  block 728571
+  27: 1923204999999999,  // afnovbhsioo  block 767127
+  28: 1925117499999999,  // afeksbckasw  block 770187
+  // Spare BUs in wallet (5): adrzwervqle 783023, adrejuehvqo 783299,
+  // adkoglpialm 785511, abigrncmehu 803651, aaexuaaadws 813455.
 };
 
 'use strict';
