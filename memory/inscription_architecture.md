@@ -137,16 +137,16 @@ Use `ord wallet inscribe --sat <sat_number>` — ord splits the host UTXO around
 - `/r/blockinfo/{height_or_hash}` returns full block data including `hash`
 - Lifespan derived from block hash at mint — the `block` attribute in the script tag gives height
 
-## Thumbnail Gradients
-- Each piece HTML has body `background:#000` (always)
-- The gradient background for piece 0 standalone viewing is baked via `BAKE:PREVIEW_GRADIENT` marker in the engine — replaced by `mint.js` with `CUSTOM_GRADIENTS[0]`
-- Tracker-matched gradients in `CUSTOM_GRADIENTS` in `mint.js`
-
 ## Min/Max — Living Collection (Intentional)
 - Min/max is NOT frozen at mint time
 - Each piece computes it dynamically from all sibling datasets
 - New pieces shift the color/percentile relationships of all existing pieces
 - By design — a new lifespan entering affects all the others
+- **Confirmed implemented 2026-06-06**: this was the intended design all along, but the
+  code didn't match it — `minMaxValues` was baked once at module load and never
+  recomputed. Fixed via `computeMinMaxValues()`/`refreshMinMaxValues()` (mutates the
+  object in place, called from `lcRefreshSiblings()` on new sibling data). Principle
+  and implementation are now aligned. See `memory/living_collection_2026-06-06.md`.
 
 ## Collection Growth
 - New piece every ~3 months as new ECG/lab data is taken

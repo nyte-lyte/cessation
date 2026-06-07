@@ -21,7 +21,7 @@
 - ~~Lock visual system~~ — DONE: sat=0.92+0.08*ab, bri=0.25+0.65*value, u_co2Norm fixed, tracker synced (9ee8fe5)
 - ~~Lifecycle engine~~ — DONE (2026-04-05): full lc engine in main.js, regtest verified
 - ~~Inscription architecture~~ — DONE (2026-04-05): iframe + URL hash params, CBOR metadata, mint.js rewritten
-- ~~Thumbnail gradients~~ — DONE (2026-04-06): CUSTOM_GRADIENTS in mint.js, all 29 pieces use tracker-matched linear-gradient(90deg, hex1, hex2)
+- ~~Thumbnail gradients~~ — N/A: `CUSTOM_GRADIENTS` removed from mint.js as dead code (2026-05-17, never consumed in HTML/metadata output). On-chain pieces use a plain black background; tracker-matched `linear-gradient(90deg, hex1, hex2)` is a tracker-side-only feature (PieceCard thumbnails), not baked into inscriptions.
 
 ## Blockchain Integration (both projects)
 - Wire lifespan, decay nudges, and beam hue nudges to actual hash derivation

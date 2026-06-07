@@ -64,7 +64,7 @@ mainJs = mainJs.replace(/\n{3,}/g, '\n\n');
 const cssClean = css
   // Remove entire rules that reference #fs-overlay (including their selectors)
   .replace(/[^\n]*#fs-overlay[^\{]*\{[^\}]*\}/g, '')
-  // Remove body background-color — controlled by _previewGradient in preamble
+  // Remove body background-color — engine always sets a plain black background
   .replace(/background-color:\s*#000000;?\s*/g, '')
   .trim()
   // Minify
@@ -90,8 +90,7 @@ const fragEsc = escapeForTemplateLiteral(fragGlsl.trim());
 //   null  → piece 0 viewing itself directly (genesis)
 //   set   → child piece loading this as <script src>, reads t/ht/unix/hue/block attributes
 //
-// BAKE:PREVIEW_GRADIENT is replaced by mint.js with the actual gradient string for piece 0.
-// When running as a child piece, the child's own HTML sets body background — preamble skips it.
+// Engine always sets a plain black background — no per-piece gradient baking.
 
 const bundle = `const _selfScript = document.currentScript;
 (function(){
