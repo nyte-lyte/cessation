@@ -1982,6 +1982,12 @@ async function init() {
   }
 
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
+  function _resolveOwnId() {
+    if (typeof window === 'undefined' || !window.location) return null;
+    const m = window.location.pathname.match(/\/(?:content|preview)\/([0-9a-f]{64}i\d+)/i);
+    return m ? m[1] : null;
+  }
+  const _ownId = _resolveOwnId();
   lc.collectionRoot = _engineId;
 
   async function lcRefreshSiblings() {
@@ -2015,6 +2021,26 @@ async function init() {
       lc.collectionDatasets = fetched;
 
       refreshMinMaxValues(lcEffectiveCollection());
+
+      recomputePartnerInheritedHue();
+    }
+  }
+
+  function recomputePartnerInheritedHue() {
+    const p = getPartnerIndex(currentDataSetIndex);
+    if (p < 0) return;
+    if (p < healthDataSets.length) {
+
+      partnerInheritedHueDeg = allInheritedHues[p];
+      return;
+    }
+    const prevIdx = Math.max(0, p - 1);
+    const collection = lcEffectiveCollection();
+    const prevFromCollection = lc.collectionDatasets.find(d => d.pieceIndex === prevIdx);
+    const prevDs = prevFromCollection?.dataset
+      ?? (prevIdx < healthDataSets.length ? healthDataSets[prevIdx] : null);
+    if (prevDs) {
+      partnerInheritedHueDeg = computeHSBFromStats(prevDs, collection).hue * 360;
     }
   }
 
@@ -2079,7 +2105,13 @@ async function init() {
         await lcCheckVoid();
         return;
       }
-      const partnerDs  = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
+
+      const partnerDs = lcGetPartnerDataset(partnerIdx)
+        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      if (!partnerDs) {
+        console.warn(`[lc] partner ${partnerIdx} not yet discoverable — deferring reanimation`);
+        return;
+      }
       const blended    = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold  = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
       const karma      = computeKarma(blended, minMaxValues);
@@ -2113,7 +2145,12 @@ async function init() {
     while (lc.currentBlockHeight >= lc.cessationBlock && !lc.isLiberated) {
       const partnerIdx = getPartnerIndex(currentDataSetIndex);
       if (partnerIdx < 0) { lc.isLiberated = true; break; }
-      const partnerDs = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
+      const partnerDs = lcGetPartnerDataset(partnerIdx)
+        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      if (!partnerDs) {
+        console.warn(`[lc] fast-forward: partner ${partnerIdx} not discoverable — stopping replay`);
+        break;
+      }
       const blended   = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
       const karma     = computeKarma(blended, minMaxValues);
@@ -2141,29 +2178,31 @@ async function init() {
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
 
-      try {
-        const parentsResp = await fetch('/r/parents/self/inscriptions/0').then(r => r.json());
-        const parents = parentsResp?.ids ?? [];
-        if (parents.length > 0) lc.collectionRoot = parents[0];
-      } catch (e) { /* keep engineId fallback */ }
+      if (_ownId) {
+        try {
+          const parentsResp = await fetch(`/r/parents/${_ownId}/inscriptions/0`).then(r => r.json());
+          const parents = parentsResp?.ids ?? [];
+          if (parents.length > 0) lc.collectionRoot = parents[0];
+        } catch (e) { /* keep engineId fallback */ }
 
-      try {
-        const ownHex = await fetch('/r/metadata/self').then(r => r.text());
-        if (ownHex && ownHex.trim()) {
-          const ownMeta = cborDecode(ownHex.trim());
-          if (ownMeta && ownMeta.dataset) {
-            lc.ownDataset = ownMeta.dataset;
+        try {
+          const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.text());
+          if (ownHex && ownHex.trim()) {
+            const ownMeta = cborDecode(ownHex.trim());
+            if (ownMeta && ownMeta.dataset) {
+              lc.ownDataset = ownMeta.dataset;
 
-            lc.collectionDatasets = [{
-              id:               'self',
-              pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
-              dataset:          ownMeta.dataset,
-              hashTail:         ownMeta.hashTail ?? null,
-              inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
-            }];
+              lc.collectionDatasets = [{
+                id:               _ownId,
+                pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
+                dataset:          ownMeta.dataset,
+                hashTail:         ownMeta.hashTail ?? null,
+                inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
+              }];
+            }
           }
-        }
-      } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
+        } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
+      }
 
       await lcRefreshSiblings();
       await lcFastForward();
