@@ -50,7 +50,8 @@ const PIECE_SATS = {
   26: 1899107499999999,  // ajyzbtminrm  block 728571
   27: 1923204999999999,  // afnovbhsioo  block 767127
   28: 1925117499999999,  // afeksbckasw  block 770187
-  // Spare BUs in wallet (5): adrzwervqle 783023, adrejuehvqo 783299,
+  29: 1933139999999999,  // adrzwervqle  block 783023
+  // Spare BUs in wallet (4): adrejuehvqo 783299,
   // adkoglpialm 785511, abigrncmehu 803651, aaexuaaadws 813455.
 };
 
