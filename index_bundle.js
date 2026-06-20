@@ -1311,6 +1311,30 @@ let healthDataSets = [
       calcium: 9.1,
     },
   },
+  {
+    date: "2026-06-19",
+    ecg: {
+      ventRate: 56,
+      prInterval: 143,
+      qrsInterval: 83,
+      qtInterval: 437,
+      qtcInterval: 428,
+      pAxis: 73,
+      rAxis: 82,
+      tAxis: 68,
+    },
+    labs: {
+      glucose: 89,
+      nitrogen: 13,
+      creatinine: 0.63,
+      eGFR: 111,
+      sodium: 138,
+      potassium: 4.5,
+      chloride: 106,
+      carbonDioxide: 22,
+      calcium: 9.2,
+    },
+  },
 ];
 
 healthDataSets.sort((a, b) => {
@@ -1906,6 +1930,8 @@ async function init() {
     voidProgress:         0.0,
     collectionDatasets:   [],
     _siblingPollCount:    0,
+    ownDataset:           null,
+    collectionRoot:       null,
   };
 
   function lcTick(nowMs) {
@@ -1920,12 +1946,22 @@ async function init() {
   }
 
   function lcCycleDataset() {
-    return lc.cycleDataset ?? healthDataSets[currentDataSetIndex];
+    if (lc.cycleDataset) return lc.cycleDataset;
+    if (lc.ownDataset)   return lc.ownDataset;
+    const fromCollection = lc.collectionDatasets.find(d => d.pieceIndex === currentDataSetIndex);
+    if (fromCollection)  return fromCollection.dataset;
+    return healthDataSets[currentDataSetIndex];
   }
 
   function lcEffectiveCollection() {
-    if (lc.collectionDatasets.length === 0) return healthDataSets;
-    return [...lc.collectionDatasets]
+    const sources = lc.collectionDatasets.length === 0
+      ? healthDataSets.map((d, i) => ({ pieceIndex: i, dataset: d }))
+      : [...lc.collectionDatasets];
+
+    if (lc.ownDataset && !sources.some(d => d.pieceIndex === currentDataSetIndex)) {
+      sources.push({ pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+    }
+    return sources
       .sort((a, b) => (a.pieceIndex ?? 999) - (b.pieceIndex ?? 999))
       .map(d => d.dataset);
   }
@@ -1946,14 +1982,16 @@ async function init() {
   }
 
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
+  const _crAttr = _sc ? _sc.getAttribute('cr') : null;
+  lc.collectionRoot = _crAttr || _engineId;
 
   async function lcRefreshSiblings() {
-    if (!_engineId) return;
+    if (!lc.collectionRoot) return;
     let page = 0, more = true;
     const fetched = [];
     while (more) {
       let resp;
-      try { resp = await fetch(`/r/children/${_engineId}/inscriptions/${page}`).then(r => r.json()); }
+      try { resp = await fetch(`/r/children/${lc.collectionRoot}/inscriptions/${page}`).then(r => r.json()); }
       catch (e) { break; }
       for (const id of (resp.ids ?? [])) {
         try {
@@ -2103,6 +2141,25 @@ async function init() {
       }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
+
+      try {
+        const ownHex = await fetch('/r/metadata/self').then(r => r.text());
+        if (ownHex && ownHex.trim()) {
+          const ownMeta = cborDecode(ownHex.trim());
+          if (ownMeta && ownMeta.dataset) {
+            lc.ownDataset = ownMeta.dataset;
+
+            lc.collectionDatasets = [{
+              id:               'self',
+              pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
+              dataset:          ownMeta.dataset,
+              hashTail:         ownMeta.hashTail ?? null,
+              inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
+            }];
+          }
+        }
+      } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
+
       await lcRefreshSiblings();
       await lcFastForward();
       if (lc.isLiberated && lc.voidTriggerMs === null) await lcCheckVoid();
@@ -2461,9 +2518,14 @@ async function init() {
   }
 
   gl.clearColor(0, 0, 0, 1);
-  draw();
 
-  initLifecycle().catch(() => {});
+  (async () => {
+    try {
+      await initLifecycle();
+    } catch (e) { /* fall through to dev render */ }
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    draw();
+  })();
 
 }
 

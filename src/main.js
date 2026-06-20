@@ -536,6 +536,8 @@ async function init() {
     voidProgress:         0.0,
     collectionDatasets:   [],      // [{id, pieceIndex, dataset, hashTail, inscriptionUnix}]
     _siblingPollCount:    0,
+    ownDataset:           null,    // own dataset fetched from /r/metadata/self at boot
+    collectionRoot:       null,    // engine inscription id whose children list is the collection
   };
 
   // Per-frame: interpolate reanimation and void transition progress values
@@ -550,17 +552,32 @@ async function init() {
     }
   }
 
-  // Dataset to use for current cycle (original or blended from prior reanimation)
+  // Dataset to use for current cycle (original or blended from prior reanimation).
+  // For pieces whose index exceeds the baked healthDataSets length, lc.ownDataset
+  // (fetched from /r/metadata/self at boot) is the source of truth.
   function lcCycleDataset() {
-    return lc.cycleDataset ?? healthDataSets[currentDataSetIndex];
+    if (lc.cycleDataset) return lc.cycleDataset;
+    if (lc.ownDataset)   return lc.ownDataset;
+    const fromCollection = lc.collectionDatasets.find(d => d.pieceIndex === currentDataSetIndex);
+    if (fromCollection)  return fromCollection.dataset;
+    return healthDataSets[currentDataSetIndex];
   }
 
   // Collection for karma/threshold computation — live siblings preferred, local fallback.
   // Sorted by pieceIndex so array position stays a valid index — currentDataSetIndex
   // must point at this piece's own dataset for getAgedDataset to drift correctly.
+  // Pieces whose index exceeds the baked array length still get a valid own slot
+  // via lc.ownDataset (injected if siblings haven't loaded yet).
   function lcEffectiveCollection() {
-    if (lc.collectionDatasets.length === 0) return healthDataSets;
-    return [...lc.collectionDatasets]
+    const sources = lc.collectionDatasets.length === 0
+      ? healthDataSets.map((d, i) => ({ pieceIndex: i, dataset: d }))
+      : [...lc.collectionDatasets];
+    // Ensure own piece is in the collection at its true index — protects against
+    // sibling fetch lag and against own pieceIndex >= healthDataSets.length.
+    if (lc.ownDataset && !sources.some(d => d.pieceIndex === currentDataSetIndex)) {
+      sources.push({ pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+    }
+    return sources
       .sort((a, b) => (a.pieceIndex ?? 999) - (b.pieceIndex ?? 999))
       .map(d => d.dataset);
   }
@@ -584,19 +601,23 @@ async function init() {
     return null;
   }
 
-  // engineId extracted from the script tag src attribute — same for all 29 pieces.
-  // All pieces are children of the engine inscription, so /r/children/{engineId}
-  // returns all siblings regardless of which piece is running.
+  // engineId = the inscription ID of the engine bundle currently running (from script src).
+  // collectionRoot = the inscription whose children list defines the full collection.
+  //   Defaults to engineId (single-engine deployment). Pieces under a forked/upgraded
+  //   engine pass cr="<old_engine_id>" so they discover siblings via the original root,
+  //   keeping the living collection unified across engine versions.
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
+  const _crAttr = _sc ? _sc.getAttribute('cr') : null;
+  lc.collectionRoot = _crAttr || _engineId;
 
-  // Fetch and load all sibling datasets from /r/children/{engineId} (with pagination)
+  // Fetch and load all sibling datasets from /r/children/{collectionRoot} (with pagination)
   async function lcRefreshSiblings() {
-    if (!_engineId) return; // dev mode — no engine id available
+    if (!lc.collectionRoot) return; // dev mode — no engine id available
     let page = 0, more = true;
     const fetched = [];
     while (more) {
       let resp;
-      try { resp = await fetch(`/r/children/${_engineId}/inscriptions/${page}`).then(r => r.json()); }
+      try { resp = await fetch(`/r/children/${lc.collectionRoot}/inscriptions/${page}`).then(r => r.json()); }
       catch (e) { break; }
       for (const id of (resp.ids ?? [])) {
         try {
@@ -758,6 +779,28 @@ async function init() {
       }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
+
+      // Own dataset from /r/metadata/self — required for pieces whose index exceeds
+      // the baked healthDataSets length. Falls back silently in dev mode.
+      try {
+        const ownHex = await fetch('/r/metadata/self').then(r => r.text());
+        if (ownHex && ownHex.trim()) {
+          const ownMeta = cborDecode(ownHex.trim());
+          if (ownMeta && ownMeta.dataset) {
+            lc.ownDataset = ownMeta.dataset;
+            // Seed collection so the very first draw has valid own data even
+            // before the full sibling fetch completes.
+            lc.collectionDatasets = [{
+              id:               'self',
+              pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
+              dataset:          ownMeta.dataset,
+              hashTail:         ownMeta.hashTail ?? null,
+              inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
+            }];
+          }
+        }
+      } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
+
       await lcRefreshSiblings();
       await lcFastForward();
       if (lc.isLiberated && lc.voidTriggerMs === null) await lcCheckVoid();
@@ -1171,10 +1214,18 @@ async function init() {
   }
 
   gl.clearColor(0, 0, 0, 1);
-  draw();
 
-  // Start lifecycle engine after rendering — non-blocking, fails silently outside ord env
-  initLifecycle().catch(() => {});
+  // Boot: wait for lifecycle init (own metadata + siblings + block height) before
+  // the first draw — without ownDataset, pieces whose pieceIndex exceeds the baked
+  // array length crash on the first frame and the rAF chain dies.
+  // Dev / non-ord environments fall through: draw() runs immediately with baked data.
+  (async () => {
+    try {
+      await initLifecycle();
+    } catch (e) { /* fall through to dev render */ }
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    draw();
+  })();
 
   // DEV_START
   // manually switch datasets in the console
