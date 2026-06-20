@@ -1982,8 +1982,7 @@ async function init() {
   }
 
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
-  const _crAttr = _sc ? _sc.getAttribute('cr') : null;
-  lc.collectionRoot = _crAttr || _engineId;
+  lc.collectionRoot = _engineId;
 
   async function lcRefreshSiblings() {
     if (!lc.collectionRoot) return;
@@ -2141,6 +2140,12 @@ async function init() {
       }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
+
+      try {
+        const parentsResp = await fetch('/r/parents/self/inscriptions/0').then(r => r.json());
+        const parents = parentsResp?.ids ?? [];
+        if (parents.length > 0) lc.collectionRoot = parents[0];
+      } catch (e) { /* keep engineId fallback */ }
 
       try {
         const ownHex = await fetch('/r/metadata/self').then(r => r.text());

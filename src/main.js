@@ -602,13 +602,11 @@ async function init() {
   }
 
   // engineId = the inscription ID of the engine bundle currently running (from script src).
-  // collectionRoot = the inscription whose children list defines the full collection.
-  //   Defaults to engineId (single-engine deployment). Pieces under a forked/upgraded
-  //   engine pass cr="<old_engine_id>" so they discover siblings via the original root,
-  //   keeping the living collection unified across engine versions.
+  // collectionRoot is resolved at boot from /r/parents/self — the piece's parent
+  // inscription is the canonical collection root. Falls back to engineId so the
+  // first-generation deployment (where engine == parent) still works.
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
-  const _crAttr = _sc ? _sc.getAttribute('cr') : null;
-  lc.collectionRoot = _crAttr || _engineId;
+  lc.collectionRoot = _engineId;
 
   // Fetch and load all sibling datasets from /r/children/{collectionRoot} (with pagination)
   async function lcRefreshSiblings() {
@@ -779,6 +777,15 @@ async function init() {
       }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
+
+      // Collection root: query the piece's own parent (the engine inscription it
+      // was minted under). Falls back to script-src engine id for first-generation
+      // pieces where the running engine IS the parent.
+      try {
+        const parentsResp = await fetch('/r/parents/self/inscriptions/0').then(r => r.json());
+        const parents = parentsResp?.ids ?? [];
+        if (parents.length > 0) lc.collectionRoot = parents[0];
+      } catch (e) { /* keep engineId fallback */ }
 
       // Own dataset from /r/metadata/self — required for pieces whose index exceeds
       // the baked healthDataSets length. Falls back silently in dev mode.
