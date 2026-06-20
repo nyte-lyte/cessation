@@ -563,33 +563,48 @@ async function init() {
     return healthDataSets[currentDataSetIndex];
   }
 
-  // Collection for karma/threshold computation — live siblings preferred, local fallback.
-  // Sorted by pieceIndex so array position stays a valid index — currentDataSetIndex
-  // must point at this piece's own dataset for getAgedDataset to drift correctly.
-  // Pieces whose index exceeds the baked array length still get a valid own slot
-  // via lc.ownDataset (injected if siblings haven't loaded yet).
-  function lcEffectiveCollection() {
-    const sources = lc.collectionDatasets.length === 0
-      ? healthDataSets.map((d, i) => ({ pieceIndex: i, dataset: d }))
-      : [...lc.collectionDatasets];
-    // Ensure own piece is in the collection at its true index — protects against
-    // sibling fetch lag and against own pieceIndex >= healthDataSets.length.
-    if (lc.ownDataset && !sources.some(d => d.pieceIndex === currentDataSetIndex)) {
-      sources.push({ pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+  // Merged entries from baked array + live collection + own piece, deduped by
+  // pieceIndex (later sources override earlier), sorted by pieceIndex.
+  // Returns DENSE array of datasets — safe to iterate. Position N in the returned
+  // array is NOT the same as pieceIndex N when there are gaps; use lcOwnPosition()
+  // to get this piece's index in the sorted dense list.
+  function _lcMergedEntries() {
+    const byIndex = new Map();
+    for (let i = 0; i < healthDataSets.length; i++) {
+      byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
     }
-    return sources
-      .sort((a, b) => (a.pieceIndex ?? 999) - (b.pieceIndex ?? 999))
-      .map(d => d.dataset);
+    for (const d of lc.collectionDatasets) {
+      if (typeof d.pieceIndex === 'number' && d.dataset) {
+        byIndex.set(d.pieceIndex, { pieceIndex: d.pieceIndex, dataset: d.dataset });
+      }
+    }
+    if (lc.ownDataset) {
+      byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+    }
+    return [...byIndex.values()].sort((a, b) => a.pieceIndex - b.pieceIndex);
+  }
+  function lcEffectiveCollection() {
+    return _lcMergedEntries().map(e => e.dataset);
+  }
+  // Own piece's position in the dense sorted collection (NOT its pieceIndex).
+  // getAgedDataset and the inherited-hue index need a position into the dense array;
+  // if pieces are non-contiguous (e.g., baked 0..29 + piece 100), the own piece is
+  // at position 30 of the collection, not at position 100.
+  function lcOwnPosition() {
+    return _lcMergedEntries().findIndex(e => e.pieceIndex === currentDataSetIndex);
   }
 
   // Collection used for rendering — effective collection with this piece's own
-  // position replaced by the post-reanimation blend (lc.cycleDataset), so chronological
-  // drift continues forward from the piece's evolved data, not its original snapshot.
+  // dense-array position replaced by the post-reanimation blend (lc.cycleDataset),
+  // so chronological drift continues forward from the piece's evolved data, not its
+  // original snapshot.
   function getDrawCollection() {
     const base = lcEffectiveCollection();
     if (!lc.cycleDataset) return base;
+    const pos = lcOwnPosition();
+    if (pos < 0) return base;
     const arr = [...base];
-    arr[currentDataSetIndex] = lc.cycleDataset;
+    arr[pos] = lc.cycleDataset;
     return arr;
   }
 
@@ -627,10 +642,16 @@ async function init() {
       let resp;
       try { resp = await fetch(`/r/children/${lc.collectionRoot}/inscriptions/${page}`).then(r => r.json()); }
       catch (e) { break; }
-      for (const id of (resp.ids ?? [])) {
+      // ord returns { children: [{id,...},...], more, page } for this endpoint in
+      // 0.27+. Older builds returned { ids: [...] }. Handle both.
+      const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
+      for (const id of childIds) {
         try {
-          const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.text());
-          if (!metaHex || !metaHex.trim()) continue;
+          // ord returns metadata as a JSON-quoted hex string. r.json() unwraps the
+          // string so cborDecode receives raw hex (not a leading quote that silently
+          // poisons the byte parse and makes every sibling skip).
+          const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.json());
+          if (!metaHex || typeof metaHex !== 'string' || !metaHex.trim()) continue;
           const meta = cborDecode(metaHex.trim());
           if (meta && meta.dataset) {
             fetched.push({
@@ -832,16 +853,18 @@ async function init() {
       // pieces where the running engine IS the parent.
       if (_ownId) {
         try {
+          // /r/parents/<id>/inscriptions/<page> returns { parents: [{id,...},...], more, page }
           const parentsResp = await fetch(`/r/parents/${_ownId}/inscriptions/0`).then(r => r.json());
-          const parents = parentsResp?.ids ?? [];
-          if (parents.length > 0) lc.collectionRoot = parents[0];
+          const parents = parentsResp?.parents ?? [];
+          if (parents.length > 0) lc.collectionRoot = parents[0].id ?? parents[0];
         } catch (e) { /* keep engineId fallback */ }
 
         // Own dataset from /r/metadata/<ownId> — required for pieces whose index
-        // exceeds the baked healthDataSets length. Falls back silently in dev mode.
+        // exceeds the baked healthDataSets length. Use r.json() to unwrap the
+        // JSON-quoted hex string ord returns. Falls back silently in dev mode.
         try {
-          const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.text());
-          if (ownHex && ownHex.trim()) {
+          const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.json());
+          if (ownHex && typeof ownHex === 'string' && ownHex.trim()) {
             const ownMeta = cborDecode(ownHex.trim());
             if (ownMeta && ownMeta.dataset) {
               lc.ownDataset = ownMeta.dataset;
@@ -1128,8 +1151,15 @@ async function init() {
     // post-reanimation blend) — falls back to local healthDataSets in dev/early boot.
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const drawCollection = getDrawCollection();
+    // getAgedDataset expects a POSITION into the dense drawCollection, not a
+    // pieceIndex. They coincide when pieces are contiguous (0..N-1), but for
+    // non-contiguous collections (e.g., baked 0..29 + piece 100), own pieceIndex
+    // 100 is at position 30 in the collection. Falls back to pieceIndex for the
+    // dev/early-boot path where own piece isn't yet in the collection.
+    const ownPos = lcOwnPosition();
+    const startIdx = ownPos >= 0 ? ownPos : Math.min(currentDataSetIndex, drawCollection.length - 1);
     const activeDataSet = applyCollectionInfluence(
-      getAgedDataset(currentDataSetIndex, lifeFraction, drawCollection, minMaxValues),
+      getAgedDataset(startIdx, lifeFraction, drawCollection, minMaxValues),
       drawCollection,
       lifeFraction,
       minMaxValues

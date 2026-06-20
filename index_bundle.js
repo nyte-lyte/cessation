@@ -1953,24 +1953,36 @@ async function init() {
     return healthDataSets[currentDataSetIndex];
   }
 
-  function lcEffectiveCollection() {
-    const sources = lc.collectionDatasets.length === 0
-      ? healthDataSets.map((d, i) => ({ pieceIndex: i, dataset: d }))
-      : [...lc.collectionDatasets];
-
-    if (lc.ownDataset && !sources.some(d => d.pieceIndex === currentDataSetIndex)) {
-      sources.push({ pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+  function _lcMergedEntries() {
+    const byIndex = new Map();
+    for (let i = 0; i < healthDataSets.length; i++) {
+      byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
     }
-    return sources
-      .sort((a, b) => (a.pieceIndex ?? 999) - (b.pieceIndex ?? 999))
-      .map(d => d.dataset);
+    for (const d of lc.collectionDatasets) {
+      if (typeof d.pieceIndex === 'number' && d.dataset) {
+        byIndex.set(d.pieceIndex, { pieceIndex: d.pieceIndex, dataset: d.dataset });
+      }
+    }
+    if (lc.ownDataset) {
+      byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+    }
+    return [...byIndex.values()].sort((a, b) => a.pieceIndex - b.pieceIndex);
+  }
+  function lcEffectiveCollection() {
+    return _lcMergedEntries().map(e => e.dataset);
+  }
+
+  function lcOwnPosition() {
+    return _lcMergedEntries().findIndex(e => e.pieceIndex === currentDataSetIndex);
   }
 
   function getDrawCollection() {
     const base = lcEffectiveCollection();
     if (!lc.cycleDataset) return base;
+    const pos = lcOwnPosition();
+    if (pos < 0) return base;
     const arr = [...base];
-    arr[currentDataSetIndex] = lc.cycleDataset;
+    arr[pos] = lc.cycleDataset;
     return arr;
   }
 
@@ -1998,10 +2010,13 @@ async function init() {
       let resp;
       try { resp = await fetch(`/r/children/${lc.collectionRoot}/inscriptions/${page}`).then(r => r.json()); }
       catch (e) { break; }
-      for (const id of (resp.ids ?? [])) {
+
+      const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
+      for (const id of childIds) {
         try {
-          const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.text());
-          if (!metaHex || !metaHex.trim()) continue;
+
+          const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.json());
+          if (!metaHex || typeof metaHex !== 'string' || !metaHex.trim()) continue;
           const meta = cborDecode(metaHex.trim());
           if (meta && meta.dataset) {
             fetched.push({
@@ -2180,14 +2195,15 @@ async function init() {
 
       if (_ownId) {
         try {
+
           const parentsResp = await fetch(`/r/parents/${_ownId}/inscriptions/0`).then(r => r.json());
-          const parents = parentsResp?.ids ?? [];
-          if (parents.length > 0) lc.collectionRoot = parents[0];
+          const parents = parentsResp?.parents ?? [];
+          if (parents.length > 0) lc.collectionRoot = parents[0].id ?? parents[0];
         } catch (e) { /* keep engineId fallback */ }
 
         try {
-          const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.text());
-          if (ownHex && ownHex.trim()) {
+          const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.json());
+          if (ownHex && typeof ownHex === 'string' && ownHex.trim()) {
             const ownMeta = cborDecode(ownHex.trim());
             if (ownMeta && ownMeta.dataset) {
               lc.ownDataset = ownMeta.dataset;
@@ -2428,8 +2444,11 @@ async function init() {
 
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const drawCollection = getDrawCollection();
+
+    const ownPos = lcOwnPosition();
+    const startIdx = ownPos >= 0 ? ownPos : Math.min(currentDataSetIndex, drawCollection.length - 1);
     const activeDataSet = applyCollectionInfluence(
-      getAgedDataset(currentDataSetIndex, lifeFraction, drawCollection, minMaxValues),
+      getAgedDataset(startIdx, lifeFraction, drawCollection, minMaxValues),
       drawCollection,
       lifeFraction,
       minMaxValues
