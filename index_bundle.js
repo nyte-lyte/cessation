@@ -1311,6 +1311,30 @@ let healthDataSets = [
       calcium: 9.1,
     },
   },
+  {
+    date: "2026-06-19",
+    ecg: {
+      ventRate: 56,
+      prInterval: 143,
+      qrsInterval: 83,
+      qtInterval: 437,
+      qtcInterval: 428,
+      pAxis: 73,
+      rAxis: 82,
+      tAxis: 68,
+    },
+    labs: {
+      glucose: 89,
+      nitrogen: 13,
+      creatinine: 0.63,
+      eGFR: 111,
+      sodium: 138,
+      potassium: 4.5,
+      chloride: 106,
+      carbonDioxide: 22,
+      calcium: 9.2,
+    },
+  },
 ];
 
 healthDataSets.sort((a, b) => {
@@ -1906,6 +1930,8 @@ async function init() {
     voidProgress:         0.0,
     collectionDatasets:   [],
     _siblingPollCount:    0,
+    ownDataset:           null,
+    collectionRoot:       null,
   };
 
   function lcTick(nowMs) {
@@ -1920,21 +1946,43 @@ async function init() {
   }
 
   function lcCycleDataset() {
-    return lc.cycleDataset ?? healthDataSets[currentDataSetIndex];
+    if (lc.cycleDataset) return lc.cycleDataset;
+    if (lc.ownDataset)   return lc.ownDataset;
+    const fromCollection = lc.collectionDatasets.find(d => d.pieceIndex === currentDataSetIndex);
+    if (fromCollection)  return fromCollection.dataset;
+    return healthDataSets[currentDataSetIndex];
   }
 
+  function _lcMergedEntries() {
+    const byIndex = new Map();
+    for (let i = 0; i < healthDataSets.length; i++) {
+      byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
+    }
+    for (const d of lc.collectionDatasets) {
+      if (typeof d.pieceIndex === 'number' && d.dataset) {
+        byIndex.set(d.pieceIndex, { pieceIndex: d.pieceIndex, dataset: d.dataset });
+      }
+    }
+    if (lc.ownDataset) {
+      byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+    }
+    return [...byIndex.values()].sort((a, b) => a.pieceIndex - b.pieceIndex);
+  }
   function lcEffectiveCollection() {
-    if (lc.collectionDatasets.length === 0) return healthDataSets;
-    return [...lc.collectionDatasets]
-      .sort((a, b) => (a.pieceIndex ?? 999) - (b.pieceIndex ?? 999))
-      .map(d => d.dataset);
+    return _lcMergedEntries().map(e => e.dataset);
+  }
+
+  function lcOwnPosition() {
+    return _lcMergedEntries().findIndex(e => e.pieceIndex === currentDataSetIndex);
   }
 
   function getDrawCollection() {
     const base = lcEffectiveCollection();
     if (!lc.cycleDataset) return base;
+    const pos = lcOwnPosition();
+    if (pos < 0) return base;
     const arr = [...base];
-    arr[currentDataSetIndex] = lc.cycleDataset;
+    arr[pos] = lc.cycleDataset;
     return arr;
   }
 
@@ -1946,38 +1994,85 @@ async function init() {
   }
 
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
+  function _resolveOwnId() {
+    if (typeof window === 'undefined' || !window.location) return null;
+    const m = window.location.pathname.match(/\/(?:content|preview)\/([0-9a-f]{64}i\d+)/i);
+    return m ? m[1] : null;
+  }
+  const _ownId = _resolveOwnId();
+  lc.collectionAncestors = [];
+  lc.collectionRoot = _engineId;
+
+  async function lcResolveAncestors() {
+    if (!_ownId) return [];
+    const ancestors = [];
+    let cursor = _ownId;
+    for (let depth = 0; depth < 10; depth++) {
+      let resp;
+      try { resp = await fetch(`/r/parents/${cursor}/inscriptions/0`).then(r => r.json()); }
+      catch (e) { break; }
+      const parents = resp?.parents ?? resp?.ids ?? [];
+      if (parents.length === 0) break;
+      const parentId = parents[0].id ?? parents[0];
+      if (ancestors.includes(parentId) || parentId === _ownId) break;
+      ancestors.push(parentId);
+      cursor = parentId;
+    }
+    return ancestors;
+  }
 
   async function lcRefreshSiblings() {
-    if (!_engineId) return;
-    let page = 0, more = true;
+    if (!lc.collectionAncestors || lc.collectionAncestors.length === 0) return;
     const fetched = [];
-    while (more) {
-      let resp;
-      try { resp = await fetch(`/r/children/${_engineId}/inscriptions/${page}`).then(r => r.json()); }
-      catch (e) { break; }
-      for (const id of (resp.ids ?? [])) {
-        try {
-          const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.text());
-          if (!metaHex || !metaHex.trim()) continue;
-          const meta = cborDecode(metaHex.trim());
-          if (meta && meta.dataset) {
-            fetched.push({
-              id,
-              pieceIndex:      meta.pieceIndex      ?? null,
-              dataset:         meta.dataset,
-              hashTail:        meta.hashTail         ?? null,
-              inscriptionUnix: meta.inscriptionUnix  ?? null,
-            });
-          }
-        } catch (e) { /* skip this sibling */ }
+    for (const ancestor of lc.collectionAncestors) {
+      let page = 0, more = true;
+      while (more) {
+        let resp;
+        try { resp = await fetch(`/r/children/${ancestor}/inscriptions/${page}`).then(r => r.json()); }
+        catch (e) { break; }
+        const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
+        for (const id of childIds) {
+          try {
+            const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.json());
+            if (!metaHex || typeof metaHex !== 'string' || !metaHex.trim()) continue;
+            const meta = cborDecode(metaHex.trim());
+            if (meta && meta.dataset) {
+              fetched.push({
+                id,
+                pieceIndex:      meta.pieceIndex      ?? null,
+                dataset:         meta.dataset,
+                hashTail:        meta.hashTail         ?? null,
+                inscriptionUnix: meta.inscriptionUnix  ?? null,
+              });
+            }
+          } catch (e) { /* skip this child — engine inscriptions have no .dataset and end up here */ }
+        }
+        more = resp.more ?? false;
+        page++;
       }
-      more = resp.more ?? false;
-      page++;
     }
     if (fetched.length > 0) {
       lc.collectionDatasets = fetched;
-
       refreshMinMaxValues(lcEffectiveCollection());
+      recomputePartnerInheritedHue();
+    }
+  }
+
+  function recomputePartnerInheritedHue() {
+    const p = getPartnerIndex(currentDataSetIndex);
+    if (p < 0) return;
+    if (p < healthDataSets.length) {
+
+      partnerInheritedHueDeg = allInheritedHues[p];
+      return;
+    }
+    const prevIdx = Math.max(0, p - 1);
+    const collection = lcEffectiveCollection();
+    const prevFromCollection = lc.collectionDatasets.find(d => d.pieceIndex === prevIdx);
+    const prevDs = prevFromCollection?.dataset
+      ?? (prevIdx < healthDataSets.length ? healthDataSets[prevIdx] : null);
+    if (prevDs) {
+      partnerInheritedHueDeg = computeHSBFromStats(prevDs, collection).hue * 360;
     }
   }
 
@@ -2042,7 +2137,13 @@ async function init() {
         await lcCheckVoid();
         return;
       }
-      const partnerDs  = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
+
+      const partnerDs = lcGetPartnerDataset(partnerIdx)
+        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      if (!partnerDs) {
+        console.warn(`[lc] partner ${partnerIdx} not yet discoverable — deferring reanimation`);
+        return;
+      }
       const blended    = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold  = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
       const karma      = computeKarma(blended, minMaxValues);
@@ -2076,7 +2177,12 @@ async function init() {
     while (lc.currentBlockHeight >= lc.cessationBlock && !lc.isLiberated) {
       const partnerIdx = getPartnerIndex(currentDataSetIndex);
       if (partnerIdx < 0) { lc.isLiberated = true; break; }
-      const partnerDs = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
+      const partnerDs = lcGetPartnerDataset(partnerIdx)
+        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      if (!partnerDs) {
+        console.warn(`[lc] fast-forward: partner ${partnerIdx} not discoverable — stopping replay`);
+        break;
+      }
       const blended   = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
       const karma     = computeKarma(blended, minMaxValues);
@@ -2103,6 +2209,32 @@ async function init() {
       }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
+
+      if (_ownId) {
+        lc.collectionAncestors = await lcResolveAncestors();
+        if (lc.collectionAncestors.length > 0) {
+          lc.collectionRoot = lc.collectionAncestors[lc.collectionAncestors.length - 1];
+        }
+
+        try {
+          const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.json());
+          if (ownHex && typeof ownHex === 'string' && ownHex.trim()) {
+            const ownMeta = cborDecode(ownHex.trim());
+            if (ownMeta && ownMeta.dataset) {
+              lc.ownDataset = ownMeta.dataset;
+
+              lc.collectionDatasets = [{
+                id:               _ownId,
+                pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
+                dataset:          ownMeta.dataset,
+                hashTail:         ownMeta.hashTail ?? null,
+                inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
+              }];
+            }
+          }
+        } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
+      }
+
       await lcRefreshSiblings();
       await lcFastForward();
       if (lc.isLiberated && lc.voidTriggerMs === null) await lcCheckVoid();
@@ -2327,8 +2459,11 @@ async function init() {
 
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const drawCollection = getDrawCollection();
+
+    const ownPos = lcOwnPosition();
+    const startIdx = ownPos >= 0 ? ownPos : Math.min(currentDataSetIndex, drawCollection.length - 1);
     const activeDataSet = applyCollectionInfluence(
-      getAgedDataset(currentDataSetIndex, lifeFraction, drawCollection, minMaxValues),
+      getAgedDataset(startIdx, lifeFraction, drawCollection, minMaxValues),
       drawCollection,
       lifeFraction,
       minMaxValues
@@ -2461,9 +2596,14 @@ async function init() {
   }
 
   gl.clearColor(0, 0, 0, 1);
-  draw();
 
-  initLifecycle().catch(() => {});
+  (async () => {
+    try {
+      await initLifecycle();
+    } catch (e) { /* fall through to dev render */ }
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    draw();
+  })();
 
 }
 

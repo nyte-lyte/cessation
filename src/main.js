@@ -536,6 +536,8 @@ async function init() {
     voidProgress:         0.0,
     collectionDatasets:   [],      // [{id, pieceIndex, dataset, hashTail, inscriptionUnix}]
     _siblingPollCount:    0,
+    ownDataset:           null,    // own dataset fetched from /r/metadata/self at boot
+    collectionRoot:       null,    // engine inscription id whose children list is the collection
   };
 
   // Per-frame: interpolate reanimation and void transition progress values
@@ -550,29 +552,59 @@ async function init() {
     }
   }
 
-  // Dataset to use for current cycle (original or blended from prior reanimation)
+  // Dataset to use for current cycle (original or blended from prior reanimation).
+  // For pieces whose index exceeds the baked healthDataSets length, lc.ownDataset
+  // (fetched from /r/metadata/self at boot) is the source of truth.
   function lcCycleDataset() {
-    return lc.cycleDataset ?? healthDataSets[currentDataSetIndex];
+    if (lc.cycleDataset) return lc.cycleDataset;
+    if (lc.ownDataset)   return lc.ownDataset;
+    const fromCollection = lc.collectionDatasets.find(d => d.pieceIndex === currentDataSetIndex);
+    if (fromCollection)  return fromCollection.dataset;
+    return healthDataSets[currentDataSetIndex];
   }
 
-  // Collection for karma/threshold computation — live siblings preferred, local fallback.
-  // Sorted by pieceIndex so array position stays a valid index — currentDataSetIndex
-  // must point at this piece's own dataset for getAgedDataset to drift correctly.
+  // Merged entries from baked array + live collection + own piece, deduped by
+  // pieceIndex (later sources override earlier), sorted by pieceIndex.
+  // Returns DENSE array of datasets — safe to iterate. Position N in the returned
+  // array is NOT the same as pieceIndex N when there are gaps; use lcOwnPosition()
+  // to get this piece's index in the sorted dense list.
+  function _lcMergedEntries() {
+    const byIndex = new Map();
+    for (let i = 0; i < healthDataSets.length; i++) {
+      byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
+    }
+    for (const d of lc.collectionDatasets) {
+      if (typeof d.pieceIndex === 'number' && d.dataset) {
+        byIndex.set(d.pieceIndex, { pieceIndex: d.pieceIndex, dataset: d.dataset });
+      }
+    }
+    if (lc.ownDataset) {
+      byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+    }
+    return [...byIndex.values()].sort((a, b) => a.pieceIndex - b.pieceIndex);
+  }
   function lcEffectiveCollection() {
-    if (lc.collectionDatasets.length === 0) return healthDataSets;
-    return [...lc.collectionDatasets]
-      .sort((a, b) => (a.pieceIndex ?? 999) - (b.pieceIndex ?? 999))
-      .map(d => d.dataset);
+    return _lcMergedEntries().map(e => e.dataset);
+  }
+  // Own piece's position in the dense sorted collection (NOT its pieceIndex).
+  // getAgedDataset and the inherited-hue index need a position into the dense array;
+  // if pieces are non-contiguous (e.g., baked 0..29 + piece 100), the own piece is
+  // at position 30 of the collection, not at position 100.
+  function lcOwnPosition() {
+    return _lcMergedEntries().findIndex(e => e.pieceIndex === currentDataSetIndex);
   }
 
   // Collection used for rendering — effective collection with this piece's own
-  // position replaced by the post-reanimation blend (lc.cycleDataset), so chronological
-  // drift continues forward from the piece's evolved data, not its original snapshot.
+  // dense-array position replaced by the post-reanimation blend (lc.cycleDataset),
+  // so chronological drift continues forward from the piece's evolved data, not its
+  // original snapshot.
   function getDrawCollection() {
     const base = lcEffectiveCollection();
     if (!lc.cycleDataset) return base;
+    const pos = lcOwnPosition();
+    if (pos < 0) return base;
     const arr = [...base];
-    arr[currentDataSetIndex] = lc.cycleDataset;
+    arr[pos] = lc.cycleDataset;
     return arr;
   }
 
@@ -584,43 +616,107 @@ async function init() {
     return null;
   }
 
-  // engineId extracted from the script tag src attribute — same for all 29 pieces.
-  // All pieces are children of the engine inscription, so /r/children/{engineId}
-  // returns all siblings regardless of which piece is running.
+  // engineId = the inscription ID of the engine bundle currently running (from script src).
+  // ownId = the inscription ID of THIS piece, parsed from window.location.pathname
+  //   (ord serves pages at /content/<id> or /preview/<id>). The "/self" recursion
+  //   shortcut isn't reliable in 0.27, so we resolve own id explicitly and use the
+  //   explicit /r/metadata/<id> and /r/parents/<id> endpoints.
+  // collectionAncestors = parent chain from own's immediate parent up to the topmost
+  //   ancestor (the canonical collection root). The living collection is the union
+  //   of children across every ancestor in this chain — so a v2 engine inscribed
+  //   under v1 (NEW --parent OLD) lets reinscribed pieces (--parent NEW) see both
+  //   their own siblings under NEW and the legacy pieces under OLD.
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
+  function _resolveOwnId() {
+    if (typeof window === 'undefined' || !window.location) return null;
+    const m = window.location.pathname.match(/\/(?:content|preview)\/([0-9a-f]{64}i\d+)/i);
+    return m ? m[1] : null;
+  }
+  const _ownId = _resolveOwnId();
+  lc.collectionAncestors = [];
+  lc.collectionRoot = _engineId;
 
-  // Fetch and load all sibling datasets from /r/children/{engineId} (with pagination)
-  async function lcRefreshSiblings() {
-    if (!_engineId) return; // dev mode — no engine id available
-    let page = 0, more = true;
-    const fetched = [];
-    while (more) {
+  // Walk parent chain from own up to topmost ancestor. Returns array of ancestor
+  // inscription ids in order [immediate_parent, grandparent, ..., root].
+  // Bounded at depth 10 — any deeper would indicate a malformed/circular chain.
+  async function lcResolveAncestors() {
+    if (!_ownId) return [];
+    const ancestors = [];
+    let cursor = _ownId;
+    for (let depth = 0; depth < 10; depth++) {
       let resp;
-      try { resp = await fetch(`/r/children/${_engineId}/inscriptions/${page}`).then(r => r.json()); }
+      try { resp = await fetch(`/r/parents/${cursor}/inscriptions/0`).then(r => r.json()); }
       catch (e) { break; }
-      for (const id of (resp.ids ?? [])) {
-        try {
-          const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.text());
-          if (!metaHex || !metaHex.trim()) continue;
-          const meta = cborDecode(metaHex.trim());
-          if (meta && meta.dataset) {
-            fetched.push({
-              id,
-              pieceIndex:      meta.pieceIndex      ?? null,
-              dataset:         meta.dataset,
-              hashTail:        meta.hashTail         ?? null,
-              inscriptionUnix: meta.inscriptionUnix  ?? null,
-            });
-          }
-        } catch (e) { /* skip this sibling */ }
+      const parents = resp?.parents ?? resp?.ids ?? [];
+      if (parents.length === 0) break;
+      const parentId = parents[0].id ?? parents[0];
+      if (ancestors.includes(parentId) || parentId === _ownId) break; // cycle guard
+      ancestors.push(parentId);
+      cursor = parentId;
+    }
+    return ancestors;
+  }
+
+  // Fetch and load all sibling datasets — queries /r/children for every ancestor in
+  // the parent chain and merges. lcEffectiveCollection dedups by pieceIndex via Map,
+  // so reinscriptions under a deeper engine override originals under the topmost root
+  // (because immediate parents are queried first and end up earlier in the array,
+  // and Map.set's last-wins keeps the topmost ancestor's children when they exist).
+  async function lcRefreshSiblings() {
+    if (!lc.collectionAncestors || lc.collectionAncestors.length === 0) return;
+    const fetched = [];
+    for (const ancestor of lc.collectionAncestors) {
+      let page = 0, more = true;
+      while (more) {
+        let resp;
+        try { resp = await fetch(`/r/children/${ancestor}/inscriptions/${page}`).then(r => r.json()); }
+        catch (e) { break; }
+        const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
+        for (const id of childIds) {
+          try {
+            const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.json());
+            if (!metaHex || typeof metaHex !== 'string' || !metaHex.trim()) continue;
+            const meta = cborDecode(metaHex.trim());
+            if (meta && meta.dataset) {
+              fetched.push({
+                id,
+                pieceIndex:      meta.pieceIndex      ?? null,
+                dataset:         meta.dataset,
+                hashTail:        meta.hashTail         ?? null,
+                inscriptionUnix: meta.inscriptionUnix  ?? null,
+              });
+            }
+          } catch (e) { /* skip this child — engine inscriptions have no .dataset and end up here */ }
+        }
+        more = resp.more ?? false;
+        page++;
       }
-      more = resp.more ?? false;
-      page++;
     }
     if (fetched.length > 0) {
       lc.collectionDatasets = fetched;
-      // Living organism: min/max ranges recompute from the live collection as it grows.
       refreshMinMaxValues(lcEffectiveCollection());
+      recomputePartnerInheritedHue();
+    }
+  }
+
+  // Recompute partner's inherited hue from the live collection — needed when the
+  // partner's index exceeds the bundled healthDataSets length (allInheritedHues is
+  // baked at module load and doesn't extend beyond the bundle).
+  function recomputePartnerInheritedHue() {
+    const p = getPartnerIndex(currentDataSetIndex);
+    if (p < 0) return;
+    if (p < healthDataSets.length) {
+      // Partner is in the bundle — baked value is correct, no recompute needed.
+      partnerInheritedHueDeg = allInheritedHues[p];
+      return;
+    }
+    const prevIdx = Math.max(0, p - 1);
+    const collection = lcEffectiveCollection();
+    const prevFromCollection = lc.collectionDatasets.find(d => d.pieceIndex === prevIdx);
+    const prevDs = prevFromCollection?.dataset
+      ?? (prevIdx < healthDataSets.length ? healthDataSets[prevIdx] : null);
+    if (prevDs) {
+      partnerInheritedHueDeg = computeHSBFromStats(prevDs, collection).hue * 360;
     }
   }
 
@@ -694,7 +790,16 @@ async function init() {
         await lcCheckVoid();
         return;
       }
-      const partnerDs  = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
+      // Partner dataset — guard against out-of-bounds baked array (for piece indices
+      // beyond the bundled count, the baked fallback is undefined and would crash
+      // blendDatasets). If neither living-collection nor in-bounds fallback yields
+      // a partner, defer reanimation to the next poll (sibling fetch may have lagged).
+      const partnerDs = lcGetPartnerDataset(partnerIdx)
+        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      if (!partnerDs) {
+        console.warn(`[lc] partner ${partnerIdx} not yet discoverable — deferring reanimation`);
+        return;
+      }
       const blended    = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold  = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
       const karma      = computeKarma(blended, minMaxValues);
@@ -729,7 +834,12 @@ async function init() {
     while (lc.currentBlockHeight >= lc.cessationBlock && !lc.isLiberated) {
       const partnerIdx = getPartnerIndex(currentDataSetIndex);
       if (partnerIdx < 0) { lc.isLiberated = true; break; }
-      const partnerDs = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
+      const partnerDs = lcGetPartnerDataset(partnerIdx)
+        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      if (!partnerDs) {
+        console.warn(`[lc] fast-forward: partner ${partnerIdx} not discoverable — stopping replay`);
+        break;
+      }
       const blended   = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
       const karma     = computeKarma(blended, minMaxValues);
@@ -758,6 +868,39 @@ async function init() {
       }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
+
+      // Walk the parent chain up to the topmost ancestor. Every ancestor's children
+      // contribute to the living collection (so a v2 engine under a v1 engine sees
+      // both branches: reinscribed pieces under v2 + originals under v1).
+      if (_ownId) {
+        lc.collectionAncestors = await lcResolveAncestors();
+        if (lc.collectionAncestors.length > 0) {
+          lc.collectionRoot = lc.collectionAncestors[lc.collectionAncestors.length - 1];
+        }
+
+        // Own dataset from /r/metadata/<ownId> — required for pieces whose index
+        // exceeds the baked healthDataSets length. Use r.json() to unwrap the
+        // JSON-quoted hex string ord returns. Falls back silently in dev mode.
+        try {
+          const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.json());
+          if (ownHex && typeof ownHex === 'string' && ownHex.trim()) {
+            const ownMeta = cborDecode(ownHex.trim());
+            if (ownMeta && ownMeta.dataset) {
+              lc.ownDataset = ownMeta.dataset;
+              // Seed collection so the very first draw has valid own data even
+              // before the full sibling fetch completes.
+              lc.collectionDatasets = [{
+                id:               _ownId,
+                pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
+                dataset:          ownMeta.dataset,
+                hashTail:         ownMeta.hashTail ?? null,
+                inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
+              }];
+            }
+          }
+        } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
+      }
+
       await lcRefreshSiblings();
       await lcFastForward();
       if (lc.isLiberated && lc.voidTriggerMs === null) await lcCheckVoid();
@@ -1027,8 +1170,15 @@ async function init() {
     // post-reanimation blend) — falls back to local healthDataSets in dev/early boot.
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const drawCollection = getDrawCollection();
+    // getAgedDataset expects a POSITION into the dense drawCollection, not a
+    // pieceIndex. They coincide when pieces are contiguous (0..N-1), but for
+    // non-contiguous collections (e.g., baked 0..29 + piece 100), own pieceIndex
+    // 100 is at position 30 in the collection. Falls back to pieceIndex for the
+    // dev/early-boot path where own piece isn't yet in the collection.
+    const ownPos = lcOwnPosition();
+    const startIdx = ownPos >= 0 ? ownPos : Math.min(currentDataSetIndex, drawCollection.length - 1);
     const activeDataSet = applyCollectionInfluence(
-      getAgedDataset(currentDataSetIndex, lifeFraction, drawCollection, minMaxValues),
+      getAgedDataset(startIdx, lifeFraction, drawCollection, minMaxValues),
       drawCollection,
       lifeFraction,
       minMaxValues
@@ -1171,10 +1321,18 @@ async function init() {
   }
 
   gl.clearColor(0, 0, 0, 1);
-  draw();
 
-  // Start lifecycle engine after rendering — non-blocking, fails silently outside ord env
-  initLifecycle().catch(() => {});
+  // Boot: wait for lifecycle init (own metadata + siblings + block height) before
+  // the first draw — without ownDataset, pieces whose pieceIndex exceeds the baked
+  // array length crash on the first frame and the rAF chain dies.
+  // Dev / non-ord environments fall through: draw() runs immediately with baked data.
+  (async () => {
+    try {
+      await initLifecycle();
+    } catch (e) { /* fall through to dev render */ }
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    draw();
+  })();
 
   // DEV_START
   // manually switch datasets in the console
