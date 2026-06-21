@@ -621,9 +621,11 @@ async function init() {
   //   (ord serves pages at /content/<id> or /preview/<id>). The "/self" recursion
   //   shortcut isn't reliable in 0.27, so we resolve own id explicitly and use the
   //   explicit /r/metadata/<id> and /r/parents/<id> endpoints.
-  // collectionRoot is resolved at boot from the piece's first parent inscription —
-  //   that's the canonical root of the living collection. Falls back to engineId
-  //   for first-generation deployments where engine == parent.
+  // collectionAncestors = parent chain from own's immediate parent up to the topmost
+  //   ancestor (the canonical collection root). The living collection is the union
+  //   of children across every ancestor in this chain — so a v2 engine inscribed
+  //   under v1 (NEW --parent OLD) lets reinscribed pieces (--parent NEW) see both
+  //   their own siblings under NEW and the legacy pieces under OLD.
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
   function _resolveOwnId() {
     if (typeof window === 'undefined' || !window.location) return null;
@@ -631,49 +633,68 @@ async function init() {
     return m ? m[1] : null;
   }
   const _ownId = _resolveOwnId();
+  lc.collectionAncestors = [];
   lc.collectionRoot = _engineId;
 
-  // Fetch and load all sibling datasets from /r/children/{collectionRoot} (with pagination)
-  async function lcRefreshSiblings() {
-    if (!lc.collectionRoot) return; // dev mode — no engine id available
-    let page = 0, more = true;
-    const fetched = [];
-    while (more) {
+  // Walk parent chain from own up to topmost ancestor. Returns array of ancestor
+  // inscription ids in order [immediate_parent, grandparent, ..., root].
+  // Bounded at depth 10 — any deeper would indicate a malformed/circular chain.
+  async function lcResolveAncestors() {
+    if (!_ownId) return [];
+    const ancestors = [];
+    let cursor = _ownId;
+    for (let depth = 0; depth < 10; depth++) {
       let resp;
-      try { resp = await fetch(`/r/children/${lc.collectionRoot}/inscriptions/${page}`).then(r => r.json()); }
+      try { resp = await fetch(`/r/parents/${cursor}/inscriptions/0`).then(r => r.json()); }
       catch (e) { break; }
-      // ord returns { children: [{id,...},...], more, page } for this endpoint in
-      // 0.27+. Older builds returned { ids: [...] }. Handle both.
-      const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
-      for (const id of childIds) {
-        try {
-          // ord returns metadata as a JSON-quoted hex string. r.json() unwraps the
-          // string so cborDecode receives raw hex (not a leading quote that silently
-          // poisons the byte parse and makes every sibling skip).
-          const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.json());
-          if (!metaHex || typeof metaHex !== 'string' || !metaHex.trim()) continue;
-          const meta = cborDecode(metaHex.trim());
-          if (meta && meta.dataset) {
-            fetched.push({
-              id,
-              pieceIndex:      meta.pieceIndex      ?? null,
-              dataset:         meta.dataset,
-              hashTail:        meta.hashTail         ?? null,
-              inscriptionUnix: meta.inscriptionUnix  ?? null,
-            });
-          }
-        } catch (e) { /* skip this sibling */ }
+      const parents = resp?.parents ?? resp?.ids ?? [];
+      if (parents.length === 0) break;
+      const parentId = parents[0].id ?? parents[0];
+      if (ancestors.includes(parentId) || parentId === _ownId) break; // cycle guard
+      ancestors.push(parentId);
+      cursor = parentId;
+    }
+    return ancestors;
+  }
+
+  // Fetch and load all sibling datasets — queries /r/children for every ancestor in
+  // the parent chain and merges. lcEffectiveCollection dedups by pieceIndex via Map,
+  // so reinscriptions under a deeper engine override originals under the topmost root
+  // (because immediate parents are queried first and end up earlier in the array,
+  // and Map.set's last-wins keeps the topmost ancestor's children when they exist).
+  async function lcRefreshSiblings() {
+    if (!lc.collectionAncestors || lc.collectionAncestors.length === 0) return;
+    const fetched = [];
+    for (const ancestor of lc.collectionAncestors) {
+      let page = 0, more = true;
+      while (more) {
+        let resp;
+        try { resp = await fetch(`/r/children/${ancestor}/inscriptions/${page}`).then(r => r.json()); }
+        catch (e) { break; }
+        const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
+        for (const id of childIds) {
+          try {
+            const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.json());
+            if (!metaHex || typeof metaHex !== 'string' || !metaHex.trim()) continue;
+            const meta = cborDecode(metaHex.trim());
+            if (meta && meta.dataset) {
+              fetched.push({
+                id,
+                pieceIndex:      meta.pieceIndex      ?? null,
+                dataset:         meta.dataset,
+                hashTail:        meta.hashTail         ?? null,
+                inscriptionUnix: meta.inscriptionUnix  ?? null,
+              });
+            }
+          } catch (e) { /* skip this child — engine inscriptions have no .dataset and end up here */ }
+        }
+        more = resp.more ?? false;
+        page++;
       }
-      more = resp.more ?? false;
-      page++;
     }
     if (fetched.length > 0) {
       lc.collectionDatasets = fetched;
-      // Living organism: min/max ranges recompute from the live collection as it grows.
       refreshMinMaxValues(lcEffectiveCollection());
-      // Partner inherited hue: for partner indices beyond the bundled array,
-      // getPartnerInheritedHue() returns 0 (wrong). Now that we have the live
-      // collection, recompute from the partner's predecessor dataset.
       recomputePartnerInheritedHue();
     }
   }
@@ -848,16 +869,14 @@ async function init() {
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
 
-      // Collection root: query the piece's own parent (the engine inscription it
-      // was minted under). Falls back to script-src engine id for first-generation
-      // pieces where the running engine IS the parent.
+      // Walk the parent chain up to the topmost ancestor. Every ancestor's children
+      // contribute to the living collection (so a v2 engine under a v1 engine sees
+      // both branches: reinscribed pieces under v2 + originals under v1).
       if (_ownId) {
-        try {
-          // /r/parents/<id>/inscriptions/<page> returns { parents: [{id,...},...], more, page }
-          const parentsResp = await fetch(`/r/parents/${_ownId}/inscriptions/0`).then(r => r.json());
-          const parents = parentsResp?.parents ?? [];
-          if (parents.length > 0) lc.collectionRoot = parents[0].id ?? parents[0];
-        } catch (e) { /* keep engineId fallback */ }
+        lc.collectionAncestors = await lcResolveAncestors();
+        if (lc.collectionAncestors.length > 0) {
+          lc.collectionRoot = lc.collectionAncestors[lc.collectionAncestors.length - 1];
+        }
 
         // Own dataset from /r/metadata/<ownId> — required for pieces whose index
         // exceeds the baked healthDataSets length. Use r.json() to unwrap the

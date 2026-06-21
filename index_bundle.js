@@ -2000,43 +2000,60 @@ async function init() {
     return m ? m[1] : null;
   }
   const _ownId = _resolveOwnId();
+  lc.collectionAncestors = [];
   lc.collectionRoot = _engineId;
 
-  async function lcRefreshSiblings() {
-    if (!lc.collectionRoot) return;
-    let page = 0, more = true;
-    const fetched = [];
-    while (more) {
+  async function lcResolveAncestors() {
+    if (!_ownId) return [];
+    const ancestors = [];
+    let cursor = _ownId;
+    for (let depth = 0; depth < 10; depth++) {
       let resp;
-      try { resp = await fetch(`/r/children/${lc.collectionRoot}/inscriptions/${page}`).then(r => r.json()); }
+      try { resp = await fetch(`/r/parents/${cursor}/inscriptions/0`).then(r => r.json()); }
       catch (e) { break; }
+      const parents = resp?.parents ?? resp?.ids ?? [];
+      if (parents.length === 0) break;
+      const parentId = parents[0].id ?? parents[0];
+      if (ancestors.includes(parentId) || parentId === _ownId) break;
+      ancestors.push(parentId);
+      cursor = parentId;
+    }
+    return ancestors;
+  }
 
-      const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
-      for (const id of childIds) {
-        try {
-
-          const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.json());
-          if (!metaHex || typeof metaHex !== 'string' || !metaHex.trim()) continue;
-          const meta = cborDecode(metaHex.trim());
-          if (meta && meta.dataset) {
-            fetched.push({
-              id,
-              pieceIndex:      meta.pieceIndex      ?? null,
-              dataset:         meta.dataset,
-              hashTail:        meta.hashTail         ?? null,
-              inscriptionUnix: meta.inscriptionUnix  ?? null,
-            });
-          }
-        } catch (e) { /* skip this sibling */ }
+  async function lcRefreshSiblings() {
+    if (!lc.collectionAncestors || lc.collectionAncestors.length === 0) return;
+    const fetched = [];
+    for (const ancestor of lc.collectionAncestors) {
+      let page = 0, more = true;
+      while (more) {
+        let resp;
+        try { resp = await fetch(`/r/children/${ancestor}/inscriptions/${page}`).then(r => r.json()); }
+        catch (e) { break; }
+        const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
+        for (const id of childIds) {
+          try {
+            const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.json());
+            if (!metaHex || typeof metaHex !== 'string' || !metaHex.trim()) continue;
+            const meta = cborDecode(metaHex.trim());
+            if (meta && meta.dataset) {
+              fetched.push({
+                id,
+                pieceIndex:      meta.pieceIndex      ?? null,
+                dataset:         meta.dataset,
+                hashTail:        meta.hashTail         ?? null,
+                inscriptionUnix: meta.inscriptionUnix  ?? null,
+              });
+            }
+          } catch (e) { /* skip this child — engine inscriptions have no .dataset and end up here */ }
+        }
+        more = resp.more ?? false;
+        page++;
       }
-      more = resp.more ?? false;
-      page++;
     }
     if (fetched.length > 0) {
       lc.collectionDatasets = fetched;
-
       refreshMinMaxValues(lcEffectiveCollection());
-
       recomputePartnerInheritedHue();
     }
   }
@@ -2194,12 +2211,10 @@ async function init() {
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
 
       if (_ownId) {
-        try {
-
-          const parentsResp = await fetch(`/r/parents/${_ownId}/inscriptions/0`).then(r => r.json());
-          const parents = parentsResp?.parents ?? [];
-          if (parents.length > 0) lc.collectionRoot = parents[0].id ?? parents[0];
-        } catch (e) { /* keep engineId fallback */ }
+        lc.collectionAncestors = await lcResolveAncestors();
+        if (lc.collectionAncestors.length > 0) {
+          lc.collectionRoot = lc.collectionAncestors[lc.collectionAncestors.length - 1];
+        }
 
         try {
           const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.json());

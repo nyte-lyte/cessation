@@ -23,6 +23,50 @@
 - npm run build → generates 29 static piece pages via generateStaticParams
 - npm run dev → localhost:3001 (port 3001 to avoid conflict with nytelyte on 3002)
 
+## Live On-Chain IDs (as of 2026-06-20)
+
+Engine (v2, fixed engine on Nakamoto sat 12425429610917, --parent v1):
+`6a53d56958589b9f9bf191646fc0eddfb560e2873bb39d714c5c6e34f00e4f60i0`
+
+Pieces — these are the **latest/clean inscription on each sat** (what marketplaces and ordinals.com surface). All point at v2 engine via `<script src>` and are children of v2 engine via `--parent`. The v1 originals + the leaked path-metadata layer remain on chain underneath each sat but are bypassed by viewers because the latest inscription wins.
+
+| Piece | Inscription ID |
+|---|---|
+| 0  | `625d803e9bf5e532905d30b9701f7132bf27056893c36dc45ca5fa3f05d960bai0` |
+| 1  | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i0` |
+| 2  | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i1` |
+| 3  | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i2` |
+| 4  | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i3` |
+| 5  | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i4` |
+| 6  | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i5` |
+| 7  | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i6` |
+| 8  | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i7` |
+| 9  | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i8` |
+| 10 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i9` |
+| 11 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i10` |
+| 12 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i11` |
+| 13 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i12` |
+| 14 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i13` |
+| 15 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i14` |
+| 16 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i15` |
+| 17 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i16` |
+| 18 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i17` |
+| 19 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i18` |
+| 20 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i19` |
+| 21 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i20` |
+| 22 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i21` |
+| 23 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i22` |
+| 24 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i23` |
+| 25 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i24` |
+| 26 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i25` |
+| 27 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i26` |
+| 28 | `5d643a3ed027346871718780233c65890e4de866e78b9242fad2ca5cf1bc19e7i27` |
+| 29 | `ebf6532aa5b0deaaa26b56c1874dbb1989961bdd4085411570f80cb264d5304bi0` |
+
+Reference (do NOT link from the tracker — these are historical layers underneath each sat):
+- v1 engine (broken, on Nakamoto sat 12425429610918): `b725884c8a6d63c2499c0f86b8e5863115808f8998697ba23abc0194b8c3323ei0`
+- v1 original piece IDs (pieces 0–29, baked-data only, no live collection): captured in `memory/inscription_architecture.md`
+
 ## Gotchas
 - Root-level app/ (from create-next-app) conflicts with src/app/ — REMOVED root app/
 - turbopack.root must be set to __dirname to fix workspace root warning
