@@ -660,12 +660,13 @@ async function init() {
   // Fetch and load all sibling datasets — queries /r/children for every ancestor in
   // the parent chain and merges. lcEffectiveCollection dedups by pieceIndex via Map,
   // so reinscriptions under a deeper engine override originals under the topmost root
-  // (because immediate parents are queried first and end up earlier in the array,
-  // and Map.set's last-wins keeps the topmost ancestor's children when they exist).
+  // Ancestors iterated topmost-first so that immediate parent's children are
+  // appended last — Map.set last-wins means the newest engine's pieces always
+  // override older reinscriptions on the same sat.
   async function lcRefreshSiblings() {
     if (!lc.collectionAncestors || lc.collectionAncestors.length === 0) return;
     const fetched = [];
-    for (const ancestor of lc.collectionAncestors) {
+    for (const ancestor of [...lc.collectionAncestors].reverse()) {
       let page = 0, more = true;
       while (more) {
         let resp;
@@ -1029,8 +1030,8 @@ async function init() {
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
 
   // set uniforms
-  function setHSBUniforms(ds) {
-    const { hue, sat, bri } = computeHSBFromStats(ds, healthDataSets);
+  function setHSBUniforms(ds, collection) {
+    const { hue, sat, bri } = computeHSBFromStats(ds, collection);
     gl.uniform1f(uGlucoseLoc, hue);
     gl.uniform1f(uPotassiumLoc, sat);
     gl.uniform1f(uEgfrLoc, bri);
@@ -1105,7 +1106,7 @@ async function init() {
     },
     {
       label: 'CO2', labKey: 'carbonDioxide', phaseKey: 'CO2',
-      phaseSeed: () => 0, tickTwoPi: true,
+      phaseSeed: (h) => (h / 99) * 1.1 * Math.PI, tickTwoPi: true,
       tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CO2),
       strengthLoc: uCo2StrengthLoc, hueLoc: uCo2HueDegLoc, radiusLoc: null,
       update({ ph, p, baseHueDeg, co2Pulse }) {
@@ -1118,7 +1119,7 @@ async function init() {
     },
     {
       label: 'Ca', labKey: 'calcium', phaseKey: 'Ca',
-      phaseSeed: () => 0, tickTwoPi: true,
+      phaseSeed: (h) => (h / 99) * 0.7 * Math.PI, tickTwoPi: true,
       tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CALCIUM),
       strengthLoc: uCalciumStrengthLoc, hueLoc: uCalciumHueDegLoc, radiusLoc: uCalciumRadiusLoc,
       update({ ph, p, baseHueDeg, caPulse, pCO2, pPR }) {
@@ -1131,6 +1132,28 @@ async function init() {
     },
   ];
 
+  // Pre-advance beam phases from birth so each page load starts mid-cycle,
+  // not at the hash-seeded zero position. The phase a beam is at on any given
+  // day is fully deterministic: seed + (secsSinceBirth / tempo) % period.
+  // Uses the initial baked dataset's tempo as the approximation — tempo drifts
+  // slightly with chronological drift but the error is negligible vs. the
+  // alternative of always starting at the beginning.
+  {
+    const _initDs  = healthDataSets[currentDataSetIndex];
+    const _initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
+    for (const cfg of beamConfigs) {
+      const seed  = cfg.phaseSeed(lastTwoHashDigits);
+      const tempo = Math.max(1e-3, cfg.tempoFn(_initDs));
+      if (cfg.tickTwoPi) {
+        // Accumulates radians — no need to mod, JS Math.sin handles large args.
+        beamPhases[cfg.phaseKey] = seed + (_initSecs * 2 * Math.PI) / tempo;
+      } else {
+        // Kept in [0, 1) by modding after each frame advance.
+        beamPhases[cfg.phaseKey] = (seed + _initSecs / tempo) % 1;
+      }
+    }
+  }
+
   // the draw() call just clears and draws the quad:
   function draw() {
     resizeCanvasToDisplaySize(canvas);
@@ -1139,7 +1162,11 @@ async function init() {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     const t = performance.now() / 1000;
-    if (uTimeLoc) gl.uniform1f(uTimeLoc, t);
+    // u_time = seconds since inscription (not since page load).
+    // Pieces are born at inscription and count forward from that moment —
+    // each page load finds the piece mid-motion, never restarting from zero.
+    const secsSinceBirth = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
+    if (uTimeLoc) gl.uniform1f(uTimeLoc, secsSinceBirth);
     window.__lastT = window.__lastT ?? t;
     const dt = Math.min(0.1, Math.max(0, t - window.__lastT));
     window.__lastT = t;
@@ -1183,7 +1210,7 @@ async function init() {
       lifeFraction,
       minMaxValues
     );
-    setHSBUniforms(activeDataSet);
+    setHSBUniforms(activeDataSet, drawCollection);
 
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);

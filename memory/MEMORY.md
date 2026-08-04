@@ -88,6 +88,10 @@ Nothing is wall-clock timed. No human triggers. The chain breathes and the piece
 - Lava lamp orbits: two superimposed sine frequencies. ECG values seed phases. driftMul grows 0.5→1.3 with age.
 - `os = 0.10 * driftMul` (committed 1c0157a). Realtime wobble: 0.03.
 - BUN/Creatinine pull coupling (pull=0.12): disease pulls kidney forms together spatially.
+- **`u_time` fixed (2026-08-04):** now `secsSinceBirth` = `Date.now()/1000 - inscriptionUnixSeconds`. Pieces are born at inscription and count forward — each page load finds the piece mid-motion, never restarting from zero. Previously used `performance.now()` which reset to 0 on every load.
+- **Beam phases pre-advanced from birth (2026-08-04):** all 6 beams initialized to `seed + (secsSinceBirth / tempo) % period` before the first draw. Previously always restarted from hash seed on every page load.
+- **CO2 and Ca phase seeds fixed (2026-08-04):** were `() => 0` — all pieces breathed in unison. Now hash-seeded: CO2 = `(h/99)*1.1π`, Ca = `(h/99)*0.7π`. Each piece independent, different from N (2π) and Cr (1.3π).
+- **`setHSBUniforms` fixed (2026-08-04):** now passes `drawCollection` (live sibling collection) instead of baked `healthDataSets`. Ensures `u_glucose`/`u_potassium`/`u_eGFR` percentile ranking stays correct as collection grows past 29 pieces.
 
 ## Canvas Format & Display (committed)
 - Aspect ratio: 3:2 (landscape, like 35mm film negative)
@@ -169,8 +173,24 @@ Full details in `memory/inscription_architecture.md`.
 - `CUSTOM_GRADIENTS` removed from mint.js (2026-05-17) — was dead code, `previewGradient` was never used in HTML output.
 - Min/max computed dynamically from all known siblings — intentional, new pieces shift existing ones
 
+## Code Bugs Found & Fixed (2026-08-04 audit)
+Full audit before third inscription attempt. All fixed in main.js unless noted.
+
+1. **`u_time` = page-load seconds (wrong)** — `performance.now()/1000` resets to 0 every page load. All pieces start from identical visual state every time. Pieces should be born at inscription and count forward. Fixed: now `Math.max(0, Date.now()/1000 - inscriptionUnixSeconds)`.
+2. **Beam phases reset on page load** — N/Cr/Na/Cl/CO2/Ca phases initialized from hash seed on every load, always starting from the same position. Fixed: all 6 phases pre-advanced by `secsSinceBirth` before first draw using initial dataset's tempo.
+3. **CO2 and Ca phase seeds always 0** — `phaseSeed: () => 0` means every piece breathes in perfect unison. No hash-based differentiation. Fixed: CO2 = `(h/99)*1.1π`, Ca = `(h/99)*0.7π` — each piece independent.
+4. **`setHSBUniforms` used baked `healthDataSets`** — the three primary color uniforms (`u_glucose`, `u_potassium`, `u_eGFR`) ranked against the static 29-piece baked array rather than the growing live sibling collection. Background color percentiles would diverge from beam color percentiles once piece 30+ minted. Fixed: `setHSBUniforms(ds, collection)` now takes `drawCollection` as parameter.
+5. **`lcRefreshSiblings` ancestor ordering wrong** — iterated ancestors immediate→topmost, so oldest engine's children were appended last and won via Map.set last-wins. Newest reinscription would lose to oldest broken inscription. Fixed: now iterates topmost→immediate so newest pieces win.
+6. **`build.js` comment wrong** — said "Piece 0 is inscribed as a JS file." The engine is the JS file; all pieces including piece 0 are HTML. Fixed: updated comment.
+
+## Inscription Failure History
+- **v1 (first attempt):** engine was broken — pieces not live, code was missing. Moved to trash wallet.
+- **v2 (second attempt):** engine fixed but metadata was wrong. Multiple inscriptions on same sats created lag and bad appearance on ordinals.com. Moved to trash wallet.
+- **v3 (current):** re-inscribing on fresh sats. Parent chain clean, no legacy ancestor conflicts.
+
 ## Mint Timeline
-- **Blocked — ord re-indexing** (as of 2026-05-17): first indexing attempt was done without `--index-sats` flag. Had to restart from scratch (two weeks wasted). Currently at ~805k/947k blocks. `--index-sats` is required to track individual sat locations for `--sat` inscriptions.
+- **Re-inscribing on fresh sats (2026-08-04):** first two inscription attempts had errors (broken engine v1, then metadata problems in v2). Both failed collections moved to trash wallet. Third inscription will be on fresh sats — clean parent chain, no legacy ancestor conflicts.
+- **`lcRefreshSiblings` ancestor ordering fixed (2026-08-04):** now iterates topmost-first so newest engine's pieces win via Map.set last-wins. Harmless for fresh sats (single ancestor), correct for any future reinscription.
 - Environment confirmed: Node v25.9.0, Bitcoin Core v30.2.0, ord 0.27.1
 - Engine: `index_bundle.js` 87.4 KB uncompressed (current, last rebuilt 2026-04-18)
 - **Mint sequence** (unified for all pieces — fill `PIECE_SATS` in mint.js first):
