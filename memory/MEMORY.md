@@ -73,7 +73,7 @@ Nothing is wall-clock timed. No human triggers. The chain breathes and the piece
 - Beam arrival gates: Na/Cl present from birth at data-driven floor, grow at arrival gate
 - Beam tempos: N by BUN (7-10s), Cr by PR (9-15s), CO2 by eGFR (12-20s), Ca by tAxis (18-30s)
 - DPR: both cessation and tracker render at physical pixels
-- **Current safe state: cessation `0e027cf`, tracker `9d0b0b9`**
+- **Current safe state: cessation `1c80352`, tracker `9d0b0b9`**
 
 ## Visual Progress (2026-04-03 — current)
 - 17-field data-driven anchors committed and approved. User loves this system.

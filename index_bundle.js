@@ -2024,7 +2024,7 @@ async function init() {
   async function lcRefreshSiblings() {
     if (!lc.collectionAncestors || lc.collectionAncestors.length === 0) return;
     const fetched = [];
-    for (const ancestor of lc.collectionAncestors) {
+    for (const ancestor of [...lc.collectionAncestors].reverse()) {
       let page = 0, more = true;
       while (more) {
         let resp;
@@ -2323,8 +2323,8 @@ async function init() {
 
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
 
-  function setHSBUniforms(ds) {
-    const { hue, sat, bri } = computeHSBFromStats(ds, healthDataSets);
+  function setHSBUniforms(ds, collection) {
+    const { hue, sat, bri } = computeHSBFromStats(ds, collection);
     gl.uniform1f(uGlucoseLoc, hue);
     gl.uniform1f(uPotassiumLoc, sat);
     gl.uniform1f(uEgfrLoc, bri);
@@ -2398,7 +2398,7 @@ async function init() {
     },
     {
       label: 'CO2', labKey: 'carbonDioxide', phaseKey: 'CO2',
-      phaseSeed: () => 0, tickTwoPi: true,
+      phaseSeed: (h) => (h / 99) * 1.1 * Math.PI, tickTwoPi: true,
       tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CO2),
       strengthLoc: uCo2StrengthLoc, hueLoc: uCo2HueDegLoc, radiusLoc: null,
       update({ ph, p, baseHueDeg, co2Pulse }) {
@@ -2411,7 +2411,7 @@ async function init() {
     },
     {
       label: 'Ca', labKey: 'calcium', phaseKey: 'Ca',
-      phaseSeed: () => 0, tickTwoPi: true,
+      phaseSeed: (h) => (h / 99) * 0.7 * Math.PI, tickTwoPi: true,
       tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CALCIUM),
       strengthLoc: uCalciumStrengthLoc, hueLoc: uCalciumHueDegLoc, radiusLoc: uCalciumRadiusLoc,
       update({ ph, p, baseHueDeg, caPulse, pCO2, pPR }) {
@@ -2424,6 +2424,22 @@ async function init() {
     },
   ];
 
+  {
+    const _initDs  = healthDataSets[currentDataSetIndex];
+    const _initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
+    for (const cfg of beamConfigs) {
+      const seed  = cfg.phaseSeed(lastTwoHashDigits);
+      const tempo = Math.max(1e-3, cfg.tempoFn(_initDs));
+      if (cfg.tickTwoPi) {
+
+        beamPhases[cfg.phaseKey] = seed + (_initSecs * 2 * Math.PI) / tempo;
+      } else {
+
+        beamPhases[cfg.phaseKey] = (seed + _initSecs / tempo) % 1;
+      }
+    }
+  }
+
   function draw() {
     resizeCanvasToDisplaySize(canvas);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
@@ -2431,7 +2447,9 @@ async function init() {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     const t = performance.now() / 1000;
-    if (uTimeLoc) gl.uniform1f(uTimeLoc, t);
+
+    const secsSinceBirth = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
+    if (uTimeLoc) gl.uniform1f(uTimeLoc, secsSinceBirth);
     window.__lastT = window.__lastT ?? t;
     const dt = Math.min(0.1, Math.max(0, t - window.__lastT));
     window.__lastT = t;
@@ -2468,7 +2486,7 @@ async function init() {
       lifeFraction,
       minMaxValues
     );
-    setHSBUniforms(activeDataSet);
+    setHSBUniforms(activeDataSet, drawCollection);
 
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);
