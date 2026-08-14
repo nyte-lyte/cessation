@@ -1880,6 +1880,8 @@ async function init() {
   const BAKED_VOID_PROGRESS    = /*BAKE:VOID_PROGRESS*/0.0;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
 
+  const U_TIME_WRAP = 200 * Math.PI;
+
   let inheritedHueDegOverride = null;
 
   const _sc = (typeof _selfScript !== 'undefined') ? _selfScript : null;
@@ -2449,7 +2451,7 @@ async function init() {
     const t = performance.now() / 1000;
 
     const secsSinceBirth = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
-    if (uTimeLoc) gl.uniform1f(uTimeLoc, secsSinceBirth);
+    if (uTimeLoc) gl.uniform1f(uTimeLoc, secsSinceBirth % U_TIME_WRAP);
     window.__lastT = window.__lastT ?? t;
     const dt = Math.min(0.1, Math.max(0, t - window.__lastT));
     window.__lastT = t;
