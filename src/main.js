@@ -421,6 +421,16 @@ async function init() {
   const BAKED_VOID_PROGRESS    = /*BAKE:VOID_PROGRESS*/0.0;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
 
+  // u_time is sent as float32 (uniform1f), so raw seconds-since-inscription is
+  // unusable directly: at two months old its ULP is 0.5s, at two years 8s, and it
+  // doubles every ~2 years after that — the value stops changing between frames
+  // and the u_time motion freezes, then snaps. Wrapping keeps the magnitude small
+  // (ULP ~6e-5s) while staying phase-continuous: every u_time coefficient in
+  // fragment.glsl is a multiple of 0.01 rad/s, so 200π seconds advances each term
+  // by an exact multiple of 2π. Wrap point is invisible; motion stays deterministic
+  // from wall clock, so all viewers of a piece still see the same frame.
+  const U_TIME_WRAP = 200 * Math.PI;   // 628.3185s
+
   // Inherited hue — piece N inherits piece N-1's glucose hue (from allInheritedHues).
   // Console override for manual testing; null = auto-derive from allInheritedHues.
   let inheritedHueDegOverride = null;
@@ -1162,11 +1172,12 @@ async function init() {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     const t = performance.now() / 1000;
-    // u_time = seconds since inscription (not since page load).
-    // Pieces are born at inscription and count forward from that moment —
-    // each page load finds the piece mid-motion, never restarting from zero.
+    // u_time = seconds since inscription (not since page load), wrapped at
+    // U_TIME_WRAP for float32 precision. Pieces are born at inscription and count
+    // forward from that moment — each page load finds the piece mid-motion, never
+    // restarting from zero.
     const secsSinceBirth = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
-    if (uTimeLoc) gl.uniform1f(uTimeLoc, secsSinceBirth);
+    if (uTimeLoc) gl.uniform1f(uTimeLoc, secsSinceBirth % U_TIME_WRAP);
     window.__lastT = window.__lastT ?? t;
     const dt = Math.min(0.1, Math.max(0, t - window.__lastT));
     window.__lastT = t;
