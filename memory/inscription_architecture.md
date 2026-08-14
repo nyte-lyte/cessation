@@ -60,6 +60,11 @@ ord wallet inscribe --fee-rate <FEE> --sat <satNumber> --parent <engineId> --fil
 
 ## Sat Inventory (in ord wallet as of 2026-06-06)
 
+> ⚠️ **STALE (2026-08-13):** this inventory and the two addresses below belong to an
+> abandoned earlier mint attempt — those sats have moved. Current wallets are documented
+> in `memory/wallets.md` (hot `ord` + cold `ord-cold`). New rare sats for the re-mint live
+> in the `ord-cold` cold wallet. Kept here only for historical reference.
+
 All sats held at receive address `bc1p36tnmumxf9qz0z9umufgra27qs4ee9spav9qarwu7m7cqjzhewys6v30sm`.
 Plus 2 funding UTXOs (10,350 sats common) at `bc1purcsf4pxtznjha05mgpp229q7eqe9erynqp990rvkf5dhpwx0tzqmuasvt` for inscription fees.
 

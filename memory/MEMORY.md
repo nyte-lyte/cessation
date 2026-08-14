@@ -159,6 +159,13 @@ Full details in `memory/nirvana.md`.
 - **`document.currentScript` bootstrap** (replaced URL hash 2026-04-11): engine reads `t/ht/unix/hue/block` attributes from the `<script>` tag synchronously. Eliminates piece-0-flash. `block` attribute supplies child's inscription block height for lcFastForward.
 - **Autonomous new-mint propagation** (built 2026-03-22): `lcRefreshSiblings()` called on every new block in `lcPoll()`. Fetches only newly-seen sibling ids, extends `lc.datasetByIdx` + `lc.siblingIdMap` incrementally, rebuilds `lc.collectionDatasets`, recomputes liberation threshold. No reload needed — collection stays live for wall-mounted use. `lc` tracks `parentId`, `knownSiblingCount`, `datasetByIdx`.
 
+## Wallets (hot & cold)
+Full details in `memory/wallets.md`. Verified live 2026-08-13.
+- Mainnet node data dir: `/Volumes/Bitcoin/Bitcoin` (external volume). RPC bitcoin/bitcoin.
+- **Hot wallet `ord`** (`/Volumes/Bitcoin/Bitcoin/ord/`) — the inscribing wallet: fees + carriers.
+- **Cold wallet `ord-cold`** (`/Volumes/Bitcoin/Bitcoin/ord-cold/`) — holds the newly-bought rare sats for the re-mint. Move a sat to `ord` only at mint time.
+- **UniSat wallet is deprecated — not used going forward.**
+
 ## Inscription Architecture
 Full details in `memory/inscription_architecture.md`.
 - **Two-inscription model** (finalized 2026-04-18): engine is root, all 29 pieces are its children
@@ -197,12 +204,12 @@ Full audit before third inscription attempt. All fixed in main.js unless noted.
   1. `ord wallet inscribe --fee-rate <FEE> --file index_bundle.js` → engineId
   2. For each piece 0–28: `node mint.js <N> <BLOCK_HASH> <BLOCK_TIME> <ENGINE_ID> <BLOCK_HEIGHT>`
   3. Run the generated command (includes `--sat`, `--parent engineId`, `--json-metadata`)
-- **Sats**: 29 sats held in UniSat wallet across 18 UTXOs — must transfer to ord wallet before inscribing. Use `ord wallet sats` after transfer to map sat numbers and satpoints before touching anything.
+- **Sats**: newly-bought rare sats held in the **`ord-cold`** wallet (see `memory/wallets.md`). Transfer the needed sat to the hot `ord` wallet at mint time. Use `ord wallet sats` after transfer to map sat numbers and satpoints before touching anything. (UniSat wallet deprecated.)
 
 ## Rare Sats
 - All 29 pieces will be inscribed on **Omega black uncommon sats** — last sat of a block, never previously inscribed
 - **Piece 0 (genesis)** will be inscribed on a **Nakamoto sat** mined 2009-01-31 — 28 days after the genesis block, when Satoshi was the only miner. Never moved.
-- Sats sourced and held in **UniSat wallet** across 18 UTXOs — transfer to ord wallet before minting. Some UTXOs contain multiple rare sats; ord will separate them correctly during inscription via satpoint tracking.
+- Newly-bought rare sats held in the **`ord-cold`** cold wallet (see `memory/wallets.md`) — transfer to the hot `ord` wallet before minting. Some UTXOs may contain multiple rare sats; ord separates them correctly during inscription via satpoint tracking. (UniSat wallet deprecated — no longer used.)
 
 ## Visual Problems — Resolved / Pending
 Full diagnosis in `memory/visual_diagnosis.md`. Images saved in `memory/` — see `visual_reference.md`.
