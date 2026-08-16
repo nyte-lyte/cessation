@@ -1,15 +1,31 @@
 # Cessation — Project Memory
 
+## READ FIRST (session ending 2026-08-16)
+**Decision: re-inscribing the whole project on fresh sats, v3 engine only.** No fourth
+layer on the existing sats. The bar is "make sure everything works this time."
+- Live on chain right now: **v2** (`4fe0114`). Repo HEAD is ahead and NOT inscribed.
+- `node test/scale.test.mjs` — 9,300 checks, must pass before anything is inscribed.
+- `node test/liberation_model.mjs` — design instrument for the liberation distribution.
+- Full state, what's done, and what's still undecided: [todo.md](todo.md).
+- What is and isn't verifiable, plus the blocking metadata gate: [testing.md](testing.md).
+- **Two decisions still open:** tail convergence, and whether `KARMA_CLEARANCE_K = 0.05`
+  should be data-derived rather than chosen. Both are cheap now, permanent later.
+- Terminology: **inscribing** is writing to chain (what the creator does); **minting**
+  is a collector claiming. `mint.js` builds inscription files — the filename is historical.
+
 ## What It Is
-Generative art project minted on the Bitcoin blockchain. Each piece is a distinct NFT derived from a specific health data snapshot (one of 28 ECG/lab readings from 2018–2025). The subject has a rare cardiomyopathy. The art visualizes the lifecycle and disease progression of a human life.
+Generative art project inscribed on the Bitcoin blockchain. Each piece is derived from a specific health data snapshot (one ECG/lab reading; 30 of them so far, 2018 onward). The subject has a rare cardiomyopathy. The art visualizes the lifecycle and disease progression of a human life.
 
 ## Key Files
-- `src/main.js` — Core JS (~1260 lines): WebGL2 setup, health data processing, beam animation, uniform computation, lifecycle engine, console debug API
+- `src/main.js` — Core JS (~1500 lines): WebGL2 setup, health data processing, beam animation, uniform computation, lifecycle engine, console debug API
 - `src/shaders/fragment.glsl` — Fragment shader (~370 lines): 4 background fields, 6 electrolyte forms, lava lamp orbits, decay, hue drift
 - `src/shaders/vertex.glsl` — Trivial fullscreen quad pass-through
 - `data/health_data_sets.js` — the baked ECG+lab snapshots, one per piece, oldest first. Grows with the collection (30 as of 2026-08-16, 2018 to 2026-06-19). Plus min/max and healthIndex[].
 - `data/decay_logic.js` — Blend, karma, drift, and collection influence functions (pure, ready for backend port)
 - `index.html` / `style.css` — Minimal entry, fullscreen canvas, no build system
+- `test/scale.test.mjs` + `test/harness.mjs` — growth/scale/determinism harness (9,300 checks)
+- `test/liberation_model.mjs` — liberation distribution model (design instrument, not a test)
+- `mint_blocks.json` — written by mint.js; which block each piece claimed. Guards against two pieces sharing a block.
 
 ## Architecture
 - Pure ES6 module + WebGL2. No build tools, no dependencies. Runs directly in browser via HTTP server.
@@ -73,7 +89,7 @@ Nothing is wall-clock timed. No human triggers. The chain breathes and the piece
 - Beam arrival gates: Na/Cl present from birth at data-driven floor, grow at arrival gate
 - Beam tempos: N by BUN (7-10s), Cr by PR (9-15s), CO2 by eGFR (12-20s), Ca by tAxis (18-30s)
 - DPR: both cessation and tracker render at physical pixels
-- **Current safe state: cessation `cdf1eb6`, tracker `9d0b0b9`**
+- **Current safe state: cessation `8f49340`, tracker `9d0b0b9`**
 
 ## Visual Progress (2026-04-03 — current)
 - 17-field data-driven anchors committed and approved. User loves this system.
@@ -157,6 +173,9 @@ Full details in `memory/nirvana.md`.
 - **Living collection**: sibling CBOR metadata fetched at boot, datasets extracted into `lc.collectionDatasets`. draw() uses this for getAgedDataset, applyCollectionInfluence, computeHSBFromStats, winsorizedPercentileForLab. Falls back to local healthDataSets in dev mode or if dataset absent from metadata.
 - **Boot rendering**: piece renders correctly from local healthDataSets at frame 1. lc.collectionDatasets loads in background (2-3s). Color is correct immediately because local data IS the initial 30-piece collection. Visual shift only occurs when piece 30+ is minted.
 - **`document.currentScript` bootstrap** (replaced URL hash 2026-04-11): engine reads `t/ht/unix/hue/block` attributes from the `<script>` tag synchronously. Eliminates piece-0-flash. `block` attribute supplies child's inscription block height for lcFastForward.
+- **Karma clearance** (2026-08-16, `8f49340`): karma now clears across rebirths at the piece's own eGFR — kidney clearance rate applied to accumulated burden. `lc.uncleared` starts at 1, multiplied by `(1 - karmaClearanceRate)` each cessation; liberation when remaining karma < threshold. Never stored, always replayed from birth. Full rationale and consequences in `memory/nirvana.md`.
+- **Boot renders on frame 1** (2026-08-16, `d6329eb`): `draw()` no longer awaits `initLifecycle`. Pieces inside the baked array draw immediately; a piece past it waits only on `lc.ownDataReady` (its own metadata), never the sibling scan. Sibling metadata is fetched in batches of 8, not serially — this is what caused tens of seconds of black screen.
+- **Pieces past the baked array used to crash init()** (fixed 2026-08-16, `d6329eb`): the beam phase pre-advance read `healthDataSets[currentDataSetIndex]` and handed it to every tempoFn, which all dereference it. Piece 30 onward would never have rendered at all. Falls back to the last baked dataset.
 - **Autonomous new-mint propagation** (corrected 2026-08-16 — the previous entry here described code that no longer exists): `lcRefreshSiblings()` is called from `lcPoll()` on **every 10th poll** (`_siblingPollCount % 10`, ~10 min), not every block. It is a **full refetch**, not incremental — it re-fetches every child's CBOR metadata from every ancestor in `lc.collectionAncestors`, rebuilds `lc.collectionDatasets`, refreshes `minMaxValues`, and recomputes the partner inherited hue. The incremental machinery this entry used to claim (`lc.datasetByIdx`, `lc.siblingIdMap`, `lc.knownSiblingCount`) exists in exactly two commits in all of history — one adding it, one removing it — and was gone long before inscription. Net effect is still correct: new mints propagate without a reload, just via full refetch on a 10-poll cadence.
 
 ## Wallets (hot & cold)

@@ -90,6 +90,37 @@ if (isNaN(inscriptionUnixSeconds) || inscriptionUnixSeconds < 1000000000) {
 const lastTwoByte = parseInt(rawHash.slice(-2), 16);        // 0..255
 const lastTwoHashDigits = Math.round(lastTwoByte * 99 / 255); // 0..99
 
+// ── One block per piece ───────────────────────────────────────────────────────
+// Lifespan is derived from the block hash. Two pieces sharing a block share a
+// hash, therefore an identical hashTail, therefore an identical lifespan — and
+// they would cease and reanimate in lockstep forever. Every piece must land in
+// its own block.
+//
+// Broadcasting several inscriptions in quick succession is how this happens: they
+// confirm together. Wait for piece N to confirm and read its real block before
+// broadcasting N+1.
+//
+// The ledger below is written on every successful run and checked on the next
+// one, so a reused block is refused rather than discovered later on chain.
+// Kept outside dist/ deliberately: dist/ is gitignored and regenerated every run,
+// and losing this file would silently disable the guard mid-mint. It is also the
+// provenance record — which block each piece claimed, and the lifespan that block
+// gave it — which nothing else in the repo captures.
+const LEDGER = path.join(__dirname, 'mint_blocks.json');
+let ledger = {};
+if (existsSync(LEDGER)) {
+  try { ledger = JSON.parse(readFileSync(LEDGER, 'utf8')); } catch (e) { ledger = {}; }
+}
+for (const [usedBy, rec] of Object.entries(ledger)) {
+  if (parseInt(usedBy, 10) === pieceIndex) continue;   // re-running the same piece is fine
+  if (rec.hash.toLowerCase() === rawHash.toLowerCase()) {
+    console.error(`Error: block hash ...${rawHash.slice(-8)} was already used by piece ${usedBy}.`);
+    console.error(`  Both pieces would derive hashTail ${lastTwoHashDigits} and share an identical lifespan.`);
+    console.error(`  Wait for a new block and re-read the height and hash before minting piece ${pieceIndex}.`);
+    process.exit(1);
+  }
+}
+
 // ── Load health data in Node context ─────────────────────────────────────────
 // Strip ES module syntax the same way build.js does, then eval.
 
@@ -228,6 +259,15 @@ if (satNumber === null || satNumber === undefined) {
   process.exit(1);
 }
 
+// Height check, now that blockHeight is parsed — same rule as the hash check above.
+for (const [usedBy, rec] of Object.entries(ledger)) {
+  if (parseInt(usedBy, 10) === pieceIndex) continue;
+  if (rec.height === blockHeight) {
+    console.error(`Error: block height ${blockHeight} was already used by piece ${usedBy}. Every piece needs its own block.`);
+    process.exit(1);
+  }
+}
+
 const scriptHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}</style></head><body><script t="${pieceIndex}" ht="${lastTwoHashDigits}" unix="${inscriptionUnixSeconds}" hue="${hue}" block="${blockHeight}" src="/content/${engineId}"><\/script></body></html>`;
 
 const outputName = `cessation_piece_${String(pieceIndex).padStart(2, '0')}.html`;
@@ -237,3 +277,14 @@ writeFileSync(outputDest, scriptHtml, 'utf8');
 console.log(`HTML written: dist/${outputName}  (${scriptHtml.length} bytes)`);
 console.log(`Ready to inscribe: dist/${outputName}`);
 console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --sat ${satNumber} --parent ${engineId} --file dist/${outputName} --json-metadata dist/${metadataName}`);
+
+// Record the block this piece claimed, so a later run cannot reuse it.
+ledger[pieceIndex] = { height: blockHeight, hash: rawHash.toLowerCase(), hashTail: lastTwoHashDigits };
+writeFileSync(LEDGER, JSON.stringify(ledger, null, 2), 'utf8');
+
+const lifespans = Object.entries(ledger)
+  .map(([i, r]) => `${i}:${r.hashTail}`)
+  .join('  ');
+console.log(`\nBlocks claimed so far (piece:hashTail) — every one must be a distinct block:`);
+console.log(`  ${lifespans}`);
+console.log(`\nWait for this inscription to confirm and read its real block before minting the next piece.`);

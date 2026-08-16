@@ -1,8 +1,14 @@
 # Cessation — To Do
 
-Rewritten 2026-08-16. Every claim below was re-verified against the code on that
-date. The previous version of this file asserted a state the code did not match —
-see "Why this file was wrong" at the bottom before trusting any old checkmark.
+Rewritten 2026-08-16, updated end of session 2026-08-16. Every claim was re-verified
+against the code. The previous version of this file asserted a state the code did not
+match — see "Why this file was wrong" at the bottom before trusting any old checkmark.
+
+## THE DECISION THAT FRAMES EVERYTHING
+**Re-inscribing the whole project on fresh sats, v3 engine only.** No fourth layer on
+the existing sats. One inscription per sat, clean parent chain, no legacy ancestors.
+The bar is "make sure everything works this time" — two previous attempts failed and
+one of them put a real name on chain permanently.
 
 ## Current state
 
@@ -19,8 +25,8 @@ Earlier layers sit underneath each sat and are bypassed by viewers (latest inscr
 on a sat wins) but remain retrievable. Stacked inscriptions are also the cause of the
 lag and poor appearance on ordinals.com.
 
-**Repo HEAD** is `8ca13e5` — engine v3 plus the `u_time` fix. **Not inscribed.** Live
-v2 corresponds to `4fe0114` (2026-06-20).
+**Repo HEAD** is `8f49340`. **Not inscribed.** Live v2 corresponds to `4fe0114`
+(2026-06-20). HEAD is what the fresh-sat inscription would carry.
 
 **What live v2 is missing** relative to HEAD (`1c80352` and `cdf1eb6`) — these are real,
 running on chain right now:
@@ -36,30 +42,69 @@ running on chain right now:
 - The `u_time` float32 freeze was introduced in v3 and fixed in `cdf1eb6`. It never
   reached chain; live v2 uses `performance.now()`.
 
-## Outstanding
+## Done this session (2026-08-16)
 
-- **Decide whether a v3 inscription is worth a fourth layer.** Each reinscription stacks
-  another layer on the same sats, which is what degraded appearance and speed on
-  ordinals.com. Weigh that against the colour-ranking issue above, which only matters
-  once the collection passes 30 pieces. Not urgent; do not reinscribe reflexively.
+All committed and pushed. Harness at **9,300 checks, 0 failures**; bundle rebuilds
+byte-identical.
+
+- `cdf1eb6` — **u_time float32 freeze.** Raw seconds-since-inscription in a float32
+  uniform; ULP exceeded a frame, so motion froze and snapped. Wrapped at 200π
+  (every u_time coefficient is a multiple of 0.01 rad/s, so it is phase-continuous).
+- `8ca13e5` — **v1 engine fossil removed** from `index_bundle.html`; back to a
+  one-line loader.
+- `8db7603` — **testing.md created**, inscription history corrected, stale doc claims
+  fixed.
+- `535ab4b` — **piece counts removed** from docs and comments (the collection grows).
+- `0d618b3` — **scale harness** (`test/scale.test.mjs`), the growth axis regtest
+  cannot reach. Mutation-tested.
+- `d6329eb` — **four engine fixes:** the init()-time crash for any piece past the baked
+  array (piece 30 onward would never have rendered at all — same class as the v1
+  failure); first-frame rendering instead of waiting on the whole sibling scan;
+  batched sibling fetches (30 serial round trips → 4); block height no longer
+  defaults to 0.
+- `8f49340` — **karma clearance at the piece's own eGFR**, plus `previewPairing()`
+  dev helper. See [[nirvana]].
+
+## Outstanding — decisions, before any inscribing
+
+- **Tail convergence — UNDECIDED.** `getAgedDataset` clamps drift at the end of the
+  timeline (`maxSpan`), so when the collection stops growing the final ~20% of pieces
+  permanently converge onto the last dataset in old age. While the collection grows,
+  new data keeps extending the runway and it does not bite. User's position: "not sure
+  about tail convergence." Not a bug — a real structural consequence that should be
+  decided rather than discovered.
+- **`KARMA_CLEARANCE_K = 0.05` is a chosen constant, not data-derived.** It sets the
+  tempo of liberation, not the ordering. The project's principle is that the data
+  decides the important things. Re-derive alternatives with
+  `node test/liberation_model.mjs`.
 - **If inscribing: dump and read the actual CBOR before broadcasting.** Wrong metadata
   is what forced the third inscription and put a real name on chain permanently.
   Verify the composed inscription's metadata decodes to exactly four keys —
   `pieceIndex`, `hashTail`, `inscriptionUnix`, `dataset` — and nothing else. Check the
   inscribe command and any batch file for absolute paths; `/Users/<name>/…` leaks
   identity. Run mint.js from the repo root so paths stay relative (`dist/…`).
-- **`/r/inscription/self` at `src/main.js:877`** — the last v2-era `/self` call in live
-  code, while `main.js:631` documents why v3 stopped trusting `/self` in ord 0.27.
-  Dev-only in practice (mint.js bakes `block=` on every piece). The `?? 0` fallback is
-  the worse half: a failed lookup becomes block 0, so `cessationBlock` lands ~5.26M and
-  the piece never ceases. Should use the already-resolved `_ownId` and fail loudly.
-- **No verification harness** for age, collection scale, or determinism — the three
-  axes regtest cannot reach. See [[testing]].
+- **Remaining harness work** — uniform completeness, float32 magnitude, and a
+  frozen-uniform age sweep are still unbuilt. Scale and determinism are done. See
+  [[testing]].
+- **The regtest growth rehearsal — the one thing that turns "modelled" into "seen."**
+  The v1 regtest inscribed 30 and viewed 30, and passed; the failure only appeared when
+  a new dataset joined the collection. So the rehearsal must include growth:
+  1. Inscribe the engine, then pieces 0–29, each in its own block.
+  2. Open all 30. Baseline — this is the step that already passed for v1.
+  3. Add a new dataset to `health_data_sets.js` and inscribe piece 30.
+  4. Reopen the originals: still render, discover 31 siblings, re-rank rather than crash.
+  5. Open piece 30 itself — index past the baked array, exercising the `_initDs`
+     fallback and `lc.ownDataReady`.
+  6. Repeat with 31 and 32; one new piece may not surface an off-by-one that two would.
+  Also time the first paint — it should be immediate now, not tens of seconds.
+- **Not yet proven on any chain:** boot ordering, batched sibling fetch, and the block
+  height fallback all no-op in dev because `/r/*` 404s immediately. Dev verified the
+  render path and the init-time fix only.
 - **Tracker data/shader copies** — `health_data_sets.js`, `decay_logic.js`,
   `fragment.glsl`, `vertex.glsl` are manual copies in ~/cessation-tracker. Divergence
   risk on every change to this repo.
 - **Never hardcode a piece count in docs or comments.** The collection has no fixed
-  size — a new piece is minted whenever new ECG/lab data arrives, so any count is stale
+  size — a new piece is inscribed whenever new ECG/lab data arrives, so any count is stale
   within about three months. The old "all 29 pieces" phrasing dated from when 29 was
   the whole collection; it is 30 now and 31 soon. Process statements should say "every
   piece" and iterate the collection; a count belongs in docs only as a dated
@@ -68,15 +113,19 @@ running on chain right now:
 
 ## Verified true (re-checked 2026-08-16)
 
-Each of these was confirmed present in `src/main.js` at HEAD:
-- CBOR decoder inlined (`cborDecode`, line 227)
-- `initLifecycle()` with graceful fallback outside ord (line 869)
-- Block polling every 60s (`setInterval(lcPoll, 60000)`, line 918) and `lcTick()`
-  per frame (line 1187)
+Each confirmed present in `src/main.js` at HEAD. Grep for the name rather than
+trusting a line number — line numbers move with every edit, which is how this file
+went stale before:
+- CBOR decoder inlined (`cborDecode`)
+- `initLifecycle()` with graceful fallback outside ord
+- Block polling every 60s (`setInterval(lcPoll, 60000)`) and `lcTick()` per frame
+- Block height fallback uses the resolved `_ownId`, not `/self`, and throws rather
+  than defaulting to 0 (fixed `d6329eb`)
 - Lifecycle uniforms wired: `u_reanimationProgress`, `u_isLiberated`, `u_voidProgress`
-- Void detection: `lcCheckVoid` (764), `lcIsPartnerLiberated` (740)
-- Living collection from sibling CBOR metadata (`lcRefreshSiblings`, 676)
-- Fast-forward for pieces loaded years post-mint (`lcFastForward`, 844)
+- Void detection: `lcCheckVoid`, `lcIsPartnerLiberated`
+- Living collection from sibling CBOR metadata (`lcRefreshSiblings`), fetched in
+  batches of 8
+- Fast-forward for pieces loaded years after inscription (`lcFastForward`)
 - Engine is `text/javascript`, all pieces `text/html`, black background
 - Dev console API stripped from the bundle via DEV_START/DEV_END
 - No Brotli compression
@@ -92,7 +141,7 @@ update the entry. Confirmed cases:
   incremental machinery (`datasetByIdx`, `siblingIdMap`, `knownSiblingCount`) exists in
   exactly two commits in all of history: one adding it, one removing it. It was gone
   well before inscription. The real code refetches every child's metadata from every
-  ancestor, on every 10th poll (`_siblingPollCount % 10`, line 840) — not incremental,
+  ancestor, on every 10th poll (`_siblingPollCount % 10`) — not incremental,
   not every block. `MEMORY.md` repeated the same claim; corrected 2026-08-16.
 - **"URL hash bootstrap `#idx=…` (replaced window.PIECE)."** Neither mechanism is live.
   `window.PIECE` appears in zero lines at HEAD; the URL hash path sits inside

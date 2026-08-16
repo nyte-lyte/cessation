@@ -33,8 +33,35 @@ Buddhist rebirth (not reincarnation). Not a permanent soul transmigrating — a 
 ## Karma & Liberation
 - Karma = disease burden of the dataset (QTc×0.35 + creatinine×0.25 + (1-eGFR)×0.20 + glucose×0.15 + ventRate×0.05)
 - Liberation threshold = 25th percentile karma of full collection — DYNAMIC, computed at runtime from all current sibling datasets
-- When a piece's current karma drops below threshold at cessation → liberation, not reanimation
-- No fixed cycle count — resolves naturally over time through three mechanisms (see below)
+- **Karma clears across rebirths at the piece's own eGFR** (added 2026-08-16, `8f49340`).
+  Remaining burden = `computeKarma(current dataset) × uncleared`, where `uncleared`
+  starts at 1 and is multiplied by `(1 - karmaClearanceRate)` at every cessation.
+  `karmaClearanceRate = KARMA_CLEARANCE_K × normalize(eGFR)` against the live collection,
+  recomputed each cycle from the piece's current blended dataset. `KARMA_CLEARANCE_K = 0.05`.
+- Liberation when **remaining** karma drops below threshold at cessation.
+- `lc.uncleared` is never stored — `lcFastForward` replays it from birth, so a piece's
+  state stays derivable from chain data alone. All four decision sites must agree:
+  `lcPoll`, `lcFastForward`, `lcIsPartnerLiberated`, `previewPairing`.
+
+### Why clearance exists
+`blendDatasets` is `a×0.70 + b×0.30`, so a piece converges geometrically onto its
+partner and its karma converges to the partner's. The threshold then decided the
+outcome within one or two cycles for nearly everyone — and since a cycle is a
+lifespan (median ~42 years), the reanimation arc never expressed itself. Clearance
+makes cycles-to-liberation a smooth function of the piece's own kidney function
+instead of a threshold test.
+
+Consequences, all from the data rather than a rule:
+- Healthy kidneys release burden quickly; the collection's lowest eGFR clears exactly
+  **0%** and can only ever arrive by being carried toward its partner.
+- Later pieces take longer as kidney function declines across the collection.
+- At mature collection size, liberation spreads across roughly **1–16 cycles** —
+  centuries apart, nothing bunched, everyone eventually arriving.
+
+`KARMA_CLEARANCE_K = 0.05` is the one chosen constant and sets tempo, not ordering.
+`node test/liberation_model.mjs` re-derives the distribution for any value, under
+decline / plateau / recovery projections of future health data. **Open question: k is
+a chosen number, not data-derived. Revisit before inscribing if that matters.**
 
 ## What Drives Liberation — Three Mechanisms
 1. **Per-piece asynchrony**: each piece lives its own blockhash-determined lifespan independently. When piece A ceases, it blends against B's current state at that moment — not a synchronized end-of-cycle. Because lifespans differ, the two pieces are always slightly out of phase. Each cessation produces a slightly different blend, so karma drifts continuously rather than freezing.
@@ -45,7 +72,11 @@ No partial blending needed. The system resolves naturally through the combined w
 
 **Intent: hundreds of years of cycling before liberation is the goal — not quick resolution. The heaviest pairs may cycle for centuries. This is by design.**
 
-## Karma Values (current 28 datasets, computed)
+## Karma Values (STALE — computed for 28 datasets, collection is now 30)
+These predate both piece 28/29 and the clearance mechanism above, so the threshold
+and the per-pair cycle counts below are no longer what the engine produces. Kept as a
+record of the pre-clearance distribution. Re-derive with `node test/liberation_model.mjs`.
+
 Sorted ascending — liberation threshold = karma[7] = 0.284 (dataset 12)
 0.138(4), 0.174(19), 0.178(22), 0.204(2), 0.211(26), 0.257(21), 0.276(17), **0.284(12)**, 0.295(18), 0.328(1), 0.364(14), 0.386(13), 0.392(27), 0.393(3), 0.412(7), 0.419(8), 0.450(0), 0.457(20), 0.512(23), 0.513(24), 0.518(6), 0.557(16), 0.609(25), 0.640(5), 0.640(10), 0.656(15), 0.720(11), 0.758(9)
 

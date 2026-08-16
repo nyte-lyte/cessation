@@ -81,6 +81,13 @@ Every bug that has shipped so far lived in one of these three gaps. See
 7. **Count the layers on each sat.** Each reinscription stacks another permanent layer
    and degrades appearance and load speed on ordinals.com. Know how many a sat already
    carries and whether another is genuinely worth it.
+8. **CBOR number fidelity.** On regtest, decode `/r/metadata/<id>` for several pieces and
+   compare every ecg/labs value *numerically* against the baked dataset — not by eye.
+   Dev and chain render identically at launch **only if these round-trip exactly**
+   (verified: 1,800 rendered values match across all pieces and life stages when the
+   numbers are preserved). If CBOR encodes any value at reduced precision, percentile
+   ranks can flip and a piece will not look on chain the way it looks in dev. This is
+   the one assumption behind "what you see in dev is what launches."
 
 ## What actually reaches the chain
 
@@ -129,7 +136,36 @@ watch it fail. All three of the real historical bugs are caught:
 | rank colour against the baked array, not the live collection (the v2 bug v3 fixed) | caught — no change on growth |
 | decouple drift span from collection size | caught — drift differs |
 
-Current status against HEAD: **8,926 checks, 0 failures.**
+Also covers **karma clearance** (added with the mechanism itself): the rate is bounded
+by `KARMA_CLEARANCE_K`, is exactly 0 at the collection's minimum eGFR and exactly k at
+its maximum, is monotonic in eGFR, and — the property that matters most — replaying a
+piece's history in one pass gives bit-identical results to applying cycles one at a
+time. If replay diverged, a page reload could change whether a piece had liberated.
+Mutation-tested: perturbing one path by 0.1% fails with the divergence printed.
+
+Current status against HEAD: **9,300 checks, 0 failures.**
+
+## Design instrument — not a test
+
+`node test/liberation_model.mjs` projects the collection forward under decline /
+plateau / recovery futures and reports what fraction of pieces ever liberate and how
+spread out those liberations are. Run it after changing the blend weight, the karma
+weights, the threshold percentile, or `KARMA_CLEARANCE_K`. It is how the current
+mechanism was chosen. Note it synthesises future health data — the three scenarios
+bracket the possibilities, they do not predict one.
+
+## Guard in mint.js — one block per piece
+
+`mint.js` refuses to build a piece against a block another piece already claimed,
+checked by hash and by height independently, with re-running the same piece allowed.
+Lifespan is derived from the block hash, so two pieces sharing a block would share a
+lifespan and cycle in lockstep forever. The ledger lives at `mint_blocks.json` (repo
+root, deliberately not `dist/`, which is gitignored and wiped) and doubles as the
+provenance record: which block each piece claimed and the lifespan it produced.
+
+It catches *building* two pieces against one block. It cannot stop two inscriptions
+confirming in the same block — only waiting for confirmation before broadcasting the
+next does that.
 
 ## Remaining harness work — not built
 
