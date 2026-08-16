@@ -82,7 +82,7 @@ byte-identical.
   Verify the composed inscription's metadata decodes to exactly four keys —
   `pieceIndex`, `hashTail`, `inscriptionUnix`, `dataset` — and nothing else. Check the
   inscribe command and any batch file for absolute paths; `/Users/<name>/…` leaks
-  identity. Run mint.js from the repo root so paths stay relative (`dist/…`).
+  identity. Run inscribe.js from the repo root so paths stay relative (`dist/…`).
 - **Remaining harness work** — uniform completeness, float32 magnitude, and a
   frozen-uniform age sweep are still unbuilt. Scale and determinism are done. See
   [[testing]].
@@ -108,7 +108,7 @@ byte-identical.
   within about three months. The old "all 29 pieces" phrasing dated from when 29 was
   the whole collection; it is 30 now and 31 soon. Process statements should say "every
   piece" and iterate the collection; a count belongs in docs only as a dated
-  point-in-time fact. Cleaned up 2026-08-16 in `mint.js`, `build.js`, `MEMORY.md`, and
+  point-in-time fact. Cleaned up 2026-08-16 in `inscribe.js`, `build.js`, `MEMORY.md`, and
   `inscription_architecture.md`.
 
 ## Verified true (re-checked 2026-08-16)
@@ -129,7 +129,7 @@ went stale before:
 - Engine is `text/javascript`, all pieces `text/html`, black background
 - Dev console API stripped from the bundle via DEV_START/DEV_END
 - No Brotli compression
-- Sats sourced and held; `PIECE_SATS` filled in mint.js
+- Sats sourced and held; `PIECE_SATS` filled in inscribe.js
 
 ## Why this file was wrong
 
@@ -149,14 +149,14 @@ update the entry. Confirmed cases:
   `<script>` tag attributes — which `MEMORY.md` states correctly under
   "`document.currentScript` bootstrap"; only this file was stale.
 - **"Pieces 1-28 — thin iframe HTML `<iframe src=…>`."** There is no iframe. Pieces are
-  `<script src>` with baked attributes (`mint.js:229`). Also 1–28 omits piece 29.
+  `<script src>` with baked attributes (`inscribe.js` (`const scriptHtml`)). Also 1–28 omits piece 29.
 - **"Piece 0 — full engine bundle (build.js → index_bundle.html)."** `build.js` writes
   `index_bundle.js`. Piece 0 is a child of the engine like every other piece.
 - **"Network layer — /r/children/self."** v3 calls
   `/r/children/<ancestor>/inscriptions/<page>`.
 - **"Thumbnail gradient CSS — injected as `<style>` tag in HTML."** Contradicted by an
   entry in this same file saying `CUSTOM_GRADIENTS` was "never consumed in HTML/metadata
-  output." `mint.js` contains zero gradient references. This one was checked off for
+  output." `inscribe.js` contains zero gradient references. This one was checked off for
   output that never existed.
 - **"regtest verified" (2026-04-05 / 2026-04-11)** attaches to the iframe architecture,
   which was later replaced. The architecture actually inscribed was never covered by the

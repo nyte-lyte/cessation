@@ -1,9 +1,9 @@
-// mint.js — Build per-piece HTML inscription files for Cessation.
+// inscribe.js — Build per-piece HTML inscription files for Cessation.
 // The engine (index_bundle.js) is a separate text/javascript inscription.
 // Every piece is a thin HTML file that loads the engine via <script src>.
 //
 // Usage (same for all pieces):
-//   node mint.js <pieceIndex> <blockHash> <blockTimestamp> <engineId> <blockHeight>
+//   node inscribe.js <pieceIndex> <blockHash> <blockTimestamp> <engineId> <blockHeight>
 //
 // pieceIndex    : 0–N (open-ended — new pieces with new health data can be added)
 // blockHash     : 64-char hex string of the reference block
@@ -106,7 +106,7 @@ const lastTwoHashDigits = Math.round(lastTwoByte * 99 / 255); // 0..99
 // and losing this file would silently disable the guard mid-mint. It is also the
 // provenance record — which block each piece claimed, and the lifespan that block
 // gave it — which nothing else in the repo captures.
-const LEDGER = path.join(__dirname, 'mint_blocks.json');
+const LEDGER = path.join(__dirname, 'inscribed_blocks.json');
 let ledger = {};
 if (existsSync(LEDGER)) {
   try { ledger = JSON.parse(readFileSync(LEDGER, 'utf8')); } catch (e) { ledger = {}; }
@@ -249,13 +249,13 @@ const hue = allInheritedHues[pieceIndex].toFixed(4);
 const blockHeight = parseInt(process.argv[6], 10);
 if (isNaN(blockHeight) || blockHeight < 0) {
   console.error('Error: blockHeight required as 6th argument');
-  console.error('  node mint.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>');
+  console.error('  node inscribe.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>');
   process.exit(1);
 }
 
 const satNumber = PIECE_SATS[pieceIndex];
 if (satNumber === null || satNumber === undefined) {
-  console.error(`Error: PIECE_SATS[${pieceIndex}] is not set — fill in the sat ordinal number in mint.js before minting.`);
+  console.error(`Error: PIECE_SATS[${pieceIndex}] is not set — fill in the sat ordinal number in inscribe.js before minting.`);
   process.exit(1);
 }
 

@@ -11,7 +11,7 @@ layer on the existing sats. The bar is "make sure everything works this time."
 - **Two decisions still open:** tail convergence, and whether `KARMA_CLEARANCE_K = 0.05`
   should be data-derived rather than chosen. Both are cheap now, permanent later.
 - Terminology: **inscribing** is writing to chain (what the creator does); **minting**
-  is a collector claiming. `mint.js` builds inscription files — the filename is historical.
+  is a collector claiming. `inscribe.js` builds the per-piece files and prints the ord command; it does not broadcast. Renamed from `mint.js` 2026-08-16.
 
 ## What It Is
 Generative art project inscribed on the Bitcoin blockchain. Each piece is derived from a specific health data snapshot (one ECG/lab reading; 30 of them so far, 2018 onward). The subject has a rare cardiomyopathy. The art visualizes the lifecycle and disease progression of a human life.
@@ -25,7 +25,7 @@ Generative art project inscribed on the Bitcoin blockchain. Each piece is derive
 - `index.html` / `style.css` — Minimal entry, fullscreen canvas, no build system
 - `test/scale.test.mjs` + `test/harness.mjs` — growth/scale/determinism harness (9,300 checks)
 - `test/liberation_model.mjs` — liberation distribution model (design instrument, not a test)
-- `mint_blocks.json` — written by mint.js; which block each piece claimed. Guards against two pieces sharing a block.
+- `inscribed_blocks.json` — written by inscribe.js; which block each piece claimed. Guards against two pieces sharing a block.
 
 ## Architecture
 - Pure ES6 module + WebGL2. No build tools, no dependencies. Runs directly in browser via HTTP server.
@@ -149,7 +149,7 @@ Full details in `memory/data_mappings.md`.
 - Hardcoded at mint from Bitcoin chain (on-chain recursion). Not computed dynamically.
 - Per-piece: piece N uses piece N-1's glucose hue (`allInheritedHues[N]`). Piece 0 uses its own.
 - Two-field and blended approaches were tried and reverted — competed with piece's own color identity.
-- **Bug fixed (2026-05-17)**: mint.js was using `getPartnerInheritedHue(pieceIndex)` (returns partner's inherited hue) instead of `allInheritedHues[pieceIndex]`. Even pieces 2+ got their own glucose hue; odd pieces 3+ got two steps back. Piece 1 was accidentally correct. Now fixed: `hue = allInheritedHues[pieceIndex].toFixed(4)`.
+- **Bug fixed (2026-05-17)**: inscribe.js was using `getPartnerInheritedHue(pieceIndex)` (returns partner's inherited hue) instead of `allInheritedHues[pieceIndex]`. Even pieces 2+ got their own glucose hue; odd pieces 3+ got two steps back. Piece 1 was accidentally correct. Now fixed: `hue = allInheritedHues[pieceIndex].toFixed(4)`.
 
 ## Collection Structure & Lifecycle
 - Collection grows indefinitely — new piece minted every ~3 months as new ECG/lab data is taken, as long as creator is alive. The collection is literally tied to continued survival.
@@ -195,8 +195,8 @@ Full details in `memory/inscription_architecture.md`.
 - Piece 0 is the genesis art piece, NOT the inscription parent. It's a child of the engine like all others.
 - New pieces (30+): mint with `--parent engineId` → automatically appear in `/r/children/{engineId}` → picked up by `lcRefreshSiblings` within ~10 minutes. Collection grows without any changes to existing pieces.
 - CBOR metadata per piece via `--json-metadata` flag — `dataset` field required for living collection
-- `PIECE_SATS` in mint.js: lookup table (null placeholders) — fill in sat ordinal numbers before minting. Script errors loudly if any sat is null. Generated command includes `--sat <satNumber>`.
-- `CUSTOM_GRADIENTS` removed from mint.js (2026-05-17) — was dead code, `previewGradient` was never used in HTML output.
+- `PIECE_SATS` in inscribe.js: lookup table (null placeholders) — fill in sat ordinal numbers before minting. Script errors loudly if any sat is null. Generated command includes `--sat <satNumber>`.
+- `CUSTOM_GRADIENTS` removed from inscribe.js (2026-05-17) — was dead code, `previewGradient` was never used in HTML output.
 - Min/max computed dynamically from all known siblings — intentional, new pieces shift existing ones
 
 ## Code Bugs Found & Fixed (2026-08-04 audit)
@@ -214,7 +214,7 @@ Full audit before third inscription attempt. All fixed in main.js unless noted.
 - **1st — v1 engine:** broken. Pieces not live, code missing.
 - **2nd — v2 engine, bad metadata:** engine worked, but the metadata leaked the creator's
   real name onto chain (a path-derived value in the inscribe invocation, not from
-  `metadataObj` — mint.js has only ever written pieceIndex/hashTail/inscriptionUnix/dataset).
+  `metadataObj` — inscribe.js has only ever written pieceIndex/hashTail/inscriptionUnix/dataset).
   Required inscribing again.
 - **3rd — v2 engine, metadata fixed:** **this is what is live now.** IDs recorded in
   `memory/tracker.md` under "Live On-Chain IDs (as of 2026-06-20)".
@@ -229,9 +229,9 @@ Full audit before third inscription attempt. All fixed in main.js unless noted.
 - **`lcRefreshSiblings` ancestor ordering fixed (2026-08-04):** now iterates topmost-first so newest engine's pieces win via Map.set last-wins. Harmless for fresh sats (single ancestor), correct for any future reinscription.
 - Environment confirmed: Node v25.9.0, Bitcoin Core v30.2.0, ord 0.27.1
 - Engine: `index_bundle.js` 95.4 KB uncompressed (rebuilt 2026-08-13 at `cdf1eb6`; the old "87.4 KB / 2026-04-18" figure predated engine v2 and v3)
-- **Mint sequence** (unified for all pieces — fill `PIECE_SATS` in mint.js first):
+- **Mint sequence** (unified for all pieces — fill `PIECE_SATS` in inscribe.js first):
   1. `ord wallet inscribe --fee-rate <FEE> --file index_bundle.js` → engineId
-  2. For each piece index in the collection: `node mint.js <N> <BLOCK_HASH> <BLOCK_TIME> <ENGINE_ID> <BLOCK_HEIGHT>`
+  2. For each piece index in the collection: `node inscribe.js <N> <BLOCK_HASH> <BLOCK_TIME> <ENGINE_ID> <BLOCK_HEIGHT>`
   3. Run the generated command (includes `--sat`, `--parent engineId`, `--json-metadata`)
 - **Sats**: newly-bought rare sats held in the **`ord-cold`** wallet (see `memory/wallets.md`). Transfer the needed sat to the hot `ord` wallet at mint time. Use `ord wallet sats` after transfer to map sat numbers and satpoints before touching anything. (UniSat wallet deprecated.)
 

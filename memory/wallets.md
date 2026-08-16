@@ -66,7 +66,7 @@ Addresses (receive, for reference): `:32` bc1pu7untfuv…shlc40, `:20` bc1p5cwxt
 330-sat UTXOs all sit on `bc1pqzckzwqz2rye72t7lw5w0utjl2lrurqyv67f9z5ptgzxz00rrweqy3rk95`.
 
 Four of the black uncommons (adrejuehvqo, adkoglpialm, abigrncmehu, aaexuaaadws) match the
-"Spare BUs in wallet (4)" note in `mint.js` — "BU" = Black Uncommon. The other three
+"Spare BUs in wallet (4)" note in `inscribe.js` — "BU" = Black Uncommon. The other three
 (cjcytrkpena, dmvuhsnspyo, ytgwcbgmcw) are additional, more recent buys; dmvuhsnspyo (2015,
 25-BTC epoch) and cjcytrkpena (12.5-BTC epoch) are from older/scarcer epochs.
 

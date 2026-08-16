@@ -65,7 +65,7 @@ Every bug that has shipped so far lived in one of these three gaps. See
 4. **Every uniform declared in fragment.glsl is located and set** in main.js. Compare
    the `uniform <type> <name>` declarations against the `getUniformLocation` names.
    This is the `u_co2Norm` check and it is purely static.
-5. **`PIECE_SATS` is filled in mint.js** — the script errors on any null.
+5. **`PIECE_SATS` is filled in inscribe.js** — the script errors on any null.
 6. **METADATA GATE — no identity on chain. Blocking; nothing is broadcast until this
    passes.** A name reached Bitcoin permanently on the second inscription. It is the
    most expensive mistake this project has made and it is not reversible.
@@ -74,8 +74,8 @@ Every bug that has shipped so far lived in one of these three gaps. See
      `dataset`. Any fifth key is a stop.
    - Grep the decoded output for the username, real name, and `/Users/` before signing.
    - **Absolute paths leak identity.** `/Users/<name>/…` carries the name in it. Run
-     mint.js from the repo root so every path stays relative (`dist/…`), and check the
-     inscribe command and any batch YAML the same way. `mint.js` itself has never
+     inscribe.js from the repo root so every path stays relative (`dist/…`), and check the
+     inscribe command and any batch YAML the same way. `inscribe.js` itself has never
      written a name — the leak came in through the invocation, so inspecting only
      `metadataObj` is not sufficient.
 7. **Count the layers on each sat.** Each reinscription stacks another permanent layer
@@ -97,7 +97,7 @@ Only two kinds of bytes, and neither reads `index_bundle.html`:
   `src/main.js`, `src/shaders/fragment.glsl`, `src/shaders/vertex.glsl`,
   `style.css`, `data/decay_logic.js`, `data/health_data_sets.js`.
 - **Each piece** — a ~300-byte HTML file written from the inline template at
-  `mint.js:229`, carrying `t/ht/unix/hue/block` and `src="/content/{engineId}"`,
+  `inscribe.js` (`const scriptHtml`), carrying `t/ht/unix/hue/block` and `src="/content/{engineId}"`,
   plus its CBOR metadata JSON. Both regenerated into gitignored `dist/` every run.
 
 ## Scale harness — built 2026-08-16
@@ -154,12 +154,12 @@ weights, the threshold percentile, or `KARMA_CLEARANCE_K`. It is how the current
 mechanism was chosen. Note it synthesises future health data — the three scenarios
 bracket the possibilities, they do not predict one.
 
-## Guard in mint.js — one block per piece
+## Guard in inscribe.js — one block per piece
 
-`mint.js` refuses to build a piece against a block another piece already claimed,
+`inscribe.js` refuses to build a piece against a block another piece already claimed,
 checked by hash and by height independently, with re-running the same piece allowed.
 Lifespan is derived from the block hash, so two pieces sharing a block would share a
-lifespan and cycle in lockstep forever. The ledger lives at `mint_blocks.json` (repo
+lifespan and cycle in lockstep forever. The ledger lives at `inscribed_blocks.json` (repo
 root, deliberately not `dist/`, which is gitignored and wiped) and doubles as the
 provenance record: which block each piece claimed and the lifespan it produced.
 

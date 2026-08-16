@@ -47,16 +47,16 @@ ord wallet inscribe --fee-rate <FEE> --sat 12425429610918 --file index_bundle.js
 # → engineId  (engine sits on last sat of UTXO ccab20ce:0, block 2485)
 
 # 2. Generate piece HTML (same command for every piece)
-node mint.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>
+node inscribe.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>
 # → dist/cessation_piece_0N.html + dist/cessation_piece_0N_metadata.json
-# mint.js errors if PIECE_SATS[N] is not filled in
+# inscribe.js errors if PIECE_SATS[N] is not filled in
 
 # 3. Inscribe piece (every piece uses --parent engineId, --sat from PIECE_SATS)
 ord wallet inscribe --fee-rate <FEE> --sat <satNumber> --parent <engineId> --file dist/cessation_piece_0N.html --json-metadata dist/cessation_piece_0N_metadata.json
 ```
 
 **CRITICAL: `--parent` must be declared at mint time — cannot be added retroactively.**
-**CRITICAL: Fill in `PIECE_SATS` in mint.js before running — wrong sat = permanently wrong sat.**
+**CRITICAL: Fill in `PIECE_SATS` in inscribe.js before running — wrong sat = permanently wrong sat.**
 
 ## Sat Inventory (in ord wallet as of 2026-06-06)
 
@@ -113,7 +113,7 @@ Plus 2 funding UTXOs (10,350 sats common) at `bc1purcsf4pxtznjha05mgpp229q7eqe9e
 | abigrncmehu | 1946032499999999 | 803651 | 3d9befa8398e45...:3 | 546 | 0 |
 | aaexuaaadws | 1952159999999999 | 813455 | af3e7cd733214a...:3 | 546 | 0 |
 
-Assignments (see `mint.js` PIECE_SATS for the full map):
+Assignments (see `inscribe.js` PIECE_SATS for the full map):
 - **Engine** → Nakamoto sat 12425429610918 (last sat of UTXO ccab20ce:0)
 - **Pieces 0–28** → Black Uncommons in chronological-by-block order, starting from `ggaofldnaso` (block 219396) through `afeksbckasw` (block 770187)
 - **5 spare BUs** in wallet for future pieces 29+: `adrzwervqle, adrejuehvqo, adkoglpialm, abigrncmehu, aaexuaaadws` (blocks 783023, 783299, 785511, 803651, 813455)

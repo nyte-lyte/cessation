@@ -28,7 +28,7 @@ produce an **old** piece (bug 1 needs months of age — at one minute old,
 `secsSinceBirth` is ~60 and float32 handles it fine), a **large** collection, or a
 **visually wrong but valid** frame. Every bug that has shipped so far lived in one
 of those three gaps: u_time (age), u_co2Norm never set (valid-but-wrong image),
-mint.js inherited hue (valid-but-wrong hue), ancestor ordering (needs two engine
+inscribe.js inherited hue (valid-but-wrong hue), ancestor ordering (needs two engine
 generations with overlapping children).
 
 ## Rules
@@ -42,13 +42,13 @@ generations with overlapping children).
   against the committed `index_bundle.js`. They must be byte-identical.
 - What actually reaches the chain: `index_bundle.js` (built by `build.js` from
   exactly six source paths) and the ~300-byte per-piece HTML written from the
-  inline template at `mint.js:229`. Neither reads `index_bundle.html`.
+  inline template in `inscribe.js` (`const scriptHtml`). Neither reads `index_bundle.html`.
 - Never bury an unrelated file rewrite in a commit whose message describes
   something else.
 
-## Open
+## Closed
 
-`src/main.js:877` still calls `/r/inscription/self` for block height on the
-piece-0/dev path — a v2 leftover, and the file's own comment at line 631 says the
-`/self` shortcut is unreliable in ord 0.27. Unreachable for minted pieces (mint.js
-bakes `block=` on every piece), but it should use the already-resolved `_ownId`.
+`/r/inscription/self` for block height — the last v2-era `/self` call in live code —
+was fixed in `d6329eb`. It now queries the resolved `_ownId` and throws instead of
+defaulting to block 0, which had put cessation ~5.26M blocks out so the piece would
+silently never cease.
