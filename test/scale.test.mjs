@@ -13,7 +13,8 @@
 
 import {
   liftModule, liftFromMainJs, makeCollection, mergedEntries, ownPosition,
-  startIndexForDraw, assertDrawGuardUnchanged, Report,
+  startIndexForDraw, assertDrawGuardUnchanged, initDatasetForPiece,
+  assertInitDatasetGuardUnchanged, Report,
 } from './harness.mjs';
 
 const {
@@ -180,6 +181,56 @@ for (const n of [BAKED, BAKED + 1, 40, 100]) {
   r.checks++;
   if (agedShort.labs.eGFR === agedLong.labs.eGFR) {
     r.fail(ctx, 'a piece drifts to the same place in a 30-piece and a 100-piece collection; drift is not scaling with collection size');
+  }
+}
+
+// ── 4. init()-time beam phase pre-advance ─────────────────────
+// Not part of the collection pipeline above — this runs inside init(), before
+// any frame. Every tempoFn dereferences the dataset, so if the piece's index is
+// past the baked array and the lookup yields undefined, init() throws and the
+// piece never renders at all. That is every piece minted after the engine.
+{
+  assertInitDatasetGuardUnchanged(r);
+
+  const baked = makeCollection(BAKED);
+  const mm = computeMinMaxValues(baked);
+  const beams = liftFromMainJs(
+    ['clamp', 'percentile', 'getBeamTempoSeconds', 'sodiumTempoSeconds', 'chlorideTempoSeconds'],
+    {
+      consts: ['BEAM'],
+      inject: `const healthDataSets = ${JSON.stringify(baked)};
+               const minMaxValues   = ${JSON.stringify(mm)};`,
+    }
+  );
+
+  // 0 and 15 are ordinary. 29 is the last baked piece. 30 is the first mint
+  // after the engine — the case that throws without the fallback. 45 is later
+  // growth.
+  for (const own of [0, 15, BAKED - 1, BAKED, 45]) {
+    const ctx = `init beams own=${own}${own >= BAKED ? ' (past baked array — new mint)' : ''}`;
+    const ds = initDatasetForPiece(baked, own);
+
+    r.checks++;
+    if (!ds) {
+      r.fail(ctx, 'no dataset available for the beam phase pre-advance — init() will throw before the first frame');
+      continue;
+    }
+
+    for (const [label, fn, args] of [
+      ['getBeamTempoSeconds(NITROGEN)',   beams.getBeamTempoSeconds, [ds, beams.BEAM?.NITROGEN ?? 0]],
+      ['getBeamTempoSeconds(CREATININE)', beams.getBeamTempoSeconds, [ds, 1]],
+      ['getBeamTempoSeconds(CO2)',        beams.getBeamTempoSeconds, [ds, 4]],
+      ['getBeamTempoSeconds(CALCIUM)',    beams.getBeamTempoSeconds, [ds, 5]],
+      ['sodiumTempoSeconds',              beams.sodiumTempoSeconds,  [ds]],
+      ['chlorideTempoSeconds',            beams.chlorideTempoSeconds,[ds]],
+    ]) {
+      const t = r.attempt(ctx, label, () => fn(...args));
+      if (t.ok) {
+        r.finite(ctx, label, t.value);
+        r.checks++;
+        if (t.value <= 0) r.fail(ctx, `${label} returned ${t.value}; a non-positive tempo divides into the phase advance`);
+      }
+    }
   }
 }
 

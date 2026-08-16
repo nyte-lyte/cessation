@@ -36,17 +36,45 @@ export function liftModule(relPath, names) {
   return lifted;
 }
 
-export function liftFromMainJs(names) {
+// `inject` is source prepended before the lifted functions — used to supply the
+// module-scope bindings they close over (healthDataSets, minMaxValues) without
+// booting main.js. `consts` lifts top-level `const NAME = …;` declarations (BEAM)
+// so enums come from the real source rather than a copy.
+export function liftFromMainJs(names, { inject = '', consts = [] } = {}) {
   const src = readFileSync(join(ROOT, 'src/main.js'), 'utf8');
-  const bodies = [];
+  const parts = [];
+  for (const name of consts) {
+    const m = src.match(new RegExp(`^const ${name} = [\\s\\S]*?\\n\\}\\);`, 'm'))
+           || src.match(new RegExp(`^const ${name} = .*?;$`, 'm'));
+    if (!m) throw new Error(`harness: could not lift const ${name} from src/main.js`);
+    parts.push(m[0]);
+  }
   for (const name of names) {
     const re = new RegExp(`^function ${name}\\(([\\s\\S]*?)\\n\\}`, 'm');
     const m = src.match(re);
     if (!m) throw new Error(`harness: could not lift ${name}() from src/main.js — has the file been reformatted?`);
-    bodies.push(m[0]);
+    parts.push(m[0]);
   }
-  const factory = new Function(`${bodies.join('\n\n')}\nreturn { ${names.join(', ')} };`);
+  const factory = new Function(`${inject}\n${parts.join('\n\n')}\nreturn { ${names.join(', ')} };`);
   return factory();
+}
+
+// Mirrors the _initDs fallback in the beam phase pre-advance (src/main.js:1152).
+// A piece minted after the engine has no baked entry, and every tempoFn
+// dereferences the dataset, so an undefined here throws inside init() and the
+// piece never draws.
+export function initDatasetForPiece(bakedDatasets, ownPieceIndex) {
+  return bakedDatasets[ownPieceIndex] ?? bakedDatasets[bakedDatasets.length - 1];
+}
+
+const INIT_DS_SOURCE = 'healthDataSets[currentDataSetIndex]\n                  ?? healthDataSets[healthDataSets.length - 1]';
+
+export function assertInitDatasetGuardUnchanged(report) {
+  const src = readFileSync(join(ROOT, 'src/main.js'), 'utf8');
+  report.checks++;
+  if (!src.includes(INIT_DS_SOURCE)) {
+    report.fail('harness', 'the _initDs fallback in src/main.js no longer matches initDatasetForPiece() in harness.mjs — a piece past the baked array may crash in init() again');
+  }
 }
 
 // A dataset shaped exactly like the real ones. Values are plausible but synthetic —

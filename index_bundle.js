@@ -1916,6 +1916,7 @@ async function init() {
   let __reanimationOverride = null;
 
   const BLOCKS_PER_YEAR = 52596;
+  const SIBLING_FETCH_BATCH = 8;
   const BLOCK_WINDOW_MS = 600000;
 
   const lc = {
@@ -1935,6 +1936,10 @@ async function init() {
     ownDataset:           null,
     collectionRoot:       null,
   };
+
+  let _releaseOwnData;
+  lc.ownDataReady = new Promise((resolve) => { _releaseOwnData = resolve; });
+  const lcReleaseOwnData = () => { if (_releaseOwnData) { _releaseOwnData(); _releaseOwnData = null; } };
 
   function lcTick(nowMs) {
     if (lc.reanimationTriggerMs !== null) {
@@ -2033,21 +2038,32 @@ async function init() {
         try { resp = await fetch(`/r/children/${ancestor}/inscriptions/${page}`).then(r => r.json()); }
         catch (e) { break; }
         const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
-        for (const id of childIds) {
-          try {
-            const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.json());
-            if (!metaHex || typeof metaHex !== 'string' || !metaHex.trim()) continue;
-            const meta = cborDecode(metaHex.trim());
-            if (meta && meta.dataset) {
-              fetched.push({
-                id,
-                pieceIndex:      meta.pieceIndex      ?? null,
-                dataset:         meta.dataset,
-                hashTail:        meta.hashTail         ?? null,
-                inscriptionUnix: meta.inscriptionUnix  ?? null,
-              });
-            }
-          } catch (e) { /* skip this child — engine inscriptions have no .dataset and end up here */ }
+
+        for (let i = 0; i < childIds.length; i += SIBLING_FETCH_BATCH) {
+          const batch = childIds.slice(i, i + SIBLING_FETCH_BATCH);
+          const results = await Promise.all(batch.map(id =>
+            fetch(`/r/metadata/${id}`)
+              .then(r => r.json())
+              .then(hex => ({ id, hex }))
+              .catch(() => null)
+          ));
+          for (const res of results) {
+            if (!res) continue;
+            const { id, hex } = res;
+            if (!hex || typeof hex !== 'string' || !hex.trim()) continue;
+            try {
+              const meta = cborDecode(hex.trim());
+              if (meta && meta.dataset) {
+                fetched.push({
+                  id,
+                  pieceIndex:      meta.pieceIndex      ?? null,
+                  dataset:         meta.dataset,
+                  hashTail:        meta.hashTail         ?? null,
+                  inscriptionUnix: meta.inscriptionUnix  ?? null,
+                });
+              }
+            } catch (e) { /* skip — engine inscriptions have no .dataset and end up here */ }
+          }
         }
         more = resp.more ?? false;
         page++;
@@ -2203,11 +2219,15 @@ async function init() {
     try {
 
       const _blk = _sc ? _sc.getAttribute('block') : null;
-      if (_blk) {
+      if (_blk !== null && _blk !== '' && Number.isFinite(parseInt(_blk))) {
         lc.ownBlockHeight = parseInt(_blk);
       } else {
-        const selfInfo = await fetch('/r/inscription/self').then(r => r.json());
-        lc.ownBlockHeight = selfInfo.height ?? 0;
+        const selfPath = _ownId ? `/r/inscription/${_ownId}` : '/r/inscription/self';
+        const selfInfo = await fetch(selfPath).then(r => r.json());
+        if (!Number.isFinite(selfInfo?.height)) {
+          throw new Error(`[lc] no block height from ${selfPath} — cannot start the lifecycle clock`);
+        }
+        lc.ownBlockHeight = selfInfo.height;
       }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
@@ -2237,6 +2257,8 @@ async function init() {
         } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
       }
 
+      lcReleaseOwnData();
+
       await lcRefreshSiblings();
       await lcFastForward();
       if (lc.isLiberated && lc.voidTriggerMs === null) await lcCheckVoid();
@@ -2244,7 +2266,10 @@ async function init() {
       lc.ready = true;
       console.log(`[lc] ready — block ${lc.currentBlockHeight}, cessation ${lc.cessationBlock}, cycle ${lc.cycleCount}, liberated: ${lc.isLiberated}`);
     } catch (e) {
-      console.warn('[lc] lifecycle engine inactive (not in ord env)');
+      console.warn('[lc] lifecycle engine inactive (not in ord env)', e);
+    } finally {
+
+      lcReleaseOwnData();
     }
   }
 
@@ -2427,7 +2452,9 @@ async function init() {
   ];
 
   {
-    const _initDs  = healthDataSets[currentDataSetIndex];
+
+    const _initDs  = healthDataSets[currentDataSetIndex]
+                  ?? healthDataSets[healthDataSets.length - 1];
     const _initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
     for (const cfg of beamConfigs) {
       const seed  = cfg.phaseSeed(lastTwoHashDigits);
@@ -2618,9 +2645,10 @@ async function init() {
   gl.clearColor(0, 0, 0, 1);
 
   (async () => {
-    try {
-      await initLifecycle();
-    } catch (e) { /* fall through to dev render */ }
+    const lifecycle = initLifecycle().catch(() => {});
+    if (currentDataSetIndex >= healthDataSets.length) {
+      await Promise.race([lc.ownDataReady, lifecycle]);
+    }
     gl.clear(gl.COLOR_BUFFER_BIT);
     draw();
   })();

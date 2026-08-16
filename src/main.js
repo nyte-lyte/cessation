@@ -530,6 +530,7 @@ async function init() {
   // by Bitcoin block height. All transitions autonomous — no human triggers.
 
   const BLOCKS_PER_YEAR = 52596;   // 144 blocks/day × 365.25 days
+  const SIBLING_FETCH_BATCH = 8;   // concurrent /r/metadata fetches per batch
   const BLOCK_WINDOW_MS = 600000;  // ~10 min block window for transitions
 
   const lc = {
@@ -546,9 +547,18 @@ async function init() {
     voidProgress:         0.0,
     collectionDatasets:   [],      // [{id, pieceIndex, dataset, hashTail, inscriptionUnix}]
     _siblingPollCount:    0,
-    ownDataset:           null,    // own dataset fetched from /r/metadata/self at boot
+    ownDataset:           null,    // own dataset fetched from /r/metadata/<ownId> at boot
     collectionRoot:       null,    // engine inscription id whose children list is the collection
   };
+
+  // Resolves as soon as this piece knows its own dataset — either because it is
+  // baked (index within healthDataSets) or because its CBOR metadata has landed.
+  // Boot waits on this, never on the full sibling scan, so the first frame does
+  // not sit behind ~30 network round trips. Always resolves, never rejects: a
+  // failed lookup still releases the frame, which then renders from baked data.
+  let _releaseOwnData;
+  lc.ownDataReady = new Promise((resolve) => { _releaseOwnData = resolve; });
+  const lcReleaseOwnData = () => { if (_releaseOwnData) { _releaseOwnData(); _releaseOwnData = null; } };
 
   // Per-frame: interpolate reanimation and void transition progress values
   function lcTick(nowMs) {
@@ -683,21 +693,38 @@ async function init() {
         try { resp = await fetch(`/r/children/${ancestor}/inscriptions/${page}`).then(r => r.json()); }
         catch (e) { break; }
         const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
-        for (const id of childIds) {
-          try {
-            const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.json());
-            if (!metaHex || typeof metaHex !== 'string' || !metaHex.trim()) continue;
-            const meta = cborDecode(metaHex.trim());
-            if (meta && meta.dataset) {
-              fetched.push({
-                id,
-                pieceIndex:      meta.pieceIndex      ?? null,
-                dataset:         meta.dataset,
-                hashTail:        meta.hashTail         ?? null,
-                inscriptionUnix: meta.inscriptionUnix  ?? null,
-              });
-            }
-          } catch (e) { /* skip this child — engine inscriptions have no .dataset and end up here */ }
+        // Fetched in batches rather than one at a time: serially, a collection of
+        // N pieces cost N round trips before anything else could proceed, which
+        // is what made boot take tens of seconds and grew with every new mint.
+        // Batches keep order (chunks run in sequence, Promise.all preserves order
+        // within a chunk), so the pieceIndex dedup in _lcMergedEntries resolves
+        // exactly as it did before. Capped so a large collection doesn't open
+        // hundreds of sockets at once.
+        for (let i = 0; i < childIds.length; i += SIBLING_FETCH_BATCH) {
+          const batch = childIds.slice(i, i + SIBLING_FETCH_BATCH);
+          const results = await Promise.all(batch.map(id =>
+            fetch(`/r/metadata/${id}`)
+              .then(r => r.json())
+              .then(hex => ({ id, hex }))
+              .catch(() => null)
+          ));
+          for (const res of results) {
+            if (!res) continue;
+            const { id, hex } = res;
+            if (!hex || typeof hex !== 'string' || !hex.trim()) continue;
+            try {
+              const meta = cborDecode(hex.trim());
+              if (meta && meta.dataset) {
+                fetched.push({
+                  id,
+                  pieceIndex:      meta.pieceIndex      ?? null,
+                  dataset:         meta.dataset,
+                  hashTail:        meta.hashTail         ?? null,
+                  inscriptionUnix: meta.inscriptionUnix  ?? null,
+                });
+              }
+            } catch (e) { /* skip — engine inscriptions have no .dataset and end up here */ }
+          }
         }
         more = resp.more ?? false;
         page++;
@@ -868,14 +895,27 @@ async function init() {
   // Main lifecycle init — non-blocking, piece renders immediately with local fallback
   async function initLifecycle() {
     try {
-      // Child pieces pass block height as an attribute on the <script> tag.
-      // Piece 0 (or dev) fetches its own block height from /r/inscription/self.
+      // Every minted piece carries its block height as a <script> attribute, so
+      // this is the normal path. The fallback exists for a piece loaded without
+      // one (engine viewed directly, hand-built wrapper, dev).
+      //
+      // The fallback queries the explicitly resolved own id, not "/self" — the
+      // /self shortcut is unreliable in ord 0.27, which is exactly why v3 resolves
+      // _ownId from the URL for metadata and parents (see _resolveOwnId above).
+      //
+      // A missing height is fatal, not a default. ownBlockHeight is the origin of
+      // the entire clock: defaulting it to 0 put cessation ~5.26M blocks out, so
+      // the piece would never cease and nothing would say why.
       const _blk = _sc ? _sc.getAttribute('block') : null;
-      if (_blk) {
+      if (_blk !== null && _blk !== '' && Number.isFinite(parseInt(_blk))) {
         lc.ownBlockHeight = parseInt(_blk);
       } else {
-        const selfInfo = await fetch('/r/inscription/self').then(r => r.json());
-        lc.ownBlockHeight = selfInfo.height ?? 0;
+        const selfPath = _ownId ? `/r/inscription/${_ownId}` : '/r/inscription/self';
+        const selfInfo = await fetch(selfPath).then(r => r.json());
+        if (!Number.isFinite(selfInfo?.height)) {
+          throw new Error(`[lc] no block height from ${selfPath} — cannot start the lifecycle clock`);
+        }
+        lc.ownBlockHeight = selfInfo.height;
       }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
@@ -911,6 +951,9 @@ async function init() {
           }
         } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
       }
+      // Own data is as resolved as it is going to get — release the first frame.
+      // Everything below is collection-wide and must not hold up rendering.
+      lcReleaseOwnData();
 
       await lcRefreshSiblings();
       await lcFastForward();
@@ -919,7 +962,11 @@ async function init() {
       lc.ready = true;
       console.log(`[lc] ready — block ${lc.currentBlockHeight}, cessation ${lc.cessationBlock}, cycle ${lc.cycleCount}, liberated: ${lc.isLiberated}`);
     } catch (e) {
-      console.warn('[lc] lifecycle engine inactive (not in ord env)');
+      console.warn('[lc] lifecycle engine inactive (not in ord env)', e);
+    } finally {
+      // Never leave boot waiting — if init threw before the own-metadata step,
+      // the piece still renders from baked data.
+      lcReleaseOwnData();
     }
   }
 
@@ -1149,7 +1196,13 @@ async function init() {
   // slightly with chronological drift but the error is negligible vs. the
   // alternative of always starting at the beginning.
   {
-    const _initDs  = healthDataSets[currentDataSetIndex];
+    // A piece minted after the engine has no baked entry — its dataset arrives
+    // later via its own CBOR metadata. Every tempoFn dereferences the dataset,
+    // so an undefined here throws inside init() and the piece never draws at all.
+    // Fall back to the last baked dataset: tempo is already documented above as
+    // an approximation, and being slightly off beats not rendering.
+    const _initDs  = healthDataSets[currentDataSetIndex]
+                  ?? healthDataSets[healthDataSets.length - 1];
     const _initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
     for (const cfg of beamConfigs) {
       const seed  = cfg.phaseSeed(lastTwoHashDigits);
@@ -1360,14 +1413,23 @@ async function init() {
 
   gl.clearColor(0, 0, 0, 1);
 
-  // Boot: wait for lifecycle init (own metadata + siblings + block height) before
-  // the first draw — without ownDataset, pieces whose pieceIndex exceeds the baked
-  // array length crash on the first frame and the rAF chain dies.
-  // Dev / non-ord environments fall through: draw() runs immediately with baked data.
+  // Boot: draw as soon as this piece has data for itself, and let the collection
+  // load behind the rendered frame.
+  //
+  // This used to await the whole of initLifecycle, which includes the sibling
+  // scan — one /r/metadata round trip per piece in the collection. That is why
+  // pieces sat on black for tens of seconds before the first frame, and it got
+  // worse with every piece minted.
+  //
+  // Pieces 0..N-1 are baked into the engine and can draw on frame 1. A piece
+  // minted after the engine has no baked entry, so it waits on lc.ownDataReady —
+  // its own metadata only, not the collection. That promise always resolves, so
+  // a failure still yields a frame rather than a black screen.
   (async () => {
-    try {
-      await initLifecycle();
-    } catch (e) { /* fall through to dev render */ }
+    const lifecycle = initLifecycle().catch(() => {});
+    if (currentDataSetIndex >= healthDataSets.length) {
+      await Promise.race([lc.ownDataReady, lifecycle]);
+    }
     gl.clear(gl.COLOR_BUFFER_BIT);
     draw();
   })();
