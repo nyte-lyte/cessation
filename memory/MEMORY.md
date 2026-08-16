@@ -7,7 +7,7 @@ Generative art project minted on the Bitcoin blockchain. Each piece is a distinc
 - `src/main.js` — Core JS (~1260 lines): WebGL2 setup, health data processing, beam animation, uniform computation, lifecycle engine, console debug API
 - `src/shaders/fragment.glsl` — Fragment shader (~370 lines): 4 background fields, 6 electrolyte forms, lava lamp orbits, decay, hue drift
 - `src/shaders/vertex.glsl` — Trivial fullscreen quad pass-through
-- `data/health_data_sets.js` — 30 timestamped ECG+lab snapshots (2018 to 2026-06-19), min/max, healthIndex[]
+- `data/health_data_sets.js` — the baked ECG+lab snapshots, one per piece, oldest first. Grows with the collection (30 as of 2026-08-16, 2018 to 2026-06-19). Plus min/max and healthIndex[].
 - `data/decay_logic.js` — Blend, karma, drift, and collection influence functions (pure, ready for backend port)
 - `index.html` / `style.css` — Minimal entry, fullscreen canvas, no build system
 
@@ -31,7 +31,7 @@ Generative art project minted on the Bitcoin blockchain. Each piece is a distinc
 - Ancestor field fades over piece lifespan (inheritance fades as individual emerges)
 
 ## Health Data
-- 30 snapshots, 2018-2026 (personal ECG + metabolic/kidney labs). Verified count 2026-08-16 — piece 29's dataset was added in 28d44f8; docs saying 29 predate it.
+- Personal ECG + metabolic/kidney labs, one snapshot per piece, 2018 onward. The set grows with each new reading — 30 as of 2026-08-16 (indices 0-29). Any fixed count in older notes is just the size on the day it was written, not a cap.
 - Two disease processes: LVNC (cardiomyopathy) + Crohn's — but the metabolic panel is a cardiac med safety panel (kidney monitoring for heart meds), not a Crohn's panel. Everything is cardiac-context.
 - ECG metrics drive: form angles, field drift tempos
 - Lab percentiles drive: form radii, color vibrancy
@@ -141,7 +141,7 @@ Full details in `memory/data_mappings.md`.
 - Each piece mints to its own Bitcoin block — minimum 2 blocks apart to guarantee distinct blockhashes for lifespan derivation.
 - **Piece 0 influences everything permanently** — it is always in the sibling list regardless of collection size. Its dataset is always part of the living collection, always included in percentile calculations, always pulling on every new piece. Genesis influences all that follows.
 - New mints shift percentiles for all existing pieces automatically via lcRefreshSiblings on the next block poll. Early pieces drift the most by the time the collection matures.
-- First 30 pieces (indices 0-29): initial collection. Piece 30+ minted as new health data arrives every ~3 months post-mint.
+- The collection has no fixed size. A new piece is minted whenever new ECG/lab data arrives (~every 3 months), for as long as the creator is alive. Counts in these docs are point-in-time only — as of 2026-08-16 the collection is 30 pieces, indices 0-29, and piece 30 is expected next.
 
 ## Nirvana / Karma / Lifecycle
 Full details in `memory/nirvana.md`.
@@ -170,7 +170,7 @@ Full details in `memory/wallets.md`. Verified live 2026-08-13.
 Full details in `memory/inscription_architecture.md`.
 - **Two-inscription model** (finalized 2026-04-18): engine is root, all 30 pieces (0-29) are its children
 - Engine: `index_bundle.js` inscribed as `text/javascript` — no parent, no metadata. Root inscription.
-- All 30 pieces: thin HTML files (~300 bytes) loading engine via `<script t=N ht=H unix=U hue=D block=B src="/content/{engineId}">` — ALL use `--parent engineId`
+- Every piece: a thin HTML file (~300 bytes) loading the engine via `<script t=N ht=H unix=U hue=D block=B src="/content/{engineId}">` — ALL use `--parent engineId`
 - Engine reads piece params from `document.currentScript` attributes synchronously
 - **Sibling discovery** (v3, `d718517`): the engine resolves its **own** inscription id from `window.location.pathname` (`_resolveOwnId`), walks the parent chain via `/r/parents/<id>/inscriptions/0` up to the topmost ancestor (`lcResolveAncestors`, depth cap 10), then fetches `/r/children/<ancestor>/inscriptions/<page>` for **every** ancestor and merges, deduped by pieceIndex. This is what lets a v2/v3 engine inscribed under v1 see both branches. The older description — engineId pulled from `_sc.getAttribute('src')` and a single `/r/children/{engineId}` call — was v1/v2 and is no longer how it works. `_engineId` is still parsed from the script src, but only as the initial `collectionRoot` fallback.
 - Piece 0 is the genesis art piece, NOT the inscription parent. It's a child of the engine like all others.
@@ -212,12 +212,12 @@ Full audit before third inscription attempt. All fixed in main.js unless noted.
 - Engine: `index_bundle.js` 95.4 KB uncompressed (rebuilt 2026-08-13 at `cdf1eb6`; the old "87.4 KB / 2026-04-18" figure predated engine v2 and v3)
 - **Mint sequence** (unified for all pieces — fill `PIECE_SATS` in mint.js first):
   1. `ord wallet inscribe --fee-rate <FEE> --file index_bundle.js` → engineId
-  2. For each piece 0-29: `node mint.js <N> <BLOCK_HASH> <BLOCK_TIME> <ENGINE_ID> <BLOCK_HEIGHT>`
+  2. For each piece index in the collection: `node mint.js <N> <BLOCK_HASH> <BLOCK_TIME> <ENGINE_ID> <BLOCK_HEIGHT>`
   3. Run the generated command (includes `--sat`, `--parent engineId`, `--json-metadata`)
 - **Sats**: newly-bought rare sats held in the **`ord-cold`** wallet (see `memory/wallets.md`). Transfer the needed sat to the hot `ord` wallet at mint time. Use `ord wallet sats` after transfer to map sat numbers and satpoints before touching anything. (UniSat wallet deprecated.)
 
 ## Rare Sats
-- **Live collection**: all 30 pieces (0-29) are inscribed on **Omega black uncommon sats** — last sat of a block. **Piece 0 (genesis)** is on a **Nakamoto sat** mined 2009-01-31 — 28 days after the genesis block, when Satoshi was the only miner. Never moved.
+- **Live collection** (as of 2026-08-16, indices 0-29): every piece is inscribed on an **Omega black uncommon sat** — last sat of a block. **Piece 0 (genesis)** is on a **Nakamoto sat** mined 2009-01-31 — 28 days after the genesis block, when Satoshi was the only miner. Never moved.
 - These sats each carry **three inscription layers** now — see "Inscription History" above. They are no longer never-previously-inscribed.
 - **For any future inscription**: newly-bought rare sats are held in the **`ord-cold`** cold wallet (see `memory/wallets.md`) — transfer to the hot `ord` wallet before minting. Some UTXOs may contain multiple rare sats; ord separates them correctly during inscription via satpoint tracking. (UniSat wallet deprecated — no longer used.)
 

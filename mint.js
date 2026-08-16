@@ -1,6 +1,6 @@
 // mint.js — Build per-piece HTML inscription files for Cessation.
 // The engine (index_bundle.js) is a separate text/javascript inscription.
-// All 29 pieces are thin HTML files that load the engine via <script src>.
+// Every piece is a thin HTML file that loads the engine via <script src>.
 //
 // Usage (same for all pieces):
 //   node mint.js <pieceIndex> <blockHash> <blockTimestamp> <engineId> <blockHeight>
@@ -11,7 +11,9 @@
 // engineId      : inscription ID of the engine (text/javascript) inscription
 // blockHeight   : block height at inscription time
 //
-// All 29 pieces use --parent engineId. Fill in PIECE_SATS before running.
+// Every piece uses --parent engineId. Fill in PIECE_SATS before running.
+// The collection grows: a new piece is minted whenever new ECG/lab data arrives.
+// Never hardcode a piece count here — index the collection, don't count it.
 //
 
 // ── Per-piece sat numbers ─────────────────────────────────────────────────────
@@ -204,7 +206,7 @@ console.log(`Metadata JSON written: dist/${metadataName}`);
 console.log(`  Use with: ord wallet inscribe --json-metadata dist/${metadataName}\n`);
 
 // ── All pieces: thin HTML — loads engine via <script src="/content/{engineId}"> ──
-// All 29 pieces are children of the engine inscription (--parent engineId).
+// Every piece is a child of the engine inscription (--parent engineId).
 // The engine is the root. Piece 0 is the genesis art piece, not the inscription parent.
 // Sibling discovery at runtime: extract engineId from _sc.src, fetch /r/children/{engineId}.
 

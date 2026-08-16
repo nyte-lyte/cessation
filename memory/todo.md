@@ -58,10 +58,13 @@ running on chain right now:
 - **Tracker data/shader copies** — `health_data_sets.js`, `decay_logic.js`,
   `fragment.glsl`, `vertex.glsl` are manual copies in ~/cessation-tracker. Divergence
   risk on every change to this repo.
-- **Piece count is 30, not 29.** `data/health_data_sets.js` holds 30 datasets (pieces
-  0–29) since `28d44f8` added piece 29. `mint.js:14`, `MEMORY.md`, and
-  `inscription_architecture.md` still say 29 in places. Cosmetic in docs, but it makes
-  every "all 29 pieces" claim ambiguous about whether piece 29 is included.
+- **Never hardcode a piece count in docs or comments.** The collection has no fixed
+  size — a new piece is minted whenever new ECG/lab data arrives, so any count is stale
+  within about three months. The old "all 29 pieces" phrasing dated from when 29 was
+  the whole collection; it is 30 now and 31 soon. Process statements should say "every
+  piece" and iterate the collection; a count belongs in docs only as a dated
+  point-in-time fact. Cleaned up 2026-08-16 in `mint.js`, `build.js`, `MEMORY.md`, and
+  `inscription_architecture.md`.
 
 ## Verified true (re-checked 2026-08-16)
 

@@ -2,7 +2,7 @@
 // Inlines all shaders, JS, data, and CSS into a single self-contained JS file.
 // Usage: node build.js
 //
-// Output is text/javascript. The engine is inscribed as a JS file; all 29 pieces are HTML.
+// Output is text/javascript. The engine is inscribed as a JS file; every piece is HTML.
 // Pieces load the engine via: <script t=N ht=H unix=U hue=D block=B src="/content/{engineId}">
 // When loaded as a child, document.currentScript carries the piece params.
 // When loaded directly as text/javascript, document.currentScript is null.

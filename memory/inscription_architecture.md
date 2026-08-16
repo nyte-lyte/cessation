@@ -11,7 +11,7 @@ Two-inscription model. Engine and pieces are separate inscriptions.
 - Creates its own DOM (canvas-container, canvas) and injects CSS as a style element
 - Reads piece parameters from `document.currentScript` attributes
 
-### Piece inscriptions (all 29)
+### Piece inscriptions (every piece)
 - All pieces are thin HTML files (~300 bytes)
 - Each loads the engine via `<script src="/content/{engineId}">`
 - Piece params passed as HTML attributes on the script tag: `t` (pieceIndex), `ht` (hashTail), `unix` (inscriptionUnixSeconds), `hue` (inheritedHueDeg), `block` (blockHeight)
@@ -19,7 +19,7 @@ Two-inscription model. Engine and pieces are separate inscriptions.
 ```html
 <!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}</style></head><body><script t="1" ht="61" unix="1775938686" hue="321.4286" block="204" src="/content/{engineId}"></script></body></html>
 ```
-- **All 29 pieces inscribed with `--parent {engineId}`** — engine is the root inscription
+- **Every piece inscribed with `--parent {engineId}`** — engine is the root inscription
 - Piece 0 is the genesis art piece, not the inscription parent
 
 ### Engine boot logic (`document.currentScript`)
@@ -34,7 +34,7 @@ const _selfScript = document.currentScript;
 ### Sibling discovery (living collection)
 - All pieces are children of the engine via `--parent {engineId}`
 - At runtime, engine calls `/r/children/{engineId}` to discover ALL siblings
-- Engine extracts engineId from `document.currentScript.src` — same for all 29 pieces
+- Engine extracts engineId from `document.currentScript.src` — same for every piece
 - For each sibling, fetches `/r/metadata/{sibling_id}` to get their health dataset (CBOR)
 - Builds `lc.collectionDatasets` — drives `getAgedDataset`, `applyCollectionInfluence`, percentile calculations
 - New mints automatically propagate via `lcRefreshSiblings()` on every block poll — no reload needed
@@ -46,12 +46,12 @@ const _selfScript = document.currentScript;
 ord wallet inscribe --fee-rate <FEE> --sat 12425429610918 --file index_bundle.js
 # → engineId  (engine sits on last sat of UTXO ccab20ce:0, block 2485)
 
-# 2. Generate piece HTML (same command for all 29 pieces)
+# 2. Generate piece HTML (same command for every piece)
 node mint.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>
 # → dist/cessation_piece_0N.html + dist/cessation_piece_0N_metadata.json
 # mint.js errors if PIECE_SATS[N] is not filled in
 
-# 3. Inscribe piece (all 29 use --parent engineId, --sat from PIECE_SATS)
+# 3. Inscribe piece (every piece uses --parent engineId, --sat from PIECE_SATS)
 ord wallet inscribe --fee-rate <FEE> --sat <satNumber> --parent <engineId> --file dist/cessation_piece_0N.html --json-metadata dist/cessation_piece_0N_metadata.json
 ```
 
