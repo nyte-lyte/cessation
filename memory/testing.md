@@ -93,7 +93,45 @@ Only two kinds of bytes, and neither reads `index_bundle.html`:
   `mint.js:229`, carrying `t/ht/unix/hue/block` and `src="/content/{engineId}"`,
   plus its CBOR metadata JSON. Both regenerated into gitignored `dist/` every run.
 
-## Planned harness — not built
+## Scale harness — built 2026-08-16
+
+`node test/scale.test.mjs` — ~8,900 assertions, no dependencies, runs in about a
+second. This is the axis that actually broke v1: **regtest inscribed 30 pieces and
+all 30 rendered; the failure only appeared when a new dataset joined the
+collection.** Growth is the main case for this project, not an edge case.
+
+What it drives, at collection sizes 30 / 31 / 40 / 100:
+- The full render pipeline exactly as `draw()` composes it — `getAgedDataset` ->
+  `applyCollectionInfluence` -> `computeHSBFromStats` -> `winsorizedPercentileForLab`
+  -> `calculateHealthIndex` / `computeKarma` — across seven life fractions.
+- Own-piece indices at the start, middle, end, **past the baked array** (a piece
+  minted after the engine, which must load its dataset from its own metadata), and
+  **past the collection** (sibling fetch incomplete).
+- Boot-order states that become reachable the moment `draw()` stops waiting on
+  `initLifecycle`: baked array alone, and baked + own metadata with no siblings.
+- Reanimation blends, including a partner past the baked array.
+- **Growth sensitivity** — that a piece's hue/sat/bri and the min/max bounds
+  actually *move* when a sibling appears, and that drift span scales with
+  collection size. This catches the silent version, where nothing crashes and the
+  piece just ignores its new sibling.
+
+It models three guards that live inside main.js's `init()` closure and cannot be
+imported (`_lcMergedEntries`, `lcOwnPosition`, and draw()'s `startIdx` clamp).
+`assertDrawGuardUnchanged()` reads main.js and fails if that clamp is edited, so
+the model cannot silently go stale.
+
+**Mutation-tested.** A test that passes proves nothing until you break the code and
+watch it fail. All three of the real historical bugs are caught:
+
+| mutation | result |
+|---|---|
+| remove draw()'s `startIdx` clamp (the v1 growth crash) | caught — TypeError |
+| rank colour against the baked array, not the live collection (the v2 bug v3 fixed) | caught — no change on growth |
+| decouple drift span from collection size | caught — drift differs |
+
+Current status against HEAD: **8,926 checks, 0 failures.**
+
+## Remaining harness work — not built
 
 Run the uniform computation in Node with a fake `gl` object that records every
 `uniform1f` call instead of drawing. Then assert across the axes regtest can't
