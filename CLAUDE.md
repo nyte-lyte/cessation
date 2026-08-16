@@ -7,5 +7,6 @@ Key files for quick orientation:
 - `memory/nirvana.md` — lifecycle engine, karma, reanimation, void
 - `memory/todo.md` — pre-mint checklist
 - `memory/inscription_architecture.md` — on-chain structure
+- `memory/testing.md` — what regtest does and does not verify; pre-inscription checklist
 - `memory/tracker.md` — cessation-tracker site details
 - `memory/data_mappings.md` — full uniform/data wiring reference

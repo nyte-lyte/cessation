@@ -7,7 +7,7 @@ Generative art project minted on the Bitcoin blockchain. Each piece is a distinc
 - `src/main.js` — Core JS (~1260 lines): WebGL2 setup, health data processing, beam animation, uniform computation, lifecycle engine, console debug API
 - `src/shaders/fragment.glsl` — Fragment shader (~370 lines): 4 background fields, 6 electrolyte forms, lava lamp orbits, decay, hue drift
 - `src/shaders/vertex.glsl` — Trivial fullscreen quad pass-through
-- `data/health_data_sets.js` — 29 timestamped ECG+lab snapshots (2018–2026-03-20), min/max, healthIndex[]
+- `data/health_data_sets.js` — 30 timestamped ECG+lab snapshots (2018 to 2026-06-19), min/max, healthIndex[]
 - `data/decay_logic.js` — Blend, karma, drift, and collection influence functions (pure, ready for backend port)
 - `index.html` / `style.css` — Minimal entry, fullscreen canvas, no build system
 
@@ -31,7 +31,7 @@ Generative art project minted on the Bitcoin blockchain. Each piece is a distinc
 - Ancestor field fades over piece lifespan (inheritance fades as individual emerges)
 
 ## Health Data
-- 29 snapshots, 2018–2026 (personal ECG + metabolic/kidney labs)
+- 30 snapshots, 2018-2026 (personal ECG + metabolic/kidney labs). Verified count 2026-08-16 — piece 29's dataset was added in 28d44f8; docs saying 29 predate it.
 - Two disease processes: LVNC (cardiomyopathy) + Crohn's — but the metabolic panel is a cardiac med safety panel (kidney monitoring for heart meds), not a Crohn's panel. Everything is cardiac-context.
 - ECG metrics drive: form angles, field drift tempos
 - Lab percentiles drive: form radii, color vibrancy
@@ -91,7 +91,7 @@ Nothing is wall-clock timed. No human triggers. The chain breathes and the piece
 - **`u_time` fixed (2026-08-04):** now `secsSinceBirth` = `Date.now()/1000 - inscriptionUnixSeconds`. Pieces are born at inscription and count forward — each page load finds the piece mid-motion, never restarting from zero. Previously used `performance.now()` which reset to 0 on every load.
 - **Beam phases pre-advanced from birth (2026-08-04):** all 6 beams initialized to `seed + (secsSinceBirth / tempo) % period` before the first draw. Previously always restarted from hash seed on every page load.
 - **CO2 and Ca phase seeds fixed (2026-08-04):** were `() => 0` — all pieces breathed in unison. Now hash-seeded: CO2 = `(h/99)*1.1π`, Ca = `(h/99)*0.7π`. Each piece independent, different from N (2π) and Cr (1.3π).
-- **`setHSBUniforms` fixed (2026-08-04):** now passes `drawCollection` (live sibling collection) instead of baked `healthDataSets`. Ensures `u_glucose`/`u_potassium`/`u_eGFR` percentile ranking stays correct as collection grows past 29 pieces.
+- **`setHSBUniforms` fixed (2026-08-04):** now passes `drawCollection` (live sibling collection) instead of baked `healthDataSets`. Ensures `u_glucose`/`u_potassium`/`u_eGFR` percentile ranking stays correct as collection grows past the initial 30 pieces.
 
 ## Canvas Format & Display (committed)
 - Aspect ratio: 3:2 (landscape, like 35mm film negative)
@@ -141,7 +141,7 @@ Full details in `memory/data_mappings.md`.
 - Each piece mints to its own Bitcoin block — minimum 2 blocks apart to guarantee distinct blockhashes for lifespan derivation.
 - **Piece 0 influences everything permanently** — it is always in the sibling list regardless of collection size. Its dataset is always part of the living collection, always included in percentile calculations, always pulling on every new piece. Genesis influences all that follows.
 - New mints shift percentiles for all existing pieces automatically via lcRefreshSiblings on the next block poll. Early pieces drift the most by the time the collection matures.
-- First 29 pieces: initial collection. Piece 30+ minted as new health data arrives every ~3 months post-mint.
+- First 30 pieces (indices 0-29): initial collection. Piece 30+ minted as new health data arrives every ~3 months post-mint.
 
 ## Nirvana / Karma / Lifecycle
 Full details in `memory/nirvana.md`.
@@ -155,17 +155,17 @@ Full details in `memory/nirvana.md`.
 - **Void detection built**: `lcIsPartnerLiberated()` simulates partner's full cycle history iteratively (blend, karma check, fetch next cessation block hash — no cap, exits via return false/true or fetch failure). `lcCheckVoid()` fires at own liberation and every subsequent block poll while liberated. Both partners must liberate independently before void triggers.
 - Piece 0 void partner = piece 1 (getPartnerIndex handles this)
 - **Living collection**: sibling CBOR metadata fetched at boot, datasets extracted into `lc.collectionDatasets`. draw() uses this for getAgedDataset, applyCollectionInfluence, computeHSBFromStats, winsorizedPercentileForLab. Falls back to local healthDataSets in dev mode or if dataset absent from metadata.
-- **Boot rendering**: piece renders correctly from local healthDataSets at frame 1. lc.collectionDatasets loads in background (2-3s). Color is correct immediately because local data IS the first-29 collection. Visual shift only occurs when piece 30+ is minted.
+- **Boot rendering**: piece renders correctly from local healthDataSets at frame 1. lc.collectionDatasets loads in background (2-3s). Color is correct immediately because local data IS the initial 30-piece collection. Visual shift only occurs when piece 30+ is minted.
 - **`document.currentScript` bootstrap** (replaced URL hash 2026-04-11): engine reads `t/ht/unix/hue/block` attributes from the `<script>` tag synchronously. Eliminates piece-0-flash. `block` attribute supplies child's inscription block height for lcFastForward.
-- **Autonomous new-mint propagation** (built 2026-03-22): `lcRefreshSiblings()` called on every new block in `lcPoll()`. Fetches only newly-seen sibling ids, extends `lc.datasetByIdx` + `lc.siblingIdMap` incrementally, rebuilds `lc.collectionDatasets`, recomputes liberation threshold. No reload needed — collection stays live for wall-mounted use. `lc` tracks `parentId`, `knownSiblingCount`, `datasetByIdx`.
+- **Autonomous new-mint propagation** (corrected 2026-08-16 — the previous entry here described code that no longer exists): `lcRefreshSiblings()` is called from `lcPoll()` on **every 10th poll** (`_siblingPollCount % 10`, ~10 min), not every block. It is a **full refetch**, not incremental — it re-fetches every child's CBOR metadata from every ancestor in `lc.collectionAncestors`, rebuilds `lc.collectionDatasets`, refreshes `minMaxValues`, and recomputes the partner inherited hue. The incremental machinery this entry used to claim (`lc.datasetByIdx`, `lc.siblingIdMap`, `lc.knownSiblingCount`) exists in exactly two commits in all of history — one adding it, one removing it — and was gone long before inscription. Net effect is still correct: new mints propagate without a reload, just via full refetch on a 10-poll cadence.
 
 ## Inscription Architecture
 Full details in `memory/inscription_architecture.md`.
-- **Two-inscription model** (finalized 2026-04-18): engine is root, all 29 pieces are its children
+- **Two-inscription model** (finalized 2026-04-18): engine is root, all 30 pieces (0-29) are its children
 - Engine: `index_bundle.js` inscribed as `text/javascript` — no parent, no metadata. Root inscription.
-- All 29 pieces: thin HTML files (~300 bytes) loading engine via `<script t=N ht=H unix=U hue=D block=B src="/content/{engineId}">` — ALL use `--parent engineId`
+- All 30 pieces: thin HTML files (~300 bytes) loading engine via `<script t=N ht=H unix=U hue=D block=B src="/content/{engineId}">` — ALL use `--parent engineId`
 - Engine reads piece params from `document.currentScript` attributes synchronously
-- **Sibling discovery**: engineId extracted from `_sc.getAttribute('src')` at runtime → `/r/children/{engineId}` returns all 29 pieces for any piece running the engine. Works identically for every piece including piece 0.
+- **Sibling discovery** (v3, `d718517`): the engine resolves its **own** inscription id from `window.location.pathname` (`_resolveOwnId`), walks the parent chain via `/r/parents/<id>/inscriptions/0` up to the topmost ancestor (`lcResolveAncestors`, depth cap 10), then fetches `/r/children/<ancestor>/inscriptions/<page>` for **every** ancestor and merges, deduped by pieceIndex. This is what lets a v2/v3 engine inscribed under v1 see both branches. The older description — engineId pulled from `_sc.getAttribute('src')` and a single `/r/children/{engineId}` call — was v1/v2 and is no longer how it works. `_engineId` is still parsed from the script src, but only as the initial `collectionRoot` fallback.
 - Piece 0 is the genesis art piece, NOT the inscription parent. It's a child of the engine like all others.
 - New pieces (30+): mint with `--parent engineId` → automatically appear in `/r/children/{engineId}` → picked up by `lcRefreshSiblings` within ~10 minutes. Collection grows without any changes to existing pieces.
 - CBOR metadata per piece via `--json-metadata` flag — `dataset` field required for living collection
@@ -183,25 +183,35 @@ Full audit before third inscription attempt. All fixed in main.js unless noted.
 5. **`lcRefreshSiblings` ancestor ordering wrong** — iterated ancestors immediate→topmost, so oldest engine's children were appended last and won via Map.set last-wins. Newest reinscription would lose to oldest broken inscription. Fixed: now iterates topmost→immediate so newest pieces win.
 6. **`build.js` comment wrong** — said "Piece 0 is inscribed as a JS file." The engine is the JS file; all pieces including piece 0 are HTML. Fixed: updated comment.
 
-## Inscription Failure History
-- **v1 (first attempt):** engine was broken — pieces not live, code was missing. Moved to trash wallet.
-- **v2 (second attempt):** engine fixed but metadata was wrong. Multiple inscriptions on same sats created lag and bad appearance on ordinals.com. Moved to trash wallet.
-- **v3 (current):** re-inscribing on fresh sats. Parent chain clean, no legacy ancestor conflicts.
+## Inscription History (corrected 2026-08-16 — the previous version of this section was wrong)
+**The same sats have been inscribed on three times.** All three layers are permanent.
+- **1st — v1 engine:** broken. Pieces not live, code missing.
+- **2nd — v2 engine, bad metadata:** engine worked, but the metadata leaked the creator's
+  real name onto chain (a path-derived value in the inscribe invocation, not from
+  `metadataObj` — mint.js has only ever written pieceIndex/hashTail/inscriptionUnix/dataset).
+  Required inscribing again.
+- **3rd — v2 engine, metadata fixed:** **this is what is live now.** IDs recorded in
+  `memory/tracker.md` under "Live On-Chain IDs (as of 2026-06-20)".
+- The earlier layers stay on chain underneath each sat, bypassed by viewers because the
+  latest inscription on a sat wins — but they remain retrievable. The name cannot be undone.
+- **v3 engine is NOT inscribed.** Repo HEAD (`8ca13e5`) is ahead of what is live.
+- Stacked inscriptions on the same sats are also what caused the lag and poor appearance
+  on ordinals.com.
 
 ## Mint Timeline
 - **Re-inscribing on fresh sats (2026-08-04):** first two inscription attempts had errors (broken engine v1, then metadata problems in v2). Both failed collections moved to trash wallet. Third inscription will be on fresh sats — clean parent chain, no legacy ancestor conflicts.
 - **`lcRefreshSiblings` ancestor ordering fixed (2026-08-04):** now iterates topmost-first so newest engine's pieces win via Map.set last-wins. Harmless for fresh sats (single ancestor), correct for any future reinscription.
 - Environment confirmed: Node v25.9.0, Bitcoin Core v30.2.0, ord 0.27.1
-- Engine: `index_bundle.js` 87.4 KB uncompressed (current, last rebuilt 2026-04-18)
+- Engine: `index_bundle.js` 95.4 KB uncompressed (rebuilt 2026-08-13 at `cdf1eb6`; the old "87.4 KB / 2026-04-18" figure predated engine v2 and v3)
 - **Mint sequence** (unified for all pieces — fill `PIECE_SATS` in mint.js first):
   1. `ord wallet inscribe --fee-rate <FEE> --file index_bundle.js` → engineId
-  2. For each piece 0–28: `node mint.js <N> <BLOCK_HASH> <BLOCK_TIME> <ENGINE_ID> <BLOCK_HEIGHT>`
+  2. For each piece 0-29: `node mint.js <N> <BLOCK_HASH> <BLOCK_TIME> <ENGINE_ID> <BLOCK_HEIGHT>`
   3. Run the generated command (includes `--sat`, `--parent engineId`, `--json-metadata`)
-- **Sats**: 29 sats held in UniSat wallet across 18 UTXOs — must transfer to ord wallet before inscribing. Use `ord wallet sats` after transfer to map sat numbers and satpoints before touching anything.
+- **Sats**: 30 sats held in UniSat wallet across 18 UTXOs — transferred to ord wallet before inscribing. Use `ord wallet sats` after transfer to map sat numbers and satpoints before touching anything.
 
 ## Rare Sats
-- All 29 pieces will be inscribed on **Omega black uncommon sats** — last sat of a block, never previously inscribed
-- **Piece 0 (genesis)** will be inscribed on a **Nakamoto sat** mined 2009-01-31 — 28 days after the genesis block, when Satoshi was the only miner. Never moved.
+- All 30 pieces inscribed on **Omega black uncommon sats** — last sat of a block, never previously inscribed
+- **Piece 0 (genesis)** inscribed on a **Nakamoto sat** mined 2009-01-31 — 28 days after the genesis block, when Satoshi was the only miner. Never moved.
 - Sats sourced and held in **UniSat wallet** across 18 UTXOs — transfer to ord wallet before minting. Some UTXOs contain multiple rare sats; ord will separate them correctly during inscription via satpoint tracking.
 
 ## Visual Problems — Resolved / Pending
@@ -247,3 +257,4 @@ Full details in `memory/tracker.md`.
 - [Visual reference](visual_reference.md) — 7 saved images with analysis
 - [ECG hue inconsistency](feedback_ecg_percentile.md) — brown left side, min-max on ECG hues
 - [Engine version artifacts](feedback_engine_version_artifacts.md) — u_time float32 bug, v1 fossil in index_bundle.html, why regtest missed both
+- [Testing](testing.md) — dev-mode expectations, regtest's three blind spots (age/scale/visual), pre-inscription checklist, planned harness

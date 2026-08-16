@@ -1,58 +1,115 @@
 # Cessation — To Do
 
-## Pre-Mint (mint target was Easter Sunday April 5 2026 — not yet done as of 2026-04-11)
-- **NEXT: Mainnet mint sequence**
-  1. Inscribe engine: `ord wallet inscribe --fee-rate <FEE_RATE> --file index_bundle.js` → get engineId
-  2. All 29 pieces: `node mint.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>` → inscribe with --parent engineId
-  - All pieces are children of the engine. Engine is the root inscription.
-  - Piece 0 is genesis art piece, not the inscription parent.
-  - Sibling discovery at runtime uses /r/children/{engineId} (engineId extracted from script src).
-  - All pieces use --json-metadata for CBOR
-  - Engine is text/javascript (ord infers from .js extension), all pieces are text/html
-- ~~Architecture: separate engine inscription~~ — DONE (2026-04-11): engine=text/javascript, all 29 pieces=HTML, black background, regtest verified
-- ~~Test iframe bootstrap + /r/children/self via ord regtest~~ — DONE (2026-04-05)
-- ~~Build inscription 0 bundle~~ — DONE: build.js → index_bundle.js (86.5 KB uncompressed)
-- ~~Strip dev console API~~ — DONE: DEV_START/DEV_END markers, only F/R/S remain for collectors
-- ~~Decide on Brotli compression~~ — DONE: not compressing
-- ~~Source Nakamoto sat for piece 0~~ — DONE: 2009-01-31 sat acquired
-- ~~Add final (29th) dataset~~ — DONE: 2026-03-20 dataset added
-- ~~Data audit complete~~ — DONE: all metrics wired meaningfully as of 2026-03-22
-- ~~Source and hold 29 Omega black uncommon sats~~ — DONE
-- ~~Lock visual system~~ — DONE: sat=0.92+0.08*ab, bri=0.25+0.65*value, u_co2Norm fixed, tracker synced (9ee8fe5)
-- ~~Lifecycle engine~~ — DONE (2026-04-05): full lc engine in main.js, regtest verified
-- ~~Inscription architecture~~ — DONE (2026-04-05): iframe + URL hash params, CBOR metadata, mint.js rewritten
-- ~~Thumbnail gradients~~ — N/A: `CUSTOM_GRADIENTS` removed from mint.js as dead code (2026-05-17, never consumed in HTML/metadata output). On-chain pieces use a plain black background; tracker-matched `linear-gradient(90deg, hex1, hex2)` is a tracker-side-only feature (PieceCard thumbnails), not baked into inscriptions.
+Rewritten 2026-08-16. Every claim below was re-verified against the code on that
+date. The previous version of this file asserted a state the code did not match —
+see "Why this file was wrong" at the bottom before trusting any old checkmark.
 
-## Blockchain Integration (both projects)
-- Wire lifespan, decay nudges, and beam hue nudges to actual hash derivation
-- Display real mint status per piece in tracker (currently hardcoded "not yet minted")
-- Update tracker with real inscription IDs, timestamps, hash tails post-mint
+## Current state
 
-## Lifecycle Engine — COMPLETE (2026-04-05)
-All items done and regtest-verified:
-- ~~CBOR decoder~~ — inlined in main.js
-- ~~Network layer~~ — /r/children/self, /r/metadata, /r/blockheight, /r/blockinfo
-- ~~LifecycleState (lc) + initLifecycle()~~ — full boot sequence, graceful fallback outside ord
-- ~~Block polling (60s), lcTick() per-frame~~ — transitions interpolate over one block window
-- ~~Uniforms wired to lc~~ — reanimationProgress, isLiberated, voidProgress
-- ~~Void detection~~ — lcCheckVoid, partner liberation simulation
-- ~~Living collection (lc.collectionDatasets)~~ — fetched from sibling CBOR metadata
-- ~~Frozen partner rule~~ — handled in lcGetPartnerDataset
-- ~~URL hash bootstrap~~ — #idx=N&ht=H&unix=U&hue=D&block=B (replaced window.PIECE)
-- ~~Autonomous new-mint propagation (lcRefreshSiblings)~~ — incremental, called every block poll
-- ~~Fast-forward for pieces loaded years post-mint~~ — lcFastForward()
+**v2 is live.** The same sats have been inscribed on three times, and all three layers
+are permanent:
+1. **v1 engine** `b725884c…i0` — broken. Pieces not live, code missing.
+2. **v2 engine, bad metadata** — the metadata leaked the creator's real name onto
+   chain. Required inscribing again.
+3. **v2 engine, metadata fixed** — **this is what is live now.** Engine
+   `6a53d569…i0` on Nakamoto sat 12425429610917, `--parent v1`, with all 30 pieces
+   (0–29) as its children. IDs in [[tracker]] under "Live On-Chain IDs".
 
-## Inscription Architecture — COMPLETE (2026-04-05)
-- ~~Piece 0~~ — full engine bundle (build.js → index_bundle.html), baked via BAKE: markers
-- ~~Pieces 1-28~~ — thin iframe HTML: `<iframe src="/content/{piece0Id}#{params}">`. MIME issue solved (HTML can't be loaded as script).
-- ~~CBOR metadata~~ — written to dist/ via --json-metadata, verified round-trip in regtest
-- ~~Thumbnail gradient CSS~~ — injected as `<style>` tag in HTML (not JS), visible before WebGL loads
+Earlier layers sit underneath each sat and are bypassed by viewers (latest inscription
+on a sat wins) but remain retrievable. Stacked inscriptions are also the cause of the
+lag and poor appearance on ordinals.com.
 
-## Tracker — Data & Shader Sync
-- health_data_sets.js and decay_logic.js are manual copies — divergence risk if main project data changes
-- Shaders (fragment.glsl, vertex.glsl) are also manual copies — same risk
+**Repo HEAD** is `8ca13e5` — engine v3 plus the `u_time` fix. **Not inscribed.** Live
+v2 corresponds to `4fe0114` (2026-06-20).
 
-## Tracker — Hiro API / Mint Data
-- Mint status badges per piece
-- Block explorer links
-- Actual inscription timestamps and hash tails once minted
+**What live v2 is missing** relative to HEAD (`1c80352` and `cdf1eb6`) — these are real,
+running on chain right now:
+- **Ancestor iteration order.** Live v2 walks `collectionAncestors` immediate-parent-first,
+  so v1's children merge *last* and win the `Map.set` dedup — the v1 originals override
+  the v2 pieces in the living collection. The datasets are identical, so the visual
+  effect should be nil, but the collection is assembled from the superseded layer.
+- **Colour ranking.** `setHSBUniforms` ranks against the baked 30-piece array, not the
+  live collection, so `u_glucose`/`u_potassium`/`u_eGFR` will not re-rank when the
+  collection grows past 30. This one bites at piece 31.
+- **CO2 and Ca phase seeds hardcoded to 0** — those two beams breathe in lockstep across
+  every piece instead of independently.
+- The `u_time` float32 freeze was introduced in v3 and fixed in `cdf1eb6`. It never
+  reached chain; live v2 uses `performance.now()`.
+
+## Outstanding
+
+- **Decide whether a v3 inscription is worth a fourth layer.** Each reinscription stacks
+  another layer on the same sats, which is what degraded appearance and speed on
+  ordinals.com. Weigh that against the colour-ranking issue above, which only matters
+  once the collection passes 30 pieces. Not urgent; do not reinscribe reflexively.
+- **If inscribing: dump and read the actual CBOR before broadcasting.** Wrong metadata
+  is what forced the third inscription and put a real name on chain permanently.
+  Verify the composed inscription's metadata decodes to exactly four keys —
+  `pieceIndex`, `hashTail`, `inscriptionUnix`, `dataset` — and nothing else. Check the
+  inscribe command and any batch file for absolute paths; `/Users/<name>/…` leaks
+  identity. Run mint.js from the repo root so paths stay relative (`dist/…`).
+- **`/r/inscription/self` at `src/main.js:877`** — the last v2-era `/self` call in live
+  code, while `main.js:631` documents why v3 stopped trusting `/self` in ord 0.27.
+  Dev-only in practice (mint.js bakes `block=` on every piece). The `?? 0` fallback is
+  the worse half: a failed lookup becomes block 0, so `cessationBlock` lands ~5.26M and
+  the piece never ceases. Should use the already-resolved `_ownId` and fail loudly.
+- **No verification harness** for age, collection scale, or determinism — the three
+  axes regtest cannot reach. See [[testing]].
+- **Tracker data/shader copies** — `health_data_sets.js`, `decay_logic.js`,
+  `fragment.glsl`, `vertex.glsl` are manual copies in ~/cessation-tracker. Divergence
+  risk on every change to this repo.
+- **Piece count is 30, not 29.** `data/health_data_sets.js` holds 30 datasets (pieces
+  0–29) since `28d44f8` added piece 29. `mint.js:14`, `MEMORY.md`, and
+  `inscription_architecture.md` still say 29 in places. Cosmetic in docs, but it makes
+  every "all 29 pieces" claim ambiguous about whether piece 29 is included.
+
+## Verified true (re-checked 2026-08-16)
+
+Each of these was confirmed present in `src/main.js` at HEAD:
+- CBOR decoder inlined (`cborDecode`, line 227)
+- `initLifecycle()` with graceful fallback outside ord (line 869)
+- Block polling every 60s (`setInterval(lcPoll, 60000)`, line 918) and `lcTick()`
+  per frame (line 1187)
+- Lifecycle uniforms wired: `u_reanimationProgress`, `u_isLiberated`, `u_voidProgress`
+- Void detection: `lcCheckVoid` (764), `lcIsPartnerLiberated` (740)
+- Living collection from sibling CBOR metadata (`lcRefreshSiblings`, 676)
+- Fast-forward for pieces loaded years post-mint (`lcFastForward`, 844)
+- Engine is `text/javascript`, all pieces `text/html`, black background
+- Dev console API stripped from the bundle via DEV_START/DEV_END
+- No Brotli compression
+- Sats sourced and held; `PIECE_SATS` filled in mint.js
+
+## Why this file was wrong
+
+The failure mode was not fabricated checkmarks — it was checkmarks that were true when
+written, against code that was then rewritten underneath them, with nobody returning to
+update the entry. Confirmed cases:
+
+- **"Autonomous new-mint propagation — incremental, called every block poll."** The
+  incremental machinery (`datasetByIdx`, `siblingIdMap`, `knownSiblingCount`) exists in
+  exactly two commits in all of history: one adding it, one removing it. It was gone
+  well before inscription. The real code refetches every child's metadata from every
+  ancestor, on every 10th poll (`_siblingPollCount % 10`, line 840) — not incremental,
+  not every block. `MEMORY.md` repeated the same claim; corrected 2026-08-16.
+- **"URL hash bootstrap `#idx=…` (replaced window.PIECE)."** Neither mechanism is live.
+  `window.PIECE` appears in zero lines at HEAD; the URL hash path sits inside
+  DEV_START/DEV_END and is stripped from the bundle. On chain, piece params come from
+  `<script>` tag attributes — which `MEMORY.md` states correctly under
+  "`document.currentScript` bootstrap"; only this file was stale.
+- **"Pieces 1-28 — thin iframe HTML `<iframe src=…>`."** There is no iframe. Pieces are
+  `<script src>` with baked attributes (`mint.js:229`). Also 1–28 omits piece 29.
+- **"Piece 0 — full engine bundle (build.js → index_bundle.html)."** `build.js` writes
+  `index_bundle.js`. Piece 0 is a child of the engine like every other piece.
+- **"Network layer — /r/children/self."** v3 calls
+  `/r/children/<ancestor>/inscriptions/<page>`.
+- **"Thumbnail gradient CSS — injected as `<style>` tag in HTML."** Contradicted by an
+  entry in this same file saying `CUSTOM_GRADIENTS` was "never consumed in HTML/metadata
+  output." `mint.js` contains zero gradient references. This one was checked off for
+  output that never existed.
+- **"regtest verified" (2026-04-05 / 2026-04-11)** attaches to the iframe architecture,
+  which was later replaced. The architecture actually inscribed was never covered by the
+  regtest runs those checkmarks point at.
+
+**Rule going forward:** a checkmark records what the code did on a date. When code is
+rewritten, the entry is re-verified or struck — not left standing. Before any
+inscription run, re-verify this file against the code rather than trusting it.
