@@ -234,4 +234,75 @@ for (const n of [BAKED, BAKED + 1, 40, 100]) {
   }
 }
 
+// ── 5. Karma clearance ────────────────────────────────────────
+// Burden released per rebirth is the piece's own eGFR. Three properties matter:
+// it is bounded, it is monotonic in eGFR, and replaying history from birth must
+// land exactly where incremental polling would — otherwise a page reload could
+// change whether a piece has liberated.
+{
+  const ctx = 'clearance';
+  const { karmaClearanceRate, remainingKarma, KARMA_CLEARANCE_K, computeKarma: ck } =
+    liftModule('data/decay_logic.js',
+      ['karmaClearanceRate', 'remainingKarma', 'KARMA_CLEARANCE_K', 'computeKarma']);
+
+  for (const n of [BAKED, 60]) {
+    const collection = makeCollection(n);
+    const mm = computeMinMaxValues(collection);
+    const rates = collection.map(d => karmaClearanceRate(d, mm));
+
+    for (const rate of rates) r.inRange(`${ctx} n=${n}`, 'rate', rate, 0, KARMA_CLEARANCE_K);
+
+    // The lowest eGFR in the collection clears nothing; the highest clears the
+    // full constant. That is the mechanism, not an accident of tuning.
+    const egfrs = collection.map(d => d.labs.eGFR);
+    const lowest = rates[egfrs.indexOf(Math.min(...egfrs))];
+    const highest = rates[egfrs.indexOf(Math.max(...egfrs))];
+    r.checks++;
+    if (Math.abs(lowest) > 1e-12) r.fail(`${ctx} n=${n}`, `lowest eGFR clears ${lowest}, expected 0 — it must be unable to release its own burden`);
+    r.checks++;
+    if (Math.abs(highest - KARMA_CLEARANCE_K) > 1e-12) r.fail(`${ctx} n=${n}`, `highest eGFR clears ${highest}, expected ${KARMA_CLEARANCE_K}`);
+
+    // Monotonic: more clearance capacity never means slower release.
+    const paired = collection.map((d, i) => ({ e: d.labs.eGFR, rate: rates[i] }))
+                             .sort((a, b) => a.e - b.e);
+    for (let i = 1; i < paired.length; i++) {
+      r.checks++;
+      if (paired[i].rate < paired[i - 1].rate - 1e-12) {
+        r.fail(`${ctx} n=${n}`, `clearance not monotonic in eGFR: ${paired[i - 1].e}->${paired[i - 1].rate} vs ${paired[i].e}->${paired[i].rate}`);
+      }
+    }
+
+    // Replay determinism. Path A applies every cycle in one pass (lcFastForward).
+    // Path B applies them one at a time across separate calls (lcPoll). They must
+    // agree exactly — the engine never stores `uncleared`, it recomputes it.
+    const own = collection[4], partner = collection[5];
+    const CYCLES = 12;
+    let dsA = own, unclearedA = 1;
+    for (let c = 0; c < CYCLES; c++) {
+      dsA = blendDatasets(dsA, partner, mm);
+      unclearedA *= (1 - karmaClearanceRate(dsA, mm));
+    }
+    let dsB = own, unclearedB = 1;
+    for (let c = 0; c < CYCLES; c++) {
+      const step = (d, u) => {
+        const blended = blendDatasets(d, partner, mm);
+        return [blended, u * (1 - karmaClearanceRate(blended, mm))];
+      };
+      [dsB, unclearedB] = step(dsB, unclearedB);
+    }
+    r.checks++;
+    if (unclearedA !== unclearedB) {
+      r.fail(`${ctx} n=${n}`, `replay diverges: fast-forward ${unclearedA} vs incremental ${unclearedB} — a reload would change the piece's fate`);
+    }
+    r.checks++;
+    if (remainingKarma(dsA, unclearedA, mm) !== ck(dsA, mm) * unclearedA) {
+      r.fail(`${ctx} n=${n}`, 'remainingKarma is not karma x uncleared');
+    }
+
+    // Burden must actually fall over rebirths, or nothing ever liberates.
+    r.checks++;
+    if (!(unclearedA < 1)) r.fail(`${ctx} n=${n}`, `after ${CYCLES} rebirths nothing was cleared (uncleared ${unclearedA})`);
+  }
+}
+
 process.exit(r.print('Scale — collection growth') ? 0 : 1);

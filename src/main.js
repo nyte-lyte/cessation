@@ -2,7 +2,7 @@
 // main.js
 // ---------------------------------------------
 import { healthDataSets, minMaxValues } from "../data/health_data_sets.js";
-import { blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence, computeMinMaxValues } from "../data/decay_logic.js";
+import { blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence, computeMinMaxValues, karmaClearanceRate, remainingKarma } from "../data/decay_logic.js";
 
 // minMaxValues starts from the baked-in mint dataset, then is refreshed in place from
 // the full sibling collection as it's discovered/grows — the collection is a living
@@ -514,8 +514,9 @@ async function init() {
   const liberationThreshold = computeLiberationThreshold(healthDataSets, minMaxValues);
   window.getKarma = (idxA, idxB) => {
     const blended = blendDatasets(healthDataSets[idxA], healthDataSets[idxB], minMaxValues);
-    const karma = computeKarma(blended, minMaxValues);
-    console.log(`Pair (${idxA}, ${idxB}) karma: ${karma.toFixed(4)} | threshold: ${liberationThreshold.toFixed(4)} | liberated: ${karma < liberationThreshold}`);
+    const rate = karmaClearanceRate(blended, minMaxValues);
+    const karma = remainingKarma(blended, 1 - rate, minMaxValues);
+    console.log(`Pair (${idxA}, ${idxB}) after one rebirth — clears ${(rate * 100).toFixed(1)}% | remaining karma: ${karma.toFixed(4)} | threshold: ${liberationThreshold.toFixed(4)} | liberated: ${karma < liberationThreshold}`);
     return karma;
   };
   window.getBlend = (idxA, idxB) => {
@@ -546,6 +547,7 @@ async function init() {
     isLiberated:          false,
     voidProgress:         0.0,
     collectionDatasets:   [],      // [{id, pieceIndex, dataset, hashTail, inscriptionUnix}]
+    uncleared:            1,       // share of karma not yet released; 1 = nothing cleared yet
     _siblingPollCount:    0,
     ownDataset:           null,    // own dataset fetched from /r/metadata/<ownId> at boot
     collectionRoot:       null,    // engine inscription id whose children list is the collection
@@ -767,6 +769,9 @@ async function init() {
   async function lcIsPartnerLiberated(pd, pInscriptionHeight) {
     let pCessationBlock = pInscriptionHeight + Math.round(lifespanYearsFromHashDigits(pd.hashTail) * BLOCKS_PER_YEAR);
     let pCycleDs = pd.dataset;
+    // The partner clears burden across its own rebirths at its own rate, exactly
+    // as this piece does. Replayed from the partner's birth, not stored.
+    let pUncleared = 1;
     const myDs = lcCycleDataset();
     const collection = lcEffectiveCollection();
     // Loop exits via: return false (partner alive), return true (partner liberated),
@@ -775,7 +780,8 @@ async function init() {
       if (lc.currentBlockHeight < pCessationBlock) return false; // partner still alive in this cycle
       const blended   = blendDatasets(pCycleDs, myDs, minMaxValues);
       const threshold = computeLiberationThreshold(collection, minMaxValues);
-      const karma     = computeKarma(blended, minMaxValues);
+      pUncleared     *= (1 - karmaClearanceRate(blended, minMaxValues));
+      const karma     = remainingKarma(blended, pUncleared, minMaxValues);
       if (karma < threshold) return true; // partner liberated
       // Partner reanimates — fetch next cessation block hash to derive new lifespan
       pCycleDs = blended;
@@ -840,12 +846,16 @@ async function init() {
       }
       const blended    = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold  = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
-      const karma      = computeKarma(blended, minMaxValues);
+      // This rebirth clears a share of the burden, at the piece's own kidney
+      // clearance rate. lc.uncleared carries across cycles and is never stored —
+      // lcFastForward replays it from birth, so it stays chain-derivable.
+      lc.uncleared    *= (1 - karmaClearanceRate(blended, minMaxValues));
+      const karma      = remainingKarma(blended, lc.uncleared, minMaxValues);
 
       if (karma < threshold) {
         lc.isLiberated  = true;
         lc.cycleDataset = blended;
-        console.log(`[lc] LIBERATED — karma ${karma.toFixed(4)} < threshold ${threshold.toFixed(4)}`);
+        console.log(`[lc] LIBERATED — remaining karma ${karma.toFixed(4)} < threshold ${threshold.toFixed(4)} after ${lc.cycleCount} cycle(s)`);
         await lcCheckVoid();
       } else {
         lc.reanimationTriggerMs = Date.now();
@@ -880,7 +890,8 @@ async function init() {
       }
       const blended   = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
-      const karma     = computeKarma(blended, minMaxValues);
+      lc.uncleared   *= (1 - karmaClearanceRate(blended, minMaxValues));
+      const karma     = remainingKarma(blended, lc.uncleared, minMaxValues);
       if (karma < threshold) { lc.isLiberated = true; lc.cycleDataset = blended; break; }
       lc.cycleCount++;
       lc.cycleDataset = blended;
@@ -1080,6 +1091,54 @@ async function init() {
   };
   window.stopPreview = () => {
     params.previewSpeedYPS = 0;
+  };
+
+  // previewPairing(cycles) — actually render the post-reanimation piece.
+  //
+  // setReanimation() only ramps the transition uniform; the piece underneath is
+  // still its own dataset. What a piece BECOMES after pairing lives in
+  // lc.cycleDataset, which only lcPoll/lcFastForward set — and neither runs
+  // outside ord. This mirrors lcFastForward's loop exactly (blend own with
+  // partner, karma against the live threshold, repeat) so what you see here is
+  // what the chain will do.
+  //
+  //   previewPairing()    → one cycle: the piece after its first reanimation
+  //   previewPairing(5)   → five cycles: how a pair converges late in life
+  //   clearPairing()      → back to the original dataset
+  window.previewPairing = (cycles = 1) => {
+    const partnerIdx = getPartnerIndex(currentDataSetIndex);
+    if (partnerIdx < 0) {
+      console.warn('Piece 0 is genesis — it liberates directly, with no partner to blend with.');
+      return null;
+    }
+    const partnerDs = lcGetPartnerDataset(partnerIdx);
+    if (!partnerDs) {
+      console.warn(`Partner ${partnerIdx} has no dataset — it is not in the collection yet. A piece cannot reanimate before its partner exists.`);
+      return null;
+    }
+    for (let i = 1; i <= Math.max(1, Number(cycles)); i++) {
+      const blended   = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
+      const threshold = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
+      const rate      = karmaClearanceRate(blended, minMaxValues);
+      lc.uncleared   *= (1 - rate);
+      const karma     = remainingKarma(blended, lc.uncleared, minMaxValues);
+      lc.cycleDataset = blended;
+      const liberates = karma < threshold;
+      console.log(`cycle ${i}: piece ${currentDataSetIndex} ↔ ${partnerIdx} | cleared ${(rate * 100).toFixed(1)}% this rebirth (${(lc.uncleared * 100).toFixed(1)}% of burden remains) | karma ${karma.toFixed(4)} vs threshold ${threshold.toFixed(4)} | ${liberates ? 'LIBERATES — this is the final cycle' : 'reanimates again'}`);
+      if (liberates) {
+        isLiberated = 1.0;
+        const asked = Math.max(1, Number(cycles));
+        if (i < asked) console.log(`(stopped at cycle ${i} of ${asked} — the piece has liberated, so later cycles do not exist. Try a piece with more burden to see a longer run.)`);
+        break;
+      }
+    }
+    return lc.cycleDataset;
+  };
+  window.clearPairing = () => {
+    lc.cycleDataset = null;
+    lc.uncleared    = 1;
+    isLiberated = BAKED_IS_LIBERATED;
+    console.log('Pairing preview cleared — rendering the original dataset.');
   };
   // DEV_END
 

@@ -80,6 +80,41 @@ function computeKarma(dataset, minMaxValues) {
   return nQTc * 0.35 + nCreat * 0.25 + (1 - nEGFR) * 0.20 + nGlucose * 0.15 + nVentRate * 0.05;
 }
 
+// Karma cleared per rebirth = the piece's own kidney clearance.
+//
+// eGFR is the glomerular filtration rate: the rate at which the kidneys clear
+// accumulated waste from the blood. Karma is accumulated burden. So the rate a
+// piece releases burden across rebirths is not a rule invented for the lifecycle
+// — it is the piece's own clearance function, read from the same lab value that
+// already drives brightness, normalised against the live collection and
+// recomputed every cycle from the piece's current (blended, drifted) dataset.
+//
+// Consequences, all of which fall out of the data rather than being legislated:
+//   - Healthy kidneys release burden quickly and reach liberation in few cycles.
+//   - The lowest eGFR in the collection clears 0% — such a piece cannot release
+//     its own burden at all, and only ever arrives by blending toward its partner.
+//   - As the creator's kidney function declines, later pieces take longer.
+//
+// KARMA_CLEARANCE_K is the one chosen constant: it sets the tempo, not the
+// ordering. At 0.05 the collection liberates across roughly 1–16 cycles at
+// mature collection size — centuries apart, nothing bunched. See
+// test/liberation_model.mjs to re-derive this after any change.
+const KARMA_CLEARANCE_K = 0.05;
+
+function karmaClearanceRate(dataset, minMaxValues) {
+  return KARMA_CLEARANCE_K * normalize(
+    dataset.labs.eGFR, minMaxValues.eGFR.min, minMaxValues.eGFR.max
+  );
+}
+
+// Burden remaining after a rebirth: the karma of the piece as it now is, less
+// everything cleared across every rebirth so far. `uncleared` starts at 1 and is
+// carried forward by the caller — it is never stored, only replayed, so it stays
+// derivable from chain state alone.
+function remainingKarma(dataset, uncleared, minMaxValues) {
+  return computeKarma(dataset, minMaxValues) * uncleared;
+}
+
 // Chronological drift — smooth interpolation through the real health timeline.
 // Piece starts at its own snapshot and drifts forward proportionally to collection size.
 // Drift span = 20% of collection size, growing as new pieces are added.
@@ -194,4 +229,4 @@ function calculateHealthIndex(data, minMaxValues) {
   );
 }
 
-export { normalize, blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence, calculateHealthIndex, computeMinMaxValues };
+export { normalize, blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence, calculateHealthIndex, computeMinMaxValues, karmaClearanceRate, remainingKarma, KARMA_CLEARANCE_K };

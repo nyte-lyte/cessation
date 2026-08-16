@@ -28,9 +28,11 @@ export function liftModule(relPath, names) {
   src = src.replace(/^export\s*\{[^}]+\};?\s*$/gm, '');
   const factory = new Function(`${src}\nreturn { ${names.join(', ')} };`);
   const lifted = factory();
+  // Constants are liftable too (KARMA_CLEARANCE_K), so require only that the
+  // binding exists — an undefined means the name is wrong or has been removed.
   for (const n of names) {
-    if (typeof lifted[n] !== 'function') {
-      throw new Error(`harness: ${n}() not found in ${relPath}`);
+    if (lifted[n] === undefined) {
+      throw new Error(`harness: ${n} not found in ${relPath}`);
     }
   }
   return lifted;

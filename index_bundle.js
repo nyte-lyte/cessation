@@ -513,6 +513,18 @@ function computeKarma(dataset, minMaxValues) {
   return nQTc * 0.35 + nCreat * 0.25 + (1 - nEGFR) * 0.20 + nGlucose * 0.15 + nVentRate * 0.05;
 }
 
+const KARMA_CLEARANCE_K = 0.05;
+
+function karmaClearanceRate(dataset, minMaxValues) {
+  return KARMA_CLEARANCE_K * normalize(
+    dataset.labs.eGFR, minMaxValues.eGFR.min, minMaxValues.eGFR.max
+  );
+}
+
+function remainingKarma(dataset, uncleared, minMaxValues) {
+  return computeKarma(dataset, minMaxValues) * uncleared;
+}
+
 function getAgedDataset(startIdx, lifeFraction, allDatasets, minMaxValues) {
   const span    = allDatasets.length * 0.20;
   const maxSpan = Math.max(0, allDatasets.length - 1 - startIdx);
@@ -1932,6 +1944,7 @@ async function init() {
     isLiberated:          false,
     voidProgress:         0.0,
     collectionDatasets:   [],
+    uncleared:            1,
     _siblingPollCount:    0,
     ownDataset:           null,
     collectionRoot:       null,
@@ -2097,6 +2110,8 @@ async function init() {
   async function lcIsPartnerLiberated(pd, pInscriptionHeight) {
     let pCessationBlock = pInscriptionHeight + Math.round(lifespanYearsFromHashDigits(pd.hashTail) * BLOCKS_PER_YEAR);
     let pCycleDs = pd.dataset;
+
+    let pUncleared = 1;
     const myDs = lcCycleDataset();
     const collection = lcEffectiveCollection();
 
@@ -2104,7 +2119,8 @@ async function init() {
       if (lc.currentBlockHeight < pCessationBlock) return false;
       const blended   = blendDatasets(pCycleDs, myDs, minMaxValues);
       const threshold = computeLiberationThreshold(collection, minMaxValues);
-      const karma     = computeKarma(blended, minMaxValues);
+      pUncleared     *= (1 - karmaClearanceRate(blended, minMaxValues));
+      const karma     = remainingKarma(blended, pUncleared, minMaxValues);
       if (karma < threshold) return true;
 
       pCycleDs = blended;
@@ -2164,12 +2180,14 @@ async function init() {
       }
       const blended    = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold  = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
-      const karma      = computeKarma(blended, minMaxValues);
+
+      lc.uncleared    *= (1 - karmaClearanceRate(blended, minMaxValues));
+      const karma      = remainingKarma(blended, lc.uncleared, minMaxValues);
 
       if (karma < threshold) {
         lc.isLiberated  = true;
         lc.cycleDataset = blended;
-        console.log(`[lc] LIBERATED — karma ${karma.toFixed(4)} < threshold ${threshold.toFixed(4)}`);
+        console.log(`[lc] LIBERATED — remaining karma ${karma.toFixed(4)} < threshold ${threshold.toFixed(4)} after ${lc.cycleCount} cycle(s)`);
         await lcCheckVoid();
       } else {
         lc.reanimationTriggerMs = Date.now();
@@ -2203,7 +2221,8 @@ async function init() {
       }
       const blended   = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
-      const karma     = computeKarma(blended, minMaxValues);
+      lc.uncleared   *= (1 - karmaClearanceRate(blended, minMaxValues));
+      const karma     = remainingKarma(blended, lc.uncleared, minMaxValues);
       if (karma < threshold) { lc.isLiberated = true; lc.cycleDataset = blended; break; }
       lc.cycleCount++;
       lc.cycleDataset = blended;
