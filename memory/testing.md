@@ -83,11 +83,15 @@ Every bug that has shipped so far lived in one of these three gaps. See
    carries and whether another is genuinely worth it.
 8. **CBOR number fidelity.** On regtest, decode `/r/metadata/<id>` for several pieces and
    compare every ecg/labs value *numerically* against the baked dataset — not by eye.
-   Dev and chain render identically at launch **only if these round-trip exactly**
-   (verified: 1,800 rendered values match across all pieces and life stages when the
-   numbers are preserved). If CBOR encodes any value at reduced precision, percentile
-   ranks can flip and a piece will not look on chain the way it looks in dev. This is
-   the one assumption behind "what you see in dev is what launches."
+   If CBOR encodes any value at reduced precision, percentile ranks flip and a piece
+   renders differently from the same data in dev.
+
+   **Note (2026-08-16): dev and chain no longer render identically at launch, by
+   design.** That equivalence held only while the engine seeded its collection from
+   the baked array. It now builds from what is on chain, so during the inscription run
+   a piece renders against however many siblings exist — dev, with all datasets baked,
+   always shows the finished state. Compare dev against a piece on a *complete* chain
+   collection, not against one mid-run.
 
 ## What actually reaches the chain
 

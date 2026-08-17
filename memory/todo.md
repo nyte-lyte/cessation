@@ -65,6 +65,32 @@ byte-identical.
 - `8f49340` — **karma clearance at the piece's own eGFR**, plus `previewPairing()`
   dev helper. See [[nirvana]].
 
+## Living collection — fixed 2026-08-16
+
+**The first 30 pieces could not affect each other, and that was the whole point of the
+project.** `_lcMergedEntries` seeded the collection from the baked `healthDataSets`
+array, which the engine carries compiled in. So piece 0, alone on chain, already knew
+pieces 1–29. Inscribing a sibling overwrote a baked entry with an identical one:
+percentiles never moved, min/max never moved, nothing re-rendered. The collection only
+began to live once inscriptions went *past* the baked set — piece 30 onward.
+
+Now the collection is strictly what is on chain once discovery succeeds
+(`lc.collectionResolved`). Baked data is fallback only: dev, and the frames before the
+first sibling fetch returns. Verified against the real datasets: **381 of 435
+piece-observations change when a sibling arrives** during a 30-piece run.
+
+Consequences accepted deliberately:
+- **Piece 0 alone is a collection of one.** No ranking exists, so every percentile is
+  the midpoint — it renders neutral until piece 1 exists. `percentile()` in main.js and
+  `normalize()` gained guards for this; a one-piece collection used to be a
+  divide-by-zero producing NaN hue/sat/bri, unreachable only because of the baked seed.
+- **The early run lurches, the late run is gentle.** With 2–3 pieces a rank can only be
+  0, 0.5 or 1, so piece 0 swings ~180° of hue when piece 1 lands, stays pinned while it
+  holds the collection's extreme, and settles to 1–4° per arrival past ~12 pieces.
+  **Decision: leave it.** Identity emerging as there is something to be distinct from.
+- Dev and chain no longer render identically mid-run. Dev has everything baked, so it
+  always shows the finished state. See [testing.md](testing.md).
+
 ## Outstanding — decisions, before any inscribing
 
 - **Tail convergence — UNDECIDED.** `getAgedDataset` clamps drift at the end of the

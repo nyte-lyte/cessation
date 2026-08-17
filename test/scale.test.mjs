@@ -93,9 +93,13 @@ function drawPipeline(r, ctx, ownPieceIndex, collection, mm) {
 }
 
 // ── 1. Steady state and growth ────────────────────────────────
-// 30 is the collection as inscribed. 31 is the case that broke v1. 40 and 100
-// are sustained growth — a new piece roughly every three months.
-for (const n of [BAKED, BAKED + 1, 40, 100]) {
+// 1 and 2 are the inscription run itself: the collection is only what is on chain,
+// so piece 0 alone IS a collection of one. These were previously dismissed as
+// unreachable — true only while the engine seeded from the baked array, which
+// defeated the living collection for the whole initial run. They are live now.
+// 30 is the run complete. 31 is the case that broke v1. 40 and 100 are sustained
+// growth — a new piece roughly every three months.
+for (const n of [1, 2, 3, BAKED, BAKED + 1, 40, 100]) {
   const collection = makeCollection(n);
   const mm = computeMinMaxValues(collection);
   const ctxBase = `n=${n}`;

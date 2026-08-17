@@ -63,9 +63,12 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+// Midpoint when the range is degenerate — matches decay_logic.js's normalize().
+// A one-piece collection makes every min equal its max, so this is now a live path
+// rather than a theoretical one, and the two implementations must agree.
 function normalize(value, min, max) {
-  if (max - min === 0) return 0;
-  return (value - min) / (max - min); // ← FIXED
+  if (max - min === 0) return 0.5;
+  return (value - min) / (max - min);
 }
 
 function wrapDeg(h) {
@@ -548,6 +551,9 @@ async function init() {
     voidProgress:         0.0,
     collectionDatasets:   [],      // [{id, pieceIndex, dataset, hashTail, inscriptionUnix}]
     uncleared:            1,       // share of karma not yet released; 1 = nothing cleared yet
+    collectionResolved:   false,   // true once a sibling fetch has succeeded — from
+                                   // then on the collection is what is on chain, and
+                                   // the baked array is no longer consulted
     _siblingPollCount:    0,
     ownDataset:           null,    // own dataset fetched from /r/metadata/<ownId> at boot
     collectionRoot:       null,    // engine inscription id whose children list is the collection
@@ -585,15 +591,32 @@ async function init() {
     return healthDataSets[currentDataSetIndex];
   }
 
-  // Merged entries from baked array + live collection + own piece, deduped by
-  // pieceIndex (later sources override earlier), sorted by pieceIndex.
-  // Returns DENSE array of datasets — safe to iterate. Position N in the returned
-  // array is NOT the same as pieceIndex N when there are gaps; use lcOwnPosition()
-  // to get this piece's index in the sorted dense list.
+  // The living collection is what this piece can actually SEE on chain — the
+  // siblings inscribed so far, plus itself. Not the baked array.
+  //
+  // This matters more than it looks. The engine carries every dataset compiled in,
+  // so seeding the collection from that array meant piece 0 already knew pieces
+  // 1..29 before they existed. Inscribing a sibling then taught the engine nothing:
+  // it overwrote a baked entry with an identical one, percentiles never moved, and
+  // the first N pieces could not affect each other at all. The collection only
+  // started living after the baked set was exhausted. That defeats the whole idea.
+  //
+  // Now: once discovery has succeeded (`lc.collectionResolved`), only discovered
+  // datasets count. Piece 0 alone is a collection of one. Piece 1 arrives and both
+  // re-rank. Each inscription visibly moves every piece already on chain.
+  //
+  // The baked array remains the fallback for two cases, both necessary:
+  //   - dev / outside ord, where there is no chain to discover anything from
+  //   - the moments before the first sibling fetch returns, so the piece renders
+  //     immediately instead of holding a blank frame
+  // Returns a DENSE array — position N is NOT pieceIndex N when there are gaps,
+  // so use lcOwnPosition() for this piece's slot.
   function _lcMergedEntries() {
     const byIndex = new Map();
-    for (let i = 0; i < healthDataSets.length; i++) {
-      byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
+    if (!lc.collectionResolved) {
+      for (let i = 0; i < healthDataSets.length; i++) {
+        byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
+      }
     }
     for (const d of lc.collectionDatasets) {
       if (typeof d.pieceIndex === 'number' && d.dataset) {
@@ -602,6 +625,17 @@ async function init() {
     }
     if (lc.ownDataset) {
       byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+    }
+    // A collection can never be empty — a piece is always at least itself.
+    if (byIndex.size === 0) {
+      const ownBaked = healthDataSets[currentDataSetIndex];
+      if (ownBaked) {
+        byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: ownBaked });
+      } else {
+        for (let i = 0; i < healthDataSets.length; i++) {
+          byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
+        }
+      }
     }
     return [...byIndex.values()].sort((a, b) => a.pieceIndex - b.pieceIndex);
   }
@@ -734,8 +768,13 @@ async function init() {
     }
     if (fetched.length > 0) {
       lc.collectionDatasets = fetched;
+      // Discovery succeeded: from here the collection is strictly what is on chain.
+      // Set before refreshing min/max so those are computed from the live set, not
+      // the baked one.
+      lc.collectionResolved = true;
       refreshMinMaxValues(lcEffectiveCollection());
       recomputePartnerInheritedHue();
+      console.log(`[lc] collection resolved — ${fetched.length} piece(s) on chain`);
     }
   }
 
@@ -1524,7 +1563,12 @@ async function init() {
   // DEV_END
 }
 
+// A collection of one has no ranking to give — genesis alone on chain has nothing
+// to be distinct from. Return the midpoint rather than dividing by zero.
+// (inscribe.js has always had this guard; main.js did not, because the baked seed
+// made a one-piece collection unreachable. It is reachable now.)
 function percentile(value, sortedArray) {
+  if (sortedArray.length < 2) return 0.5;
   const rank = sortedArray.filter((v) => v < value).length;
   return rank / (sortedArray.length - 1); // ensures [0, 1] range
 }

@@ -1945,6 +1945,8 @@ async function init() {
     voidProgress:         0.0,
     collectionDatasets:   [],
     uncleared:            1,
+    collectionResolved:   false,
+
     _siblingPollCount:    0,
     ownDataset:           null,
     collectionRoot:       null,
@@ -1975,8 +1977,10 @@ async function init() {
 
   function _lcMergedEntries() {
     const byIndex = new Map();
-    for (let i = 0; i < healthDataSets.length; i++) {
-      byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
+    if (!lc.collectionResolved) {
+      for (let i = 0; i < healthDataSets.length; i++) {
+        byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
+      }
     }
     for (const d of lc.collectionDatasets) {
       if (typeof d.pieceIndex === 'number' && d.dataset) {
@@ -1985,6 +1989,17 @@ async function init() {
     }
     if (lc.ownDataset) {
       byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+    }
+
+    if (byIndex.size === 0) {
+      const ownBaked = healthDataSets[currentDataSetIndex];
+      if (ownBaked) {
+        byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: ownBaked });
+      } else {
+        for (let i = 0; i < healthDataSets.length; i++) {
+          byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
+        }
+      }
     }
     return [...byIndex.values()].sort((a, b) => a.pieceIndex - b.pieceIndex);
   }
@@ -2084,8 +2099,11 @@ async function init() {
     }
     if (fetched.length > 0) {
       lc.collectionDatasets = fetched;
+
+      lc.collectionResolved = true;
       refreshMinMaxValues(lcEffectiveCollection());
       recomputePartnerInheritedHue();
+      console.log(`[lc] collection resolved — ${fetched.length} piece(s) on chain`);
     }
   }
 
@@ -2675,6 +2693,7 @@ async function init() {
 }
 
 function percentile(value, sortedArray) {
+  if (sortedArray.length < 2) return 0.5;
   const rank = sortedArray.filter((v) => v < value).length;
   return rank / (sortedArray.length - 1);
 }
