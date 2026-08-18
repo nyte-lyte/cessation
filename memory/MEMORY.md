@@ -264,6 +264,17 @@ Full details in `memory/tracker.md`.
 - Homepage: live random piece embed (iframe) left text + right piece layout
 - Nav: nytelyte · Projects · About · Contact (Resend contact form → hillyerjess@gmail.com)
 - "View collection" links to cessation-tracker.vercel.app/piece/0
+- **Engine copy**: `public/cessation-engine.js` is a full bundle copy — byte-identical to
+  `index_bundle.js` as of `0d410a6` (2026-08-17). Was a pre-v2 fossil before that, so the
+  homepage piece restarted its motion on every load.
+- **`public/piece0.html` forwards query params onto the engine's `<script>` tag**
+  (`t/ht/unix/hue/block`) via `document.write` — the same mechanism inscribed pieces use.
+  Do not revert it to URL-hash params: `build.js` strips the dev block that read those,
+  so the shipped bundle ignores the hash and every piece would render as the baked
+  default. `document.write` is required so `document.currentScript` resolves; an
+  appended script executes async with `currentScript` null.
+- Homepage copy updated 2026-08-17; Discord invite replaced in `contact` and `info`
+  (the old one had expired — Discord invites default to 7 days).
 
 ## User Preferences
 - Communication: concise, direct, no emojis

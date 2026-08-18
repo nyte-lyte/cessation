@@ -67,6 +67,16 @@ Reference (do NOT link from the tracker — these are historical layers undernea
 - v1 engine (broken, on Nakamoto sat 12425429610918): `b725884c8a6d63c2499c0f86b8e5863115808f8998697ba23abc0194b8c3323ei0`
 - v1 original piece IDs (pieces 0–29, baked-data only, no live collection): captured in `memory/inscription_architecture.md`
 
+## Engine sync (2026-08-17, `bc5ccc9`)
+- All four copied files byte-identical to cessation. `decay_logic.d.ts` pins signatures.
+- `PieceViewer` now matches the engine's time base: `u_time` counts from the piece's
+  inscription (wrapped at 200pi), beams pre-advance from birth, CO2/Ca phases
+  hash-seeded rather than 0. Pieces no longer restart their motion on every page load.
+- Analytics reports **cycles to liberation** per pair, simulated as the engine does it,
+  not "above/below threshold". The old binary label implied "never liberates" and was
+  wrong for 10 of 15 pairs once karma clearance is applied. Its local duplicate of
+  `computeMinMaxValues` is deleted — that duplicate is how the drift started.
+
 ## Gotchas
 - Root-level app/ (from create-next-app) conflicts with src/app/ — REMOVED root app/
 - turbopack.root must be set to __dirname to fix workspace root warning

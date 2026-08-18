@@ -126,9 +126,21 @@ Consequences accepted deliberately:
 - **Not yet proven on any chain:** boot ordering, batched sibling fetch, and the block
   height fallback all no-op in dev because `/r/*` 404s immediately. Dev verified the
   render path and the init-time fix only.
-- **Tracker data/shader copies** — `health_data_sets.js`, `decay_logic.js`,
-  `fragment.glsl`, `vertex.glsl` are manual copies in ~/cessation-tracker. Divergence
-  risk on every change to this repo.
+- **Downstream copies of the engine — resynced 2026-08-17, still manual.** Both other
+  repos hold copies and neither updates itself. After any change to `data/`,
+  `src/shaders/` or `index_bundle.js`, check both:
+  - `~/cessation-tracker` — `src/data/health_data_sets.js`, `src/data/decay_logic.js`,
+    `src/shaders/{fragment,vertex}.glsl`. All four byte-identical as of `bc5ccc9`.
+    `src/data/decay_logic.d.ts` now pins the function signatures, so a future sync that
+    changes them fails the build instead of passing arguments into the wrong parameter —
+    which nearly happened: `applyCollectionInfluence` gained `minMaxValues` in the
+    fourth position, exactly where the old copy took `influence`.
+  - `~/nytelyte` — `public/cessation-engine.js`, a full bundle copy, byte-identical to
+    `index_bundle.js` as of `0d410a6`. Note `public/piece0.html` forwards query params
+    onto the engine's `<script>` tag; it must not go back to URL-hash params, since
+    `build.js` strips the dev block that read them.
+  - Verify with:
+    `for f in ...; do diff -q <tracker copy> <cessation source>; done`
 - **Never hardcode a piece count in docs or comments.** The collection has no fixed
   size — a new piece is inscribed whenever new ECG/lab data arrives, so any count is stale
   within about three months. The old "all 29 pieces" phrasing dated from when 29 was
