@@ -397,25 +397,12 @@ async function init() {
   const uNirvanaRGBLoc   = gl.getUniformLocation(program, "u_nirvanaRGB");
   const uPartnerRGBLoc   = gl.getUniformLocation(program, "u_partnerRGB");
 
-  // Pre-compute BUN/Creatinine ratio winsorized range across all datasets (once)
-  const allBunCreatRatios = healthDataSets
-    .map((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine))
-    .slice()
-    .sort((a, b) => a - b);
-  const bunCreatP05 = allBunCreatRatios[Math.floor(0.05 * (allBunCreatRatios.length - 1))];
-  const bunCreatP95 = allBunCreatRatios[Math.ceil(0.95 * (allBunCreatRatios.length - 1))];
-  const sortedQtcValues = healthDataSets.map((d) => d.ecg.qtcInterval).sort((a, b) => a - b);
-  const sortedPAxisValues     = healthDataSets.map((d) => d.ecg.pAxis).sort((a, b) => a - b);
-  const sortedRAxisValues     = healthDataSets.map((d) => d.ecg.rAxis).sort((a, b) => a - b);
-  const sortedTAxisValues     = healthDataSets.map((d) => d.ecg.tAxis).sort((a, b) => a - b);
-  const sortedVentRateValues  = healthDataSets.map((d) => d.ecg.ventRate).sort((a, b) => a - b);
-  const sortedPRValues        = healthDataSets.map((d) => d.ecg.prInterval).sort((a, b) => a - b);
-  const sortedQRSValues       = healthDataSets.map((d) => d.ecg.qrsInterval).sort((a, b) => a - b);
-  // QRS-T angle: |rAxis - tAxis|, normalized over dataset range
-  const allQrsTAngles = healthDataSets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
-  const qrsTAngleMin = Math.min(...allQrsTAngles);
-  const qrsTAngleMax = Math.max(...allQrsTAngles);
-  const sortedQRSTAngleValues = [...allQrsTAngles].sort((a, b) => a - b);
+  // The ECG rank tables and the BUN/creatinine winsorized range used to be
+  // computed here, once, from the baked array — so they stayed frozen at the
+  // engine's compiled-in snapshot while the lab-side percentiles re-ranked
+  // against the live collection. The two halves diverged as soon as the
+  // collection grew past what the engine shipped with. They are now derived
+  // per-collection in getRankTables().
 
   let currentDataSetIndex      = /*BAKE:DATASET_INDEX*/5;
   let lastTwoHashDigits        = /*BAKE:HASH_DIGITS*/88;
@@ -485,6 +472,19 @@ async function init() {
     if (idx === 0) return -1; // genesis
     return idx % 2 === 0 ? idx + 1 : idx - 1;
   }
+  // Piece N inherits piece N-1's glucose hue; piece 0 inherits its own. Derived
+  // from the live collection for the case allInheritedHues cannot answer — which,
+  // now that the engine ships with no datasets, is every piece on chain. The baked
+  // `hue` attribute normally supplies this, so this is the path for a piece whose
+  // attribute is missing or unparseable: derive the hue rather than send undefined
+  // to a uniform. Wrong-but-plausible hues have reached chain before.
+  function inheritedHueFromCollection(idx, collection) {
+    const prevIdx = Math.max(0, idx - 1);
+    const prev = lc.collectionDatasets.find(d => d.pieceIndex === prevIdx)?.dataset
+              ?? lcCycleDataset();
+    return prev && collection.length ? computeHSBFromStats(prev, collection).hue * 360 : 0;
+  }
+
   function getPartnerInheritedHue(idx) {
     const p = getPartnerIndex(idx);
     if (p < 0 || p >= healthDataSets.length) return 0;
@@ -664,6 +664,59 @@ async function init() {
     return arr;
   }
 
+  // ─── Rank tables derived from the live collection ───────────────────────────
+  // Every ECG percentile the shader consumes is a rank of this piece's value
+  // against the collection. The collection grows on chain, so the tables have to
+  // be rebuilt when a sibling lands rather than frozen at engine-build time.
+  //
+  // Rebuilding eight sorted arrays every frame would be wasteful on an unbounded
+  // collection, so the result is cached. The key cannot be the collection array
+  // itself: lcEffectiveCollection() ends in .map(), so every call returns a new
+  // array and a reference key would miss on every frame while paying for an
+  // extra merge to compute it.
+  //
+  // Instead key on the three lc fields the collection is assembled from, plus
+  // the own index that decides which slot is this piece's. Every write to those
+  // fields replaces the reference outright — none is mutated in place — so
+  // comparing references detects exactly the discrete events that change what
+  // getDrawCollection() returns: a sibling refresh, own metadata landing, and
+  // reanimation.
+  let _rankTables = null, _rankKey = null;
+  function getRankTables(collection) {
+    const k = _rankKey;
+    if (_rankTables && k &&
+        k.sibs === lc.collectionDatasets && k.own === lc.ownDataset &&
+        k.cycle === lc.cycleDataset && k.idx === currentDataSetIndex) {
+      return _rankTables;
+    }
+    const sortedBy = (fn) => collection.map(fn).sort((a, b) => a - b);
+    const qrsTAngles = sortedBy((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
+    const bunCreat   = sortedBy((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine));
+    _rankTables = {
+      qtc:      sortedBy((d) => d.ecg.qtcInterval),
+      pAxis:    sortedBy((d) => d.ecg.pAxis),
+      rAxis:    sortedBy((d) => d.ecg.rAxis),
+      tAxis:    sortedBy((d) => d.ecg.tAxis),
+      ventRate: sortedBy((d) => d.ecg.ventRate),
+      pr:       sortedBy((d) => d.ecg.prInterval),
+      qrs:      sortedBy((d) => d.ecg.qrsInterval),
+      qrsTAngle: qrsTAngles,
+      // Math.min(...arr) spreads the whole collection onto the call stack and
+      // throws past ~100k entries; the array is already sorted, so read the ends.
+      qrsTAngleMin: qrsTAngles.length ? qrsTAngles[0] : 0,
+      qrsTAngleMax: qrsTAngles.length ? qrsTAngles[qrsTAngles.length - 1] : 0,
+      bunCreatP05:  bunCreat.length ? bunCreat[Math.floor(0.05 * (bunCreat.length - 1))] : 0,
+      bunCreatP95:  bunCreat.length ? bunCreat[Math.ceil(0.95 * (bunCreat.length - 1))]  : 0,
+    };
+    _rankKey = {
+      sibs:  lc.collectionDatasets,
+      own:   lc.ownDataset,
+      cycle: lc.cycleDataset,
+      idx:   currentDataSetIndex,
+    };
+    return _rankTables;
+  }
+
   // Partner's dataset from living collection, fallback to local healthDataSets
   function lcGetPartnerDataset(partnerIdx) {
     const found = lc.collectionDatasets.find(d => d.pieceIndex === partnerIdx);
@@ -683,10 +736,28 @@ async function init() {
   //   under v1 (NEW --parent OLD) lets reinscribed pieces (--parent NEW) see both
   //   their own siblings under NEW and the legacy pieces under OLD.
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
+  // Own inscription id, read off the URL. Everything this piece knows about
+  // itself — its dataset, its parents, its siblings — hangs off this one value,
+  // and if it comes back null the piece has no way to find its own data.
+  //
+  // ord serves at /content/<id> and /preview/<id>, which is the only shape that
+  // has to work. The looser patterns are free insurance: the engine is baked at
+  // inscription and cannot be patched afterwards, so a host that serves the same
+  // bytes from a slightly different path is worth catching now rather than never.
+  const _OWN_ID_RE = /[0-9a-f]{64}i\d+/i;
   function _resolveOwnId() {
     if (typeof window === 'undefined' || !window.location) return null;
-    const m = window.location.pathname.match(/\/(?:content|preview)\/([0-9a-f]{64}i\d+)/i);
-    return m ? m[1] : null;
+    const loc = window.location;
+    // Most specific first — an ord path can only mean one thing.
+    const exact = (loc.pathname || '').match(/\/(?:content|preview)\/([0-9a-f]{64}i\d+)/i);
+    if (exact) return exact[1];
+    // Then a bare id anywhere in the path (/inscription/<id>, //<id>, nested mounts).
+    const inPath = (loc.pathname || '').match(_OWN_ID_RE);
+    if (inPath) return inPath[0];
+    // Then the query string, for hosts that pass the id as a parameter.
+    const inSearch = (loc.search || '').match(_OWN_ID_RE);
+    if (inSearch) return inSearch[0];
+    return null;
   }
   const _ownId = _resolveOwnId();
   lc.collectionAncestors = [];
@@ -943,7 +1014,57 @@ async function init() {
   }
 
   // Main lifecycle init — non-blocking, piece renders immediately with local fallback
+  // Fetch this piece's own dataset from its CBOR metadata. This is the one
+  // request the first frame depends on: the engine ships with no datasets, so
+  // until this returns the piece does not know what it looks like.
+  //
+  // Retried rather than attempted once. A single miss used to be survivable
+  // because the baked array stood behind it; now a miss means the piece has no
+  // data at all, and most realistic failures here (a cold index, a host still
+  // warming up, a transient 5xx) clear on a second try moments later.
+  async function lcFetchOwnDataset(ownId, attempts = 4) {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const hex = await fetch(`/r/metadata/${ownId}`).then(r => r.json());
+        if (hex && typeof hex === 'string' && hex.trim()) {
+          const meta = cborDecode(hex.trim());
+          if (meta && meta.dataset) return meta;
+        }
+      } catch (e) { /* fall through to the retry */ }
+      // 150ms, 300ms, 600ms. Short enough not to strand the first frame,
+      // long enough to outlast a transient failure.
+      if (i < attempts - 1) {
+        await new Promise(res => setTimeout(res, 150 * Math.pow(2, i)));
+      }
+    }
+    return null;
+  }
+
   async function initLifecycle() {
+    // Own data first, and released the moment it lands — it is all the first
+    // frame needs. Everything below it is lifecycle-only: block height, the
+    // parent chain, the sibling scan. Those used to run first, which meant an
+    // unrelated failure among them aborted to the outer catch and the piece
+    // never reached its own metadata at all.
+    try {
+      if (_ownId) {
+        const ownMeta = await lcFetchOwnDataset(_ownId);
+        if (ownMeta) {
+          lc.ownDataset = ownMeta.dataset;
+          // Seed the collection so the first draw has valid own data even
+          // before the full sibling fetch completes.
+          lc.collectionDatasets = [{
+            id:               _ownId,
+            pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
+            dataset:          ownMeta.dataset,
+            hashTail:         ownMeta.hashTail ?? null,
+            inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
+          }];
+        }
+      }
+    } catch (e) { /* dev, or no metadata — the render gate reports it */ }
+    lcReleaseOwnData();
+
     try {
       // Every minted piece carries its block height as a <script> attribute, so
       // this is the normal path. The fallback exists for a piece loaded without
@@ -978,32 +1099,7 @@ async function init() {
         if (lc.collectionAncestors.length > 0) {
           lc.collectionRoot = lc.collectionAncestors[lc.collectionAncestors.length - 1];
         }
-
-        // Own dataset from /r/metadata/<ownId> — required for pieces whose index
-        // exceeds the baked healthDataSets length. Use r.json() to unwrap the
-        // JSON-quoted hex string ord returns. Falls back silently in dev mode.
-        try {
-          const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.json());
-          if (ownHex && typeof ownHex === 'string' && ownHex.trim()) {
-            const ownMeta = cborDecode(ownHex.trim());
-            if (ownMeta && ownMeta.dataset) {
-              lc.ownDataset = ownMeta.dataset;
-              // Seed collection so the very first draw has valid own data even
-              // before the full sibling fetch completes.
-              lc.collectionDatasets = [{
-                id:               _ownId,
-                pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
-                dataset:          ownMeta.dataset,
-                hashTail:         ownMeta.hashTail ?? null,
-                inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
-              }];
-            }
-          }
-        } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
       }
-      // Own data is as resolved as it is going to get — release the first frame.
-      // Everything below is collection-wide and must not hold up rendering.
-      lcReleaseOwnData();
 
       await lcRefreshSiblings();
       await lcFastForward();
@@ -1014,8 +1110,8 @@ async function init() {
     } catch (e) {
       console.warn('[lc] lifecycle engine inactive (not in ord env)', e);
     } finally {
-      // Never leave boot waiting — if init threw before the own-metadata step,
-      // the piece still renders from baked data.
+      // Redundant now that own data is released before this block runs, and
+      // idempotent — kept so no future reordering can strand boot waiting.
       lcReleaseOwnData();
     }
   }
@@ -1202,33 +1298,33 @@ async function init() {
     {
       label: 'N (BUN)', labKey: 'nitrogen', phaseKey: 'N',
       phaseSeed: (h) => (h / 99) * 2 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.NITROGEN),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.NITROGEN, coll),
       strengthLoc: uNitrogenStrengthLoc, hueLoc: uNitrogenHueDegLoc, radiusLoc: uNitrogenRadiusLoc,
-      update({ ph, p, ds }) {
+      update({ ph, p, ds, collection }) {
         const amp = getBreathingAmplitude(ds);
         let str = clamp(0.58 * (0.5 + 0.5 * Math.sin(ph) * amp), 0, 1);
         str = 0.35 + 0.20 * str;
-        const hue = getBeamHueAnchorDeg(ds, BEAM.NITROGEN) + (10 + 8 * p) * Math.sin(ph * 0.93 + 0.14);
+        const hue = getBeamHueAnchorDeg(ds, BEAM.NITROGEN, collection) + (10 + 8 * p) * Math.sin(ph * 0.93 + 0.14);
         return { str, hue };
       },
     },
     {
       label: 'C (Cr)', labKey: 'creatinine', phaseKey: 'C',
       phaseSeed: (h) => (h / 99) * 1.3 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CREATININE),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CREATININE, coll),
       strengthLoc: uCreatinineStrengthLoc, hueLoc: uCreatinineHueDegLoc, radiusLoc: uCreatinineRadiusLoc,
-      update({ ph, p, ds }) {
+      update({ ph, p, ds, collection }) {
         const amp = getBreathingAmplitude(ds);
         let str = clamp((0.4 + 0.3 * p) * (0.5 + 0.5 * Math.sin(ph) * amp), 0, 1);
         str = 0.3 + 0.20 * str;
-        const hue = getBeamHueAnchorDeg(ds, BEAM.CREATININE) + (8 + 5 * p) * Math.sin(ph * 1.07 + 0.08);
+        const hue = getBeamHueAnchorDeg(ds, BEAM.CREATININE, collection) + (8 + 5 * p) * Math.sin(ph * 1.07 + 0.08);
         return { str, hue };
       },
     },
     {
       label: 'Na', labKey: 'sodium', phaseKey: 'Na',
       phaseSeed: (h) => sodiumPhaseSeed(h), tickTwoPi: false,
-      tempoFn: (ds) => sodiumTempoSeconds(ds),
+      tempoFn: (ds, _coll) => sodiumTempoSeconds(ds),
       strengthLoc: uSodiumStrengthLoc, hueLoc: uSodiumHueDegLoc, radiusLoc: uSodiumRadiusLoc,
       update({ ph, p, ds, baseHueDeg, totalYears }) {
         const arr = sodiumArrivalProgress(totalYears, lifespanYears);
@@ -1245,7 +1341,7 @@ async function init() {
     {
       label: 'Cl', labKey: 'chloride', phaseKey: 'Cl',
       phaseSeed: (h) => chloridePhaseSeed(h), tickTwoPi: false,
-      tempoFn: (ds) => chlorideTempoSeconds(ds),
+      tempoFn: (ds, _coll) => chlorideTempoSeconds(ds),
       strengthLoc: uChlorideStrength, hueLoc: uChlorideHueDeg, radiusLoc: uChlorideRadiusLoc,
       update({ ph, p, ds, baseHueDeg, totalYears }) {
         const arr = chlorideArrivalProgress(totalYears, lifespanYears);
@@ -1262,7 +1358,7 @@ async function init() {
     {
       label: 'CO2', labKey: 'carbonDioxide', phaseKey: 'CO2',
       phaseSeed: (h) => (h / 99) * 1.1 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CO2),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CO2, coll),
       strengthLoc: uCo2StrengthLoc, hueLoc: uCo2HueDegLoc, radiusLoc: null,
       update({ ph, p, baseHueDeg, co2Pulse }) {
         const str = clamp(0.26 + 0.18 * (1 - p) + 0.22 * co2Pulse, 0, 0.62);
@@ -1275,7 +1371,7 @@ async function init() {
     {
       label: 'Ca', labKey: 'calcium', phaseKey: 'Ca',
       phaseSeed: (h) => (h / 99) * 0.7 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CALCIUM),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CALCIUM, coll),
       strengthLoc: uCalciumStrengthLoc, hueLoc: uCalciumHueDegLoc, radiusLoc: uCalciumRadiusLoc,
       update({ ph, p, baseHueDeg, caPulse, pCO2, pPR }) {
         const str = clamp(0.06 + 0.08 * (1 - pCO2) + 0.16 * caPulse, 0, 0.30);
@@ -1290,27 +1386,27 @@ async function init() {
   // Pre-advance beam phases from birth so each page load starts mid-cycle,
   // not at the hash-seeded zero position. The phase a beam is at on any given
   // day is fully deterministic: seed + (secsSinceBirth / tempo) % period.
-  // Uses the initial baked dataset's tempo as the approximation — tempo drifts
-  // slightly with chronological drift but the error is negligible vs. the
-  // alternative of always starting at the beginning.
-  {
-    // A piece minted after the engine has no baked entry — its dataset arrives
-    // later via its own CBOR metadata. Every tempoFn dereferences the dataset,
-    // so an undefined here throws inside init() and the piece never draws at all.
-    // Fall back to the last baked dataset: tempo is already documented above as
-    // an approximation, and being slightly off beats not rendering.
-    const _initDs  = healthDataSets[currentDataSetIndex]
-                  ?? healthDataSets[healthDataSets.length - 1];
-    const _initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
+  //
+  // Every tempo is derived from the data, so this cannot run until the piece
+  // knows its own dataset. It used to run inline during init() against the baked
+  // array; with nothing baked, that read undefined and every tempoFn dereferenced
+  // it, so init() threw and the piece never drew at all. It is now called from
+  // the boot sequence once own data has resolved.
+  //
+  // The dataset passed here is the piece's starting point, not its drifted
+  // present — tempo moves slightly with chronological drift, but the error is
+  // negligible against the alternative of always starting from zero.
+  function preAdvanceBeamPhases(initDs, collection) {
+    const initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
     for (const cfg of beamConfigs) {
       const seed  = cfg.phaseSeed(lastTwoHashDigits);
-      const tempo = Math.max(1e-3, cfg.tempoFn(_initDs));
+      const tempo = Math.max(1e-3, cfg.tempoFn(initDs, collection));
       if (cfg.tickTwoPi) {
         // Accumulates radians — no need to mod, JS Math.sin handles large args.
-        beamPhases[cfg.phaseKey] = seed + (_initSecs * 2 * Math.PI) / tempo;
+        beamPhases[cfg.phaseKey] = seed + (initSecs * 2 * Math.PI) / tempo;
       } else {
         // Kept in [0, 1) by modding after each frame advance.
-        beamPhases[cfg.phaseKey] = (seed + _initSecs / tempo) % 1;
+        beamPhases[cfg.phaseKey] = (seed + initSecs / tempo) % 1;
       }
     }
   }
@@ -1398,11 +1494,12 @@ async function init() {
       0, 1
     );
     if (uQtcNormLoc) gl.uniform1f(uQtcNormLoc, qtcNorm);
-    const qtcPercentile = percentile(activeDataSet.ecg.qtcInterval, sortedQtcValues);
+    const rank = getRankTables(drawCollection);
+    const qtcPercentile = percentile(activeDataSet.ecg.qtcInterval, rank.qtc);
     if (uQtcPercentileLoc) gl.uniform1f(uQtcPercentileLoc, qtcPercentile);
-    const pAxisPct = percentile(activeDataSet.ecg.pAxis, sortedPAxisValues);
-    const rAxisPct = percentile(activeDataSet.ecg.rAxis, sortedRAxisValues);
-    const tAxisPct = percentile(activeDataSet.ecg.tAxis, sortedTAxisValues);
+    const pAxisPct = percentile(activeDataSet.ecg.pAxis, rank.pAxis);
+    const rAxisPct = percentile(activeDataSet.ecg.rAxis, rank.rAxis);
+    const tAxisPct = percentile(activeDataSet.ecg.tAxis, rank.tAxis);
     if (uPAxisPctLoc) gl.uniform1f(uPAxisPctLoc, pAxisPct);
     if (uRAxisPctLoc) gl.uniform1f(uRAxisPctLoc, rAxisPct);
     if (uTAxisPctLoc) gl.uniform1f(uTAxisPctLoc, tAxisPct);
@@ -1429,14 +1526,14 @@ async function init() {
     if (uCo2NormLoc) gl.uniform1f(uCo2NormLoc, co2Norm);
     const qrsTAngle = Math.abs(activeDataSet.ecg.rAxis - activeDataSet.ecg.tAxis);
     const qrsTAngleNorm = clamp(
-      (qrsTAngle - qrsTAngleMin) / Math.max(1e-6, qrsTAngleMax - qrsTAngleMin),
+      (qrsTAngle - rank.qrsTAngleMin) / Math.max(1e-6, rank.qrsTAngleMax - rank.qrsTAngleMin),
       0, 1
     );
     if (uQrsTAngleLoc) gl.uniform1f(uQrsTAngleLoc, qrsTAngleNorm);
-    const ventRatePct   = percentile(activeDataSet.ecg.ventRate,    sortedVentRateValues);
-    const prPct         = percentile(activeDataSet.ecg.prInterval,  sortedPRValues);
-    const qrsPct        = percentile(activeDataSet.ecg.qrsInterval, sortedQRSValues);
-    const qrsTAnglePct  = percentile(qrsTAngle,                     sortedQRSTAngleValues);
+    const ventRatePct   = percentile(activeDataSet.ecg.ventRate,    rank.ventRate);
+    const prPct         = percentile(activeDataSet.ecg.prInterval,  rank.pr);
+    const qrsPct        = percentile(activeDataSet.ecg.qrsInterval, rank.qrs);
+    const qrsTAnglePct  = percentile(qrsTAngle,                     rank.qrsTAngle);
     if (uVentRatePctLoc)  gl.uniform1f(uVentRatePctLoc,  ventRatePct);
     if (uPrPctLoc)        gl.uniform1f(uPrPctLoc,        prPct);
     if (uQrsPctLoc)       gl.uniform1f(uQrsPctLoc,       qrsPct);
@@ -1446,7 +1543,8 @@ async function init() {
     const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
     const inheritedHueDeg = inheritedHueDegOverride !== null
       ? inheritedHueDegOverride
-      : allInheritedHues[currentDataSetIndex];
+      : (allInheritedHues[currentDataSetIndex]
+         ?? inheritedHueFromCollection(currentDataSetIndex, drawCollection));
     if (uInheritedHueDegLoc) gl.uniform1f(uInheritedHueDegLoc, inheritedHueDeg);
     if (uInheritedStrengthLoc) gl.uniform1f(uInheritedStrengthLoc, inheritedStrength);
     if (uReanimationProgressLoc) gl.uniform1f(uReanimationProgressLoc, reanimationProgress);
@@ -1480,13 +1578,13 @@ async function init() {
       const cfg = beamConfigs[i];
       beamPhases[cfg.phaseKey] = beamPhases[cfg.phaseKey] ?? cfg.phaseSeed(lastTwoHashDigits);
       if (cfg.tickTwoPi) {
-        beamPhases[cfg.phaseKey] += (dt * 2 * Math.PI) / Math.max(1e-3, cfg.tempoFn(activeDataSet));
+        beamPhases[cfg.phaseKey] += (dt * 2 * Math.PI) / Math.max(1e-3, cfg.tempoFn(activeDataSet, drawCollection));
       } else {
-        beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet))) % 1;
+        beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet, drawCollection))) % 1;
       }
       const ph = beamPhases[cfg.phaseKey];
       const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, drawCollection);
-      const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
+      const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR, collection: drawCollection });
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
       if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);
       if (cfg.radiusLoc)   gl.uniform1f(cfg.radiusLoc, p);
@@ -1500,7 +1598,7 @@ async function init() {
     // BUN/Creatinine ratio: spatial coupling between nitrogen and creatinine forms
     const bunCreatRatio = activeDataSet.labs.nitrogen / Math.max(0.1, activeDataSet.labs.creatinine);
     const bunCreatRatioNorm = clamp(
-      (bunCreatRatio - bunCreatP05) / Math.max(1e-9, bunCreatP95 - bunCreatP05),
+      (bunCreatRatio - rank.bunCreatP05) / Math.max(1e-9, rank.bunCreatP95 - rank.bunCreatP05),
       0, 1
     );
     if (uBunCreatRatioNormLoc) gl.uniform1f(uBunCreatRatioNormLoc, bunCreatRatioNorm);
@@ -1519,16 +1617,27 @@ async function init() {
   // pieces sat on black for tens of seconds before the first frame, and it got
   // worse with every piece minted.
   //
-  // Pieces 0..N-1 are baked into the engine and can draw on frame 1. A piece
-  // minted after the engine has no baked entry, so it waits on lc.ownDataReady —
-  // its own metadata only, not the collection. That promise always resolves, so
-  // a failure still yields a frame rather than a black screen.
+  // A piece waits on lc.ownDataReady — its own metadata only, never the sibling
+  // scan. In dev the baked array answers immediately and nothing is awaited.
+  //
+  // If no dataset resolves, the piece holds black rather than drawing. With an
+  // empty collection every percentile and every normalize returns its midpoint,
+  // so the alternative is a piece that renders a plausible, fully-formed image
+  // that is not this piece — the wrong-but-valid frame that has cost this
+  // project twice already. A black canvas is wrong in a way someone will report;
+  // a neutral one gets screenshotted and cached as the artwork.
   (async () => {
     const lifecycle = initLifecycle().catch(() => {});
-    if (currentDataSetIndex >= healthDataSets.length) {
+    if (!lcCycleDataset()) {
       await Promise.race([lc.ownDataReady, lifecycle]);
     }
     gl.clear(gl.COLOR_BUFFER_BIT);
+    const initDs = lcCycleDataset();
+    if (!initDs) {
+      console.error('[lc] no dataset for this piece — own metadata did not resolve. Holding black rather than rendering a piece this is not.');
+      return;
+    }
+    preAdvanceBeamPhases(initDs, getDrawCollection());
     draw();
   })();
 
@@ -1658,12 +1767,15 @@ function getBreathingAmplitude(dataSet) {
   return amp;
 }
 
-// Tempo: data-driven per beam
-function getBeamTempoSeconds(dataSet, beamId) {
+// Tempo: data-driven per beam.
+// `collection` is the live collection the piece is currently ranking against —
+// passed in rather than read from the baked array, so tempos re-rank as siblings
+// are discovered on chain instead of staying frozen at the engine's snapshot.
+function getBeamTempoSeconds(dataSet, beamId, collection) {
   switch (beamId) {
     case BEAM.NITROGEN: {
       // High BUN (waste accumulating) → more urgent breathing cycle
-      const vals = healthDataSets.map(d => d.labs.nitrogen).sort((a, b) => a - b);
+      const vals = collection.map(d => d.labs.nitrogen).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.nitrogen, vals);
       return 10 - 3 * p; // 10s (low BUN) → 7s (high BUN)
     }
@@ -1678,7 +1790,7 @@ function getBeamTempoSeconds(dataSet, beamId) {
     }
     case BEAM.CO2: {
       // Low eGFR → more acidosis pressure → faster CO2 cycling
-      const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
+      const vals = collection.map(d => d.labs.eGFR).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.eGFR, vals);
       return 12 + 8 * p; // 12s (low eGFR, stressed) → 20s (high eGFR, calm)
     }
@@ -1699,20 +1811,20 @@ function getBeamTempoSeconds(dataSet, beamId) {
 // Hue anchor: kidney beams offset from base by an independent lab variable.
 // Uses an offset from baseHueDeg (not a full remap) so pieces stay coherent
 // while the kidney markers can still diverge meaningfully under disease.
-function getBeamHueAnchorDeg(dataSet, beamId) {
-  const { hue } = computeHSBFromStats(dataSet, healthDataSets);
+function getBeamHueAnchorDeg(dataSet, beamId, collection) {
+  const { hue } = computeHSBFromStats(dataSet, collection);
   const baseDeg = hue * 360.0;
   switch (beamId) {
     case BEAM.NITROGEN: {
       // eGFR offsets nitrogen ±80° from base. Low eGFR (failing kidneys) pushes
       // the form away from the glucose background — disease creates color tension.
-      const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
+      const vals = collection.map(d => d.labs.eGFR).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.eGFR, vals);
       return baseDeg + (p - 0.5) * 160; // ±80° from base
     }
     case BEAM.CREATININE: {
       // Potassium offsets creatinine ±60° from base — K+ varies independently.
-      const vals = healthDataSets.map(d => d.labs.potassium).sort((a, b) => a - b);
+      const vals = collection.map(d => d.labs.potassium).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.potassium, vals);
       return baseDeg + (p - 0.5) * 120; // ±60° from base
     }

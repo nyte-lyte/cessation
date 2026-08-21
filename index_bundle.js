@@ -450,8 +450,9 @@ float mCa = max(m1, m2);
 }`;
 
 function normalize(val, min, max) {
-  if (max - min === 0) return 0.5;
-  return (val - min) / (max - min);
+  const span = max - min;
+  if (!isFinite(span) || span === 0) return 0.5;
+  return (val - min) / span;
 }
 
 const ECG_KEYS = ['ventRate', 'prInterval', 'qrsInterval', 'qtInterval', 'qtcInterval', 'pAxis', 'rAxis', 'tAxis'];
@@ -626,908 +627,8 @@ function calculateHealthIndex(data, minMaxValues) {
   );
 }
 
-let healthDataSets = [
-  {
-    date: "2018-07-16",
-    ecg: {
-      ventRate: 65,
-      prInterval: 166,
-      qrsInterval: 82,
-      qtInterval: 412,
-      qtcInterval: 428,
-      pAxis: 77,
-      rAxis: 86,
-      tAxis: 78,
-    },
-    labs: {
-      glucose: 127,
-      nitrogen: 20,
-      creatinine: 0.62,
-      eGFR: 115,
-      sodium: 138,
-      potassium: 4.1,
-      chloride: 104,
-      carbonDioxide: 24,
-      calcium: 9.2,
-    },
-  },
-  {
-    date: "2018-10-04",
-    ecg: {
-      ventRate: 60,
-      prInterval: 158,
-      qrsInterval: 85,
-      qtInterval: 428,
-      qtcInterval: 428,
-      pAxis: 49,
-      rAxis: 76,
-      tAxis: 58,
-    },
-    labs: {
-      glucose: 105,
-      nitrogen: 16,
-      creatinine: 0.58,
-      eGFR: 118,
-      sodium: 140,
-      potassium: 4.1,
-      chloride: 107,
-      carbonDioxide: 25,
-      calcium: 9.1,
-    },
-  },
-  {
-    date: "2019-01-24",
-    ecg: {
-      ventRate: 60,
-      prInterval: 152,
-      qrsInterval: 86,
-      qtInterval: 404,
-      qtcInterval: 404,
-      pAxis: 64,
-      rAxis: 72,
-      tAxis: 46,
-    },
-    labs: {
-      glucose: 104,
-      nitrogen: 16,
-      creatinine: 0.64,
-      eGFR: 114,
-      sodium: 140,
-      potassium: 4.1,
-      chloride: 105,
-      carbonDioxide: 27,
-      calcium: 9.4,
-    },
-  },
-  {
-    date: "2019-04-24",
-    ecg: {
-      ventRate: 63,
-      prInterval: 149,
-      qrsInterval: 72,
-      qtInterval: 417,
-      qtcInterval: 427,
-      pAxis: 62,
-      rAxis: 72,
-      tAxis: 42,
-    },
-    labs: {
-      glucose: 103,
-      nitrogen: 15,
-      creatinine: 0.63,
-      eGFR: 115,
-      sodium: 139,
-      potassium: 4.4,
-      chloride: 104,
-      carbonDioxide: 26,
-      calcium: 9.2,
-    },
-  },
-  {
-    date: "2019-07-31",
-    ecg: {
-      ventRate: 59,
-      prInterval: 166,
-      qrsInterval: 80,
-      qtInterval: 412,
-      qtcInterval: 408,
-      pAxis: 61,
-      rAxis: 77,
-      tAxis: 48,
-    },
-    labs: {
-      glucose: 105,
-      nitrogen: 15,
-      creatinine: 0.57,
-      eGFR: 118,
-      sodium: 139,
-      potassium: 4.5,
-      chloride: 105,
-      carbonDioxide: 26,
-      calcium: 9.3,
-    },
-  },
-  {
-    date: "2020-02-07",
-    ecg: {
-      ventRate: 78,
-      prInterval: 164,
-      qrsInterval: 85,
-      qtInterval: 383,
-      qtcInterval: 436,
-      pAxis: 74,
-      rAxis: 98,
-      tAxis: 65,
-    },
-    labs: {
-      glucose: 124,
-      nitrogen: 17,
-      creatinine: 0.69,
-      eGFR: 110,
-      sodium: 138,
-      potassium: 4.2,
-      chloride: 107,
-      carbonDioxide: 24,
-      calcium: 8.8,
-    },
-  },
-  {
-    date: "2020-02-28",
-    ecg: {
-      ventRate: 75,
-      prInterval: 142,
-      qrsInterval: 89,
-      qtInterval: 377,
-      qtcInterval: 421,
-      pAxis: 54,
-      rAxis: 93,
-      tAxis: 55,
-    },
-    labs: {
-      glucose: 116,
-      nitrogen: 19,
-      creatinine: 0.75,
-      eGFR: 113,
-      sodium: 136,
-      potassium: 4.0,
-      chloride: 109,
-      carbonDioxide: 21,
-      calcium: 9.5,
-    },
-  },
-  {
-    date: "2020-03-13",
-    ecg: {
-      ventRate: 101,
-      prInterval: 136,
-      qrsInterval: 82,
-      qtInterval: 343,
-      qtcInterval: 401,
-      pAxis: 54,
-      rAxis: 88,
-      tAxis: 38,
-    },
-    labs: {
-      glucose: 115,
-      nitrogen: 18,
-      creatinine: 0.75,
-      eGFR: 107,
-      sodium: 137,
-      potassium: 4.1,
-      chloride: 108,
-      carbonDioxide: 22,
-      calcium: 8.8,
-    },
-  },
-  {
-    date: "2020-05-22",
-    ecg: {
-      ventRate: 70,
-      prInterval: 166,
-      qrsInterval: 88,
-      qtInterval: 370,
-      qtcInterval: 399,
-      pAxis: 69,
-      rAxis: 79,
-      tAxis: 51,
-    },
-    labs: {
-      glucose: 117,
-      nitrogen: 15,
-      creatinine: 0.75,
-      eGFR: 101,
-      sodium: 140,
-      potassium: 4.2,
-      chloride: 107,
-      carbonDioxide: 26,
-      calcium: 9.6,
-    },
-  },
-  {
-    date: "2020-08-11",
-    ecg: {
-      ventRate: 75,
-      prInterval: 164,
-      qrsInterval: 86,
-      qtInterval: 389,
-      qtcInterval: 434,
-      pAxis: 61,
-      rAxis: 81,
-      tAxis: 50,
-    },
-    labs: {
-      glucose: 127,
-      nitrogen: 17,
-      creatinine: 0.75,
-      eGFR: 100,
-      sodium: 140,
-      potassium: 3.7,
-      chloride: 108,
-      carbonDioxide: 22,
-      calcium: 9.3,
-    },
-  },
-  {
-    date: "2020-11-12",
-    ecg: {
-      ventRate: 83,
-      prInterval: 147,
-      qrsInterval: 84,
-      qtInterval: 372,
-      qtcInterval: 437,
-      pAxis: 48,
-      rAxis: 70,
-      tAxis: 31,
-    },
-    labs: {
-      glucose: 118,
-      nitrogen: 16,
-      creatinine: 0.69,
-      eGFR: 110,
-      sodium: 137,
-      potassium: 4.3,
-      chloride: 106,
-      carbonDioxide: 23,
-      calcium: 9.4,
-    },
-  },
-  {
-    date: "2021-02-24",
-    ecg: {
-      ventRate: 64,
-      prInterval: 168,
-      qrsInterval: 94,
-      qtInterval: 413,
-      qtcInterval: 426,
-      pAxis: 68,
-      rAxis: 89,
-      tAxis: 43,
-    },
-    labs: {
-      glucose: 103,
-      nitrogen: 14,
-      creatinine: 0.79,
-      eGFR: 94,
-      sodium: 139,
-      potassium: 4.5,
-      chloride: 106,
-      carbonDioxide: 24,
-      calcium: 9.4,
-    },
-  },
-  {
-    date: "2021-09-01",
-    ecg: {
-      ventRate: 67,
-      prInterval: 149,
-      qrsInterval: 80,
-      qtInterval: 388,
-      qtcInterval: 410,
-      pAxis: 66,
-      rAxis: 77,
-      tAxis: 49,
-    },
-    labs: {
-      glucose: 117,
-      nitrogen: 9,
-      creatinine: 0.62,
-      eGFR: 113,
-      sodium: 140,
-      potassium: 4.4,
-      chloride: 107,
-      carbonDioxide: 22,
-      calcium: 9.4,
-    },
-  },
-  {
-    date: "2021-12-01",
-    ecg: {
-      ventRate: 67,
-      prInterval: 150,
-      qrsInterval: 83,
-      qtInterval: 386,
-      qtcInterval: 402,
-      pAxis: 54,
-      rAxis: 70,
-      tAxis: 31,
-    },
-    labs: {
-      glucose: 120,
-      nitrogen: 11,
-      creatinine: 0.72,
-      eGFR: 105,
-      sodium: 138,
-      potassium: 4.2,
-      chloride: 105,
-      carbonDioxide: 22,
-      calcium: 9.5,
-    },
-  },
-  {
-    date: "2022-02-14",
-    ecg: {
-      ventRate: 69,
-      prInterval: 166,
-      qrsInterval: 87,
-      qtInterval: 385,
-      qtcInterval: 404,
-      pAxis: 59,
-      rAxis: 68,
-      tAxis: 30,
-    },
-    labs: {
-      glucose: 129,
-      nitrogen: 12,
-      creatinine: 0.69,
-      eGFR: 109,
-      sodium: 142,
-      potassium: 3.9,
-      chloride: 109,
-      carbonDioxide: 23,
-      calcium: 9,
-    },
-  },
-  {
-    date: "2022-05-13",
-    ecg: {
-      ventRate: 63,
-      prInterval: 156,
-      qrsInterval: 85,
-      qtInterval: 404,
-      qtcInterval: 411,
-      pAxis: 65,
-      rAxis: 75,
-      tAxis: 47,
-    },
-    labs: {
-      glucose: 160,
-      nitrogen: 11,
-      creatinine: 0.76,
-      eGFR: 98,
-      sodium: 139,
-      potassium: 4.1,
-      chloride: 105,
-      carbonDioxide: 24,
-      calcium: 9.4,
-    },
-  },
-  {
-    date: "2022-08-25",
-    ecg: {
-      ventRate: 59,
-      prInterval: 141,
-      qrsInterval: 81,
-      qtInterval: 436,
-      qtcInterval: 435,
-      pAxis: 48,
-      rAxis: 69,
-      tAxis: 41,
-    },
-    labs: {
-      glucose: 112,
-      nitrogen: 13,
-      creatinine: 0.68,
-      eGFR: 112,
-      sodium: 139,
-      potassium: 4.5,
-      chloride: 108,
-      carbonDioxide: 24,
-      calcium: 9.4,
-    },
-  },
-  {
-    date: "2023-06-12",
-    ecg: {
-      ventRate: 57,
-      prInterval: 161,
-      qrsInterval: 85,
-      qtInterval: 420,
-      qtcInterval: 414,
-      pAxis: 76,
-      rAxis: 90,
-      tAxis: 76,
-    },
-    labs: {
-      glucose: 118,
-      nitrogen: 14,
-      creatinine: 0.6,
-      eGFR: 115,
-      sodium: 137,
-      potassium: 3.7,
-      chloride: 106,
-      carbonDioxide: 26,
-      calcium: 8.9,
-    },
-  },
-  {
-    date: "2023-09-05",
-    ecg: {
-      ventRate: 58,
-      prInterval: 149,
-      qrsInterval: 90,
-      qtInterval: 427,
-      qtcInterval: 424,
-      pAxis: 69,
-      rAxis: 88,
-      tAxis: 60,
-    },
-    labs: {
-      glucose: 116,
-      nitrogen: 12,
-      creatinine: 0.55,
-      eGFR: 117,
-      sodium: 142,
-      potassium: 4,
-      chloride: 113,
-      carbonDioxide: 20,
-      calcium: 9.2,
-    },
-  },
-  {
-    date: "2023-12-05",
-    ecg: {
-      ventRate: 54,
-      prInterval: 153,
-      qrsInterval: 83,
-      qtInterval: 420,
-      qtcInterval: 407,
-      pAxis: 52,
-      rAxis: 72,
-      tAxis: 47,
-    },
-    labs: {
-      glucose: 115,
-      nitrogen: 14,
-      creatinine: 0.58,
-      eGFR: 116,
-      sodium: 138,
-      potassium: 4.1,
-      chloride: 107,
-      carbonDioxide: 22,
-      calcium: 9.1,
-    },
-  },
-  {
-    date: "2024-02-05",
-    ecg: {
-      ventRate: 52,
-      prInterval: 150,
-      qrsInterval: 86,
-      qtInterval: 453,
-      qtcInterval: 433,
-      pAxis: 72,
-      rAxis: 69,
-      tAxis: 55,
-    },
-    labs: {
-      glucose: 117,
-      nitrogen: 19,
-      creatinine: 0.61,
-      eGFR: 114,
-      sodium: 139,
-      potassium: 4.1,
-      chloride: 110,
-      carbonDioxide: 23,
-      calcium: 9.1,
-    },
-  },
-  {
-    date: "2024-06-10",
-    ecg: {
-      ventRate: 57,
-      prInterval: 152,
-      qrsInterval: 85,
-      qtInterval: 414,
-      qtcInterval: 408,
-      pAxis: 71,
-      rAxis: 86,
-      tAxis: 56,
-    },
-    labs: {
-      glucose: 97,
-      nitrogen: 12,
-      creatinine: 0.66,
-      eGFR: 112,
-      sodium: 138,
-      potassium: 4.1,
-      chloride: 105,
-      carbonDioxide: 22,
-      calcium: 9.2,
-    },
-  },
-  {
-    date: "2024-09-16",
-    ecg: {
-      ventRate: 68,
-      prInterval: 163,
-      qrsInterval: 82,
-      qtInterval: 389,
-      qtcInterval: 407,
-      pAxis: 80,
-      rAxis: 93,
-      tAxis: 67,
-    },
-    labs: {
-      glucose: 103,
-      nitrogen: 16,
-      creatinine: 0.59,
-      eGFR: 115,
-      sodium: 137,
-      potassium: 4.3,
-      chloride: 106,
-      carbonDioxide: 23,
-      calcium: 9,
-    },
-  },
-  {
-    date: "2024-12-30",
-    ecg: {
-      ventRate: 63,
-      prInterval: 155,
-      qrsInterval: 86,
-      qtInterval: 431,
-      qtcInterval: 438,
-      pAxis: 73,
-      rAxis: 87,
-      tAxis: 67,
-    },
-    labs: {
-      glucose: 109,
-      nitrogen: 15,
-      creatinine: 0.62,
-      eGFR: 113,
-      sodium: 138,
-      potassium: 4.3,
-      chloride: 105,
-      carbonDioxide: 23,
-      calcium: 9.4,
-    },
-  },
-  {
-    date: "2025-03-26",
-    ecg: {
-      ventRate: 54,
-      prInterval: 147,
-      qrsInterval: 86,
-      qtInterval: 448,
-      qtcInterval: 433,
-      pAxis: 148,
-      rAxis: 143,
-      tAxis: 142,
-    },
-    labs: {
-      glucose: 100,
-      nitrogen: 11,
-      creatinine: 0.68,
-      eGFR: 111,
-      sodium: 138,
-      potassium: 4.2,
-      chloride: 107,
-      carbonDioxide: 24,
-      calcium: 9.3,
-    },
-  },
-  {
-    date: "2025-06-18",
-    ecg: {
-      ventRate: 51,
-      prInterval: 156,
-      qrsInterval: 80,
-      qtInterval: 459,
-      qtcInterval: 435,
-      pAxis: 77,
-      rAxis: 80,
-      tAxis: 74,
-    },
-    labs: {
-      glucose: 108,
-      nitrogen: 16,
-      creatinine: 0.71,
-      eGFR: 107,
-      sodium: 137,
-      potassium: 4.2,
-      chloride: 106,
-      carbonDioxide: 24,
-      calcium: 8.8,
-    },
-  },
-  {
-    date: "2025-09-12",
-    ecg: {
-      ventRate: 58,
-      prInterval: 157,
-      qrsInterval: 89,
-      qtInterval: 419,
-      qtcInterval: 417,
-      pAxis: 84,
-      rAxis: 95,
-      tAxis: 75,
-    },
-    labs: {
-      glucose: 108,
-      nitrogen: 11,
-      creatinine: 0.54,
-      eGFR: 116,
-      sodium: 137,
-      potassium: 4.0,
-      chloride: 106,
-      carbonDioxide: 22,
-      calcium: 9.0,
-    },
-  },
-  {
-    date: "2025-12-11",
-    ecg: {
-      ventRate: 60,
-      prInterval: 164,
-      qrsInterval: 86,
-      qtInterval: 415,
-      qtcInterval: 416,
-      pAxis: 64,
-      rAxis: 87,
-      tAxis: 74,
-    },
-    labs: {
-      glucose: 119,
-      nitrogen: 17,
-      creatinine: 0.66,
-      eGFR: 111,
-      sodium: 141,
-      potassium: 4.3,
-      chloride: 106,
-      carbonDioxide: 25,
-      calcium: 9.3,
-    },
-  },
-  {
-    date: "2026-03-20",
-    ecg: {
-      ventRate: 66,
-      prInterval: 162,
-      qrsInterval: 87,
-      qtInterval: 385,
-      qtcInterval: 399,
-      pAxis: 68,
-      rAxis: 85,
-      tAxis: 52,
-    },
-    labs: {
-      glucose: 117,
-      nitrogen: 16,
-      creatinine: 0.70,
-      eGFR: 109,
-      sodium: 139,
-      potassium: 4.2,
-      chloride: 109,
-      carbonDioxide: 21,
-      calcium: 9.1,
-    },
-  },
-  {
-    date: "2026-06-19",
-    ecg: {
-      ventRate: 56,
-      prInterval: 143,
-      qrsInterval: 83,
-      qtInterval: 437,
-      qtcInterval: 428,
-      pAxis: 73,
-      rAxis: 82,
-      tAxis: 68,
-    },
-    labs: {
-      glucose: 89,
-      nitrogen: 13,
-      creatinine: 0.63,
-      eGFR: 111,
-      sodium: 138,
-      potassium: 4.5,
-      chloride: 106,
-      carbonDioxide: 22,
-      calcium: 9.2,
-    },
-  },
-];
-
-healthDataSets.sort((a, b) => {
-  return new Date(a.date) - new Date(b.date);
-});
-
-let minMaxValues = {
-  ventRate: { min: Infinity, max: -Infinity },
-  prInterval: { min: Infinity, max: -Infinity },
-  qrsInterval: { min: Infinity, max: -Infinity },
-  qtInterval: { min: Infinity, max: -Infinity },
-  qtcInterval: { min: Infinity, max: -Infinity },
-  pAxis: { min: Infinity, max: -Infinity },
-  rAxis: { min: Infinity, max: -Infinity },
-  tAxis: { min: Infinity, max: -Infinity },
-  glucose: { min: Infinity, max: -Infinity },
-  nitrogen: { min: Infinity, max: -Infinity },
-  creatinine: { min: Infinity, max: -Infinity },
-  eGFR: { min: Infinity, max: -Infinity },
-  sodium: { min: Infinity, max: -Infinity },
-  potassium: { min: Infinity, max: -Infinity },
-  chloride: { min: Infinity, max: -Infinity },
-  carbonDioxide: { min: Infinity, max: -Infinity },
-  calcium: { min: Infinity, max: -Infinity },
-};
-
-healthDataSets.forEach((dataSet) => {
-
-  minMaxValues.ventRate.min = Math.min(
-    minMaxValues.ventRate.min,
-    dataSet.ecg.ventRate
-  );
-  minMaxValues.ventRate.max = Math.max(
-    minMaxValues.ventRate.max,
-    dataSet.ecg.ventRate
-  );
-
-  minMaxValues.prInterval.min = Math.min(
-    minMaxValues.prInterval.min,
-    dataSet.ecg.prInterval
-  );
-  minMaxValues.prInterval.max = Math.max(
-    minMaxValues.prInterval.max,
-    dataSet.ecg.prInterval
-  );
-
-  minMaxValues.qrsInterval.min = Math.min(
-    minMaxValues.qrsInterval.min,
-    dataSet.ecg.qrsInterval
-  );
-  minMaxValues.qrsInterval.max = Math.max(
-    minMaxValues.qrsInterval.max,
-    dataSet.ecg.qrsInterval
-  );
-
-  minMaxValues.qtInterval.min = Math.min(
-    minMaxValues.qtInterval.min,
-    dataSet.ecg.qtInterval
-  );
-  minMaxValues.qtInterval.max = Math.max(
-    minMaxValues.qtInterval.max,
-    dataSet.ecg.qtInterval
-  );
-
-  minMaxValues.qtcInterval.min = Math.min(
-    minMaxValues.qtcInterval.min,
-    dataSet.ecg.qtcInterval
-  );
-  minMaxValues.qtcInterval.max = Math.max(
-    minMaxValues.qtcInterval.max,
-    dataSet.ecg.qtcInterval
-  );
-
-  minMaxValues.pAxis.min = Math.min(minMaxValues.pAxis.min, dataSet.ecg.pAxis);
-  minMaxValues.pAxis.max = Math.max(minMaxValues.pAxis.max, dataSet.ecg.pAxis);
-
-  minMaxValues.rAxis.min = Math.min(minMaxValues.rAxis.min, dataSet.ecg.rAxis);
-  minMaxValues.rAxis.max = Math.max(minMaxValues.rAxis.max, dataSet.ecg.rAxis);
-
-  minMaxValues.tAxis.min = Math.min(minMaxValues.tAxis.min, dataSet.ecg.tAxis);
-  minMaxValues.tAxis.max = Math.max(minMaxValues.tAxis.max, dataSet.ecg.tAxis);
-
-  minMaxValues.glucose.min = Math.min(
-    minMaxValues.glucose.min,
-    dataSet.labs.glucose
-  );
-  minMaxValues.glucose.max = Math.max(
-    minMaxValues.glucose.max,
-    dataSet.labs.glucose
-  );
-
-  minMaxValues.nitrogen.min = Math.min(
-    minMaxValues.nitrogen.min,
-    dataSet.labs.nitrogen
-  );
-  minMaxValues.nitrogen.max = Math.max(
-    minMaxValues.nitrogen.max,
-    dataSet.labs.nitrogen
-  );
-
-  minMaxValues.creatinine.min = Math.min(
-    minMaxValues.creatinine.min,
-    dataSet.labs.creatinine
-  );
-  minMaxValues.creatinine.max = Math.max(
-    minMaxValues.creatinine.max,
-    dataSet.labs.creatinine
-  );
-
-  minMaxValues.eGFR.min = Math.min(minMaxValues.eGFR.min, dataSet.labs.eGFR);
-  minMaxValues.eGFR.max = Math.max(minMaxValues.eGFR.max, dataSet.labs.eGFR);
-
-  minMaxValues.sodium.min = Math.min(
-    minMaxValues.sodium.min,
-    dataSet.labs.sodium
-  );
-  minMaxValues.sodium.max = Math.max(
-    minMaxValues.sodium.max,
-    dataSet.labs.sodium
-  );
-
-  minMaxValues.potassium.min = Math.min(
-    minMaxValues.potassium.min,
-    dataSet.labs.potassium
-  );
-  minMaxValues.potassium.max = Math.max(
-    minMaxValues.potassium.max,
-    dataSet.labs.potassium
-  );
-
-  minMaxValues.chloride.min = Math.min(
-    minMaxValues.chloride.min,
-    dataSet.labs.chloride
-  );
-  minMaxValues.chloride.max = Math.max(
-    minMaxValues.chloride.max,
-    dataSet.labs.chloride
-  );
-
-  minMaxValues.carbonDioxide.min = Math.min(
-    minMaxValues.carbonDioxide.min,
-    dataSet.labs.carbonDioxide
-  );
-  minMaxValues.carbonDioxide.max = Math.max(
-    minMaxValues.carbonDioxide.max,
-    dataSet.labs.carbonDioxide
-  );
-
-  minMaxValues.calcium.min = Math.min(
-    minMaxValues.calcium.min,
-    dataSet.labs.calcium
-  );
-  minMaxValues.calcium.max = Math.max(
-    minMaxValues.calcium.max,
-    dataSet.labs.calcium
-  );
-});
-
-function calculateHealthIndex(data) {
-  const nQTc  = normalize(data.ecg.qtcInterval, minMaxValues.qtcInterval.min, minMaxValues.qtcInterval.max);
-  const nEGFR = normalize(data.labs.eGFR,       minMaxValues.eGFR.min,        minMaxValues.eGFR.max);
-  const nCr   = normalize(data.labs.creatinine,  minMaxValues.creatinine.min,  minMaxValues.creatinine.max);
-  const nVent = normalize(data.ecg.ventRate,     minMaxValues.ventRate.min,    minMaxValues.ventRate.max);
-  const nK    = normalize(data.labs.potassium,   minMaxValues.potassium.min,   minMaxValues.potassium.max);
-  const nCO2  = normalize(data.labs.carbonDioxide, minMaxValues.carbonDioxide.min, minMaxValues.carbonDioxide.max);
-  const nQRS  = normalize(data.ecg.qrsInterval,  minMaxValues.qrsInterval.min, minMaxValues.qrsInterval.max);
-
-  return (
-    (1 - nQTc)  * 0.30 +
-    nEGFR       * 0.25 +
-    (1 - nCr)   * 0.15 +
-    (1 - nVent) * 0.10 +
-    nK          * 0.07 +
-    nCO2        * 0.07 +
-    (1 - nQRS)  * 0.06
-  );
-}
-
-healthDataSets.forEach((dataSet) => {
-  dataSet.healthIndex = calculateHealthIndex(dataSet);
-});
+let healthDataSets = [];
+let minMaxValues = computeMinMaxValues(healthDataSets);
 
 function refreshMinMaxValues(allDatasets) {
   const fresh = computeMinMaxValues(allDatasets);
@@ -1866,25 +967,6 @@ async function init() {
   const uNirvanaRGBLoc   = gl.getUniformLocation(program, "u_nirvanaRGB");
   const uPartnerRGBLoc   = gl.getUniformLocation(program, "u_partnerRGB");
 
-  const allBunCreatRatios = healthDataSets
-    .map((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine))
-    .slice()
-    .sort((a, b) => a - b);
-  const bunCreatP05 = allBunCreatRatios[Math.floor(0.05 * (allBunCreatRatios.length - 1))];
-  const bunCreatP95 = allBunCreatRatios[Math.ceil(0.95 * (allBunCreatRatios.length - 1))];
-  const sortedQtcValues = healthDataSets.map((d) => d.ecg.qtcInterval).sort((a, b) => a - b);
-  const sortedPAxisValues     = healthDataSets.map((d) => d.ecg.pAxis).sort((a, b) => a - b);
-  const sortedRAxisValues     = healthDataSets.map((d) => d.ecg.rAxis).sort((a, b) => a - b);
-  const sortedTAxisValues     = healthDataSets.map((d) => d.ecg.tAxis).sort((a, b) => a - b);
-  const sortedVentRateValues  = healthDataSets.map((d) => d.ecg.ventRate).sort((a, b) => a - b);
-  const sortedPRValues        = healthDataSets.map((d) => d.ecg.prInterval).sort((a, b) => a - b);
-  const sortedQRSValues       = healthDataSets.map((d) => d.ecg.qrsInterval).sort((a, b) => a - b);
-
-  const allQrsTAngles = healthDataSets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
-  const qrsTAngleMin = Math.min(...allQrsTAngles);
-  const qrsTAngleMax = Math.max(...allQrsTAngles);
-  const sortedQRSTAngleValues = [...allQrsTAngles].sort((a, b) => a - b);
-
   let currentDataSetIndex      = /*BAKE:DATASET_INDEX*/5;
   let lastTwoHashDigits        = /*BAKE:HASH_DIGITS*/88;
   let inscriptionUnixSeconds   = /*BAKE:INSCRIPTION_UNIX*/1704067200;
@@ -1916,6 +998,14 @@ async function init() {
     if (idx === 0) return -1;
     return idx % 2 === 0 ? idx + 1 : idx - 1;
   }
+
+  function inheritedHueFromCollection(idx, collection) {
+    const prevIdx = Math.max(0, idx - 1);
+    const prev = lc.collectionDatasets.find(d => d.pieceIndex === prevIdx)?.dataset
+              ?? lcCycleDataset();
+    return prev && collection.length ? computeHSBFromStats(prev, collection).hue * 360 : 0;
+  }
+
   function getPartnerInheritedHue(idx) {
     const p = getPartnerIndex(idx);
     if (p < 0 || p >= healthDataSets.length) return 0;
@@ -2021,6 +1111,41 @@ async function init() {
     return arr;
   }
 
+  let _rankTables = null, _rankKey = null;
+  function getRankTables(collection) {
+    const k = _rankKey;
+    if (_rankTables && k &&
+        k.sibs === lc.collectionDatasets && k.own === lc.ownDataset &&
+        k.cycle === lc.cycleDataset && k.idx === currentDataSetIndex) {
+      return _rankTables;
+    }
+    const sortedBy = (fn) => collection.map(fn).sort((a, b) => a - b);
+    const qrsTAngles = sortedBy((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
+    const bunCreat   = sortedBy((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine));
+    _rankTables = {
+      qtc:      sortedBy((d) => d.ecg.qtcInterval),
+      pAxis:    sortedBy((d) => d.ecg.pAxis),
+      rAxis:    sortedBy((d) => d.ecg.rAxis),
+      tAxis:    sortedBy((d) => d.ecg.tAxis),
+      ventRate: sortedBy((d) => d.ecg.ventRate),
+      pr:       sortedBy((d) => d.ecg.prInterval),
+      qrs:      sortedBy((d) => d.ecg.qrsInterval),
+      qrsTAngle: qrsTAngles,
+
+      qrsTAngleMin: qrsTAngles.length ? qrsTAngles[0] : 0,
+      qrsTAngleMax: qrsTAngles.length ? qrsTAngles[qrsTAngles.length - 1] : 0,
+      bunCreatP05:  bunCreat.length ? bunCreat[Math.floor(0.05 * (bunCreat.length - 1))] : 0,
+      bunCreatP95:  bunCreat.length ? bunCreat[Math.ceil(0.95 * (bunCreat.length - 1))]  : 0,
+    };
+    _rankKey = {
+      sibs:  lc.collectionDatasets,
+      own:   lc.ownDataset,
+      cycle: lc.cycleDataset,
+      idx:   currentDataSetIndex,
+    };
+    return _rankTables;
+  }
+
   function lcGetPartnerDataset(partnerIdx) {
     const found = lc.collectionDatasets.find(d => d.pieceIndex === partnerIdx);
     if (found) return found.dataset;
@@ -2029,10 +1154,21 @@ async function init() {
   }
 
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
+
+  const _OWN_ID_RE = /[0-9a-f]{64}i\d+/i;
   function _resolveOwnId() {
     if (typeof window === 'undefined' || !window.location) return null;
-    const m = window.location.pathname.match(/\/(?:content|preview)\/([0-9a-f]{64}i\d+)/i);
-    return m ? m[1] : null;
+    const loc = window.location;
+
+    const exact = (loc.pathname || '').match(/\/(?:content|preview)\/([0-9a-f]{64}i\d+)/i);
+    if (exact) return exact[1];
+
+    const inPath = (loc.pathname || '').match(_OWN_ID_RE);
+    if (inPath) return inPath[0];
+
+    const inSearch = (loc.search || '').match(_OWN_ID_RE);
+    if (inSearch) return inSearch[0];
+    return null;
   }
   const _ownId = _resolveOwnId();
   lc.collectionAncestors = [];
@@ -2252,7 +1388,43 @@ async function init() {
     }
   }
 
+  async function lcFetchOwnDataset(ownId, attempts = 4) {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const hex = await fetch(`/r/metadata/${ownId}`).then(r => r.json());
+        if (hex && typeof hex === 'string' && hex.trim()) {
+          const meta = cborDecode(hex.trim());
+          if (meta && meta.dataset) return meta;
+        }
+      } catch (e) { /* fall through to the retry */ }
+
+      if (i < attempts - 1) {
+        await new Promise(res => setTimeout(res, 150 * Math.pow(2, i)));
+      }
+    }
+    return null;
+  }
+
   async function initLifecycle() {
+
+    try {
+      if (_ownId) {
+        const ownMeta = await lcFetchOwnDataset(_ownId);
+        if (ownMeta) {
+          lc.ownDataset = ownMeta.dataset;
+
+          lc.collectionDatasets = [{
+            id:               _ownId,
+            pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
+            dataset:          ownMeta.dataset,
+            hashTail:         ownMeta.hashTail ?? null,
+            inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
+          }];
+        }
+      }
+    } catch (e) { /* dev, or no metadata — the render gate reports it */ }
+    lcReleaseOwnData();
+
     try {
 
       const _blk = _sc ? _sc.getAttribute('block') : null;
@@ -2274,27 +1446,7 @@ async function init() {
         if (lc.collectionAncestors.length > 0) {
           lc.collectionRoot = lc.collectionAncestors[lc.collectionAncestors.length - 1];
         }
-
-        try {
-          const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.json());
-          if (ownHex && typeof ownHex === 'string' && ownHex.trim()) {
-            const ownMeta = cborDecode(ownHex.trim());
-            if (ownMeta && ownMeta.dataset) {
-              lc.ownDataset = ownMeta.dataset;
-
-              lc.collectionDatasets = [{
-                id:               _ownId,
-                pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
-                dataset:          ownMeta.dataset,
-                hashTail:         ownMeta.hashTail ?? null,
-                inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
-              }];
-            }
-          }
-        } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
       }
-
-      lcReleaseOwnData();
 
       await lcRefreshSiblings();
       await lcFastForward();
@@ -2403,33 +1555,33 @@ async function init() {
     {
       label: 'N (BUN)', labKey: 'nitrogen', phaseKey: 'N',
       phaseSeed: (h) => (h / 99) * 2 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.NITROGEN),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.NITROGEN, coll),
       strengthLoc: uNitrogenStrengthLoc, hueLoc: uNitrogenHueDegLoc, radiusLoc: uNitrogenRadiusLoc,
-      update({ ph, p, ds }) {
+      update({ ph, p, ds, collection }) {
         const amp = getBreathingAmplitude(ds);
         let str = clamp(0.58 * (0.5 + 0.5 * Math.sin(ph) * amp), 0, 1);
         str = 0.35 + 0.20 * str;
-        const hue = getBeamHueAnchorDeg(ds, BEAM.NITROGEN) + (10 + 8 * p) * Math.sin(ph * 0.93 + 0.14);
+        const hue = getBeamHueAnchorDeg(ds, BEAM.NITROGEN, collection) + (10 + 8 * p) * Math.sin(ph * 0.93 + 0.14);
         return { str, hue };
       },
     },
     {
       label: 'C (Cr)', labKey: 'creatinine', phaseKey: 'C',
       phaseSeed: (h) => (h / 99) * 1.3 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CREATININE),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CREATININE, coll),
       strengthLoc: uCreatinineStrengthLoc, hueLoc: uCreatinineHueDegLoc, radiusLoc: uCreatinineRadiusLoc,
-      update({ ph, p, ds }) {
+      update({ ph, p, ds, collection }) {
         const amp = getBreathingAmplitude(ds);
         let str = clamp((0.4 + 0.3 * p) * (0.5 + 0.5 * Math.sin(ph) * amp), 0, 1);
         str = 0.3 + 0.20 * str;
-        const hue = getBeamHueAnchorDeg(ds, BEAM.CREATININE) + (8 + 5 * p) * Math.sin(ph * 1.07 + 0.08);
+        const hue = getBeamHueAnchorDeg(ds, BEAM.CREATININE, collection) + (8 + 5 * p) * Math.sin(ph * 1.07 + 0.08);
         return { str, hue };
       },
     },
     {
       label: 'Na', labKey: 'sodium', phaseKey: 'Na',
       phaseSeed: (h) => sodiumPhaseSeed(h), tickTwoPi: false,
-      tempoFn: (ds) => sodiumTempoSeconds(ds),
+      tempoFn: (ds, _coll) => sodiumTempoSeconds(ds),
       strengthLoc: uSodiumStrengthLoc, hueLoc: uSodiumHueDegLoc, radiusLoc: uSodiumRadiusLoc,
       update({ ph, p, ds, baseHueDeg, totalYears }) {
         const arr = sodiumArrivalProgress(totalYears, lifespanYears);
@@ -2446,7 +1598,7 @@ async function init() {
     {
       label: 'Cl', labKey: 'chloride', phaseKey: 'Cl',
       phaseSeed: (h) => chloridePhaseSeed(h), tickTwoPi: false,
-      tempoFn: (ds) => chlorideTempoSeconds(ds),
+      tempoFn: (ds, _coll) => chlorideTempoSeconds(ds),
       strengthLoc: uChlorideStrength, hueLoc: uChlorideHueDeg, radiusLoc: uChlorideRadiusLoc,
       update({ ph, p, ds, baseHueDeg, totalYears }) {
         const arr = chlorideArrivalProgress(totalYears, lifespanYears);
@@ -2463,7 +1615,7 @@ async function init() {
     {
       label: 'CO2', labKey: 'carbonDioxide', phaseKey: 'CO2',
       phaseSeed: (h) => (h / 99) * 1.1 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CO2),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CO2, coll),
       strengthLoc: uCo2StrengthLoc, hueLoc: uCo2HueDegLoc, radiusLoc: null,
       update({ ph, p, baseHueDeg, co2Pulse }) {
         const str = clamp(0.26 + 0.18 * (1 - p) + 0.22 * co2Pulse, 0, 0.62);
@@ -2476,7 +1628,7 @@ async function init() {
     {
       label: 'Ca', labKey: 'calcium', phaseKey: 'Ca',
       phaseSeed: (h) => (h / 99) * 0.7 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CALCIUM),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CALCIUM, coll),
       strengthLoc: uCalciumStrengthLoc, hueLoc: uCalciumHueDegLoc, radiusLoc: uCalciumRadiusLoc,
       update({ ph, p, baseHueDeg, caPulse, pCO2, pPR }) {
         const str = clamp(0.06 + 0.08 * (1 - pCO2) + 0.16 * caPulse, 0, 0.30);
@@ -2488,20 +1640,17 @@ async function init() {
     },
   ];
 
-  {
-
-    const _initDs  = healthDataSets[currentDataSetIndex]
-                  ?? healthDataSets[healthDataSets.length - 1];
-    const _initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
+  function preAdvanceBeamPhases(initDs, collection) {
+    const initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
     for (const cfg of beamConfigs) {
       const seed  = cfg.phaseSeed(lastTwoHashDigits);
-      const tempo = Math.max(1e-3, cfg.tempoFn(_initDs));
+      const tempo = Math.max(1e-3, cfg.tempoFn(initDs, collection));
       if (cfg.tickTwoPi) {
 
-        beamPhases[cfg.phaseKey] = seed + (_initSecs * 2 * Math.PI) / tempo;
+        beamPhases[cfg.phaseKey] = seed + (initSecs * 2 * Math.PI) / tempo;
       } else {
 
-        beamPhases[cfg.phaseKey] = (seed + _initSecs / tempo) % 1;
+        beamPhases[cfg.phaseKey] = (seed + initSecs / tempo) % 1;
       }
     }
   }
@@ -2577,11 +1726,12 @@ async function init() {
       0, 1
     );
     if (uQtcNormLoc) gl.uniform1f(uQtcNormLoc, qtcNorm);
-    const qtcPercentile = percentile(activeDataSet.ecg.qtcInterval, sortedQtcValues);
+    const rank = getRankTables(drawCollection);
+    const qtcPercentile = percentile(activeDataSet.ecg.qtcInterval, rank.qtc);
     if (uQtcPercentileLoc) gl.uniform1f(uQtcPercentileLoc, qtcPercentile);
-    const pAxisPct = percentile(activeDataSet.ecg.pAxis, sortedPAxisValues);
-    const rAxisPct = percentile(activeDataSet.ecg.rAxis, sortedRAxisValues);
-    const tAxisPct = percentile(activeDataSet.ecg.tAxis, sortedTAxisValues);
+    const pAxisPct = percentile(activeDataSet.ecg.pAxis, rank.pAxis);
+    const rAxisPct = percentile(activeDataSet.ecg.rAxis, rank.rAxis);
+    const tAxisPct = percentile(activeDataSet.ecg.tAxis, rank.tAxis);
     if (uPAxisPctLoc) gl.uniform1f(uPAxisPctLoc, pAxisPct);
     if (uRAxisPctLoc) gl.uniform1f(uRAxisPctLoc, rAxisPct);
     if (uTAxisPctLoc) gl.uniform1f(uTAxisPctLoc, tAxisPct);
@@ -2608,14 +1758,14 @@ async function init() {
     if (uCo2NormLoc) gl.uniform1f(uCo2NormLoc, co2Norm);
     const qrsTAngle = Math.abs(activeDataSet.ecg.rAxis - activeDataSet.ecg.tAxis);
     const qrsTAngleNorm = clamp(
-      (qrsTAngle - qrsTAngleMin) / Math.max(1e-6, qrsTAngleMax - qrsTAngleMin),
+      (qrsTAngle - rank.qrsTAngleMin) / Math.max(1e-6, rank.qrsTAngleMax - rank.qrsTAngleMin),
       0, 1
     );
     if (uQrsTAngleLoc) gl.uniform1f(uQrsTAngleLoc, qrsTAngleNorm);
-    const ventRatePct   = percentile(activeDataSet.ecg.ventRate,    sortedVentRateValues);
-    const prPct         = percentile(activeDataSet.ecg.prInterval,  sortedPRValues);
-    const qrsPct        = percentile(activeDataSet.ecg.qrsInterval, sortedQRSValues);
-    const qrsTAnglePct  = percentile(qrsTAngle,                     sortedQRSTAngleValues);
+    const ventRatePct   = percentile(activeDataSet.ecg.ventRate,    rank.ventRate);
+    const prPct         = percentile(activeDataSet.ecg.prInterval,  rank.pr);
+    const qrsPct        = percentile(activeDataSet.ecg.qrsInterval, rank.qrs);
+    const qrsTAnglePct  = percentile(qrsTAngle,                     rank.qrsTAngle);
     if (uVentRatePctLoc)  gl.uniform1f(uVentRatePctLoc,  ventRatePct);
     if (uPrPctLoc)        gl.uniform1f(uPrPctLoc,        prPct);
     if (uQrsPctLoc)       gl.uniform1f(uQrsPctLoc,       qrsPct);
@@ -2624,7 +1774,8 @@ async function init() {
     const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
     const inheritedHueDeg = inheritedHueDegOverride !== null
       ? inheritedHueDegOverride
-      : allInheritedHues[currentDataSetIndex];
+      : (allInheritedHues[currentDataSetIndex]
+         ?? inheritedHueFromCollection(currentDataSetIndex, drawCollection));
     if (uInheritedHueDegLoc) gl.uniform1f(uInheritedHueDegLoc, inheritedHueDeg);
     if (uInheritedStrengthLoc) gl.uniform1f(uInheritedStrengthLoc, inheritedStrength);
     if (uReanimationProgressLoc) gl.uniform1f(uReanimationProgressLoc, reanimationProgress);
@@ -2652,13 +1803,13 @@ async function init() {
       const cfg = beamConfigs[i];
       beamPhases[cfg.phaseKey] = beamPhases[cfg.phaseKey] ?? cfg.phaseSeed(lastTwoHashDigits);
       if (cfg.tickTwoPi) {
-        beamPhases[cfg.phaseKey] += (dt * 2 * Math.PI) / Math.max(1e-3, cfg.tempoFn(activeDataSet));
+        beamPhases[cfg.phaseKey] += (dt * 2 * Math.PI) / Math.max(1e-3, cfg.tempoFn(activeDataSet, drawCollection));
       } else {
-        beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet))) % 1;
+        beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet, drawCollection))) % 1;
       }
       const ph = beamPhases[cfg.phaseKey];
       const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, drawCollection);
-      const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
+      const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR, collection: drawCollection });
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
       if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);
       if (cfg.radiusLoc)   gl.uniform1f(cfg.radiusLoc, p);
@@ -2670,7 +1821,7 @@ async function init() {
 
     const bunCreatRatio = activeDataSet.labs.nitrogen / Math.max(0.1, activeDataSet.labs.creatinine);
     const bunCreatRatioNorm = clamp(
-      (bunCreatRatio - bunCreatP05) / Math.max(1e-9, bunCreatP95 - bunCreatP05),
+      (bunCreatRatio - rank.bunCreatP05) / Math.max(1e-9, rank.bunCreatP95 - rank.bunCreatP05),
       0, 1
     );
     if (uBunCreatRatioNormLoc) gl.uniform1f(uBunCreatRatioNormLoc, bunCreatRatioNorm);
@@ -2683,10 +1834,16 @@ async function init() {
 
   (async () => {
     const lifecycle = initLifecycle().catch(() => {});
-    if (currentDataSetIndex >= healthDataSets.length) {
+    if (!lcCycleDataset()) {
       await Promise.race([lc.ownDataReady, lifecycle]);
     }
     gl.clear(gl.COLOR_BUFFER_BIT);
+    const initDs = lcCycleDataset();
+    if (!initDs) {
+      console.error('[lc] no dataset for this piece — own metadata did not resolve. Holding black rather than rendering a piece this is not.');
+      return;
+    }
+    preAdvanceBeamPhases(initDs, getDrawCollection());
     draw();
   })();
 
@@ -2776,11 +1933,11 @@ function getBreathingAmplitude(dataSet) {
   return amp;
 }
 
-function getBeamTempoSeconds(dataSet, beamId) {
+function getBeamTempoSeconds(dataSet, beamId, collection) {
   switch (beamId) {
     case BEAM.NITROGEN: {
 
-      const vals = healthDataSets.map(d => d.labs.nitrogen).sort((a, b) => a - b);
+      const vals = collection.map(d => d.labs.nitrogen).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.nitrogen, vals);
       return 10 - 3 * p;
     }
@@ -2795,7 +1952,7 @@ function getBeamTempoSeconds(dataSet, beamId) {
     }
     case BEAM.CO2: {
 
-      const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
+      const vals = collection.map(d => d.labs.eGFR).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.eGFR, vals);
       return 12 + 8 * p;
     }
@@ -2813,19 +1970,19 @@ function getBeamTempoSeconds(dataSet, beamId) {
   }
 }
 
-function getBeamHueAnchorDeg(dataSet, beamId) {
-  const { hue } = computeHSBFromStats(dataSet, healthDataSets);
+function getBeamHueAnchorDeg(dataSet, beamId, collection) {
+  const { hue } = computeHSBFromStats(dataSet, collection);
   const baseDeg = hue * 360.0;
   switch (beamId) {
     case BEAM.NITROGEN: {
 
-      const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
+      const vals = collection.map(d => d.labs.eGFR).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.eGFR, vals);
       return baseDeg + (p - 0.5) * 160;
     }
     case BEAM.CREATININE: {
 
-      const vals = healthDataSets.map(d => d.labs.potassium).sort((a, b) => a - b);
+      const vals = collection.map(d => d.labs.potassium).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.potassium, vals);
       return baseDeg + (p - 0.5) * 120;
     }

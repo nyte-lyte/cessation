@@ -14,15 +14,29 @@ let   vertGlsl     = readFileSync('./src/shaders/vertex.glsl',   'utf8');
 let   fragGlsl     = readFileSync('./src/shaders/fragment.glsl', 'utf8');
 const css          = readFileSync('./style.css',                  'utf8');
 let   decayLogic   = readFileSync('./data/decay_logic.js',        'utf8');
-let   healthData   = readFileSync('./data/health_data_sets.js',   'utf8');
 let   mainJs       = readFileSync('./src/main.js',                'utf8');
+
+// data/health_data_sets.js is deliberately NOT inlined.
+//
+// The engine used to carry every dataset compiled in, which meant a piece knew
+// its siblings before they were inscribed — percentiles never moved when one
+// landed, and the first pieces could not affect each other at all. A living
+// collection cannot ship with part of itself baked in.
+//
+// On chain each piece carries its own dataset in its CBOR metadata and the
+// collection is assembled from what /r/children discovery actually finds. The
+// bundle therefore declares the two bindings empty; main.js's remaining reads
+// of them are fallback paths that only fire in dev.
+//
+// The file still exists and is still the source of truth — index.html imports it
+// for dev, inscribe.js reads it to write each piece's metadata, and the test
+// harness imports it directly. It just never reaches the chain.
+const healthDataShell = `let healthDataSets = [];
+let minMaxValues = computeMinMaxValues(healthDataSets);`;
 
 // ── Strip ES module syntax ────────────────────────────────────
 
 decayLogic = decayLogic.replace(/^export\s*\{[^}]+\};\s*$/m, '');
-
-healthData = healthData.replace(/^import\s+.*$/m, '');
-healthData = healthData.replace(/^export\s*\{[^}]+\};\s*$/m, '');
 
 mainJs = mainJs.replace(/^import\s+.*\n/gm, '');
 
@@ -54,7 +68,6 @@ function stripComments(src) {
 vertGlsl   = stripComments(vertGlsl);
 fragGlsl   = stripComments(fragGlsl);
 decayLogic = stripComments(decayLogic);
-healthData = stripComments(healthData);
 // mainJs: strip only line comments and whitespace, preserve BAKE block comments
 mainJs = mainJs.replace(/\/\/[^\n]*/g, '');
 mainJs = mainJs.replace(/[ \t]+$/gm, '');
@@ -108,7 +121,7 @@ const _fragSrc = \`${fragEsc}\`;
 
 ${decayLogic.trim()}
 
-${healthData.trim()}
+${healthDataShell}
 
 ${mainJs.trim()}
 })();`;

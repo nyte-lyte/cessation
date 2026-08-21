@@ -1,9 +1,14 @@
 // decay_logic.js
 // Dataset blending, karma, chronological drift, and collection influence.
 
+// An empty collection leaves computeMinMaxValues at its Infinity/-Infinity seeds,
+// so the span is -Infinity rather than 0 and the equality guard alone misses it,
+// returning NaN. Unreachable while the engine carried a baked dataset array;
+// reachable once the collection is only ever what is discovered on chain.
 function normalize(val, min, max) {
-  if (max - min === 0) return 0.5;
-  return (val - min) / (max - min);
+  const span = max - min;
+  if (!isFinite(span) || span === 0) return 0.5;
+  return (val - min) / span;
 }
 
 const ECG_KEYS = ['ventRate', 'prInterval', 'qrsInterval', 'qtInterval', 'qtcInterval', 'pAxis', 'rAxis', 'tAxis'];

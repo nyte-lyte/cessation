@@ -12,7 +12,7 @@
 // Run: node test/scale.test.mjs
 
 import {
-  liftModule, liftFromMainJs, makeCollection, mergedEntries, ownPosition,
+  liftModule, liftFromMainJs, makeCollection, makeDataset, mergedEntries, ownPosition,
   startIndexForDraw, assertDrawGuardUnchanged, initDatasetForPiece,
   assertInitDatasetGuardUnchanged, Report,
 } from './harness.mjs';
@@ -186,6 +186,35 @@ for (const n of [1, 2, 3, BAKED, BAKED + 1, 40, 100]) {
   if (agedShort.labs.eGFR === agedLong.labs.eGFR) {
     r.fail(ctx, 'a piece drifts to the same place in a 30-piece and a 100-piece collection; drift is not scaling with collection size');
   }
+
+  // The beam side of the same failure. Tempo and hue anchor rank the piece
+  // against the collection exactly as the background colour does, but they read
+  // the baked array until they are handed one — so they went on ranking against
+  // the engine's compiled-in snapshot while the background re-ranked live. The
+  // two halves of the same piece drifted apart as the collection grew.
+  //
+  // A genuine append rather than makeCollection(n+1): makeDataset derives its
+  // values from i/(n-1), so a wider collection rewrites every entry and would
+  // move the ranks for the wrong reason.
+  const sibling = makeDataset(BAKED, BAKED + 1);
+  const grown   = [...before, sibling];
+  const beamsG  = liftFromMainJs(
+    ['clamp', 'percentile', 'computeHSBFromStats', 'getBeamTempoSeconds', 'getBeamHueAnchorDeg'],
+    { consts: ['BEAM'],
+      inject: `const minMaxValues = ${JSON.stringify(computeMinMaxValues(grown))};` }
+  );
+  const B = beamsG.BEAM;
+  for (const [label, fn, beamId] of [
+    ['tempo(NITROGEN)', beamsG.getBeamTempoSeconds,  B.NITROGEN],
+    ['tempo(CO2)',      beamsG.getBeamTempoSeconds,  B.CO2],
+    ['hue(NITROGEN)',   beamsG.getBeamHueAnchorDeg,  B.NITROGEN],
+    ['hue(CREATININE)', beamsG.getBeamHueAnchorDeg,  B.CREATININE],
+  ]) {
+    r.checks++;
+    if (fn(subject, beamId, before) === fn(subject, beamId, grown)) {
+      r.fail(ctx, `${label} unchanged when the collection grew ${BAKED} -> ${BAKED + 1}; the beam is not ranking against the live collection`);
+    }
+  }
 }
 
 // ── 4. init()-time beam phase pre-advance ─────────────────────
@@ -207,24 +236,26 @@ for (const n of [1, 2, 3, BAKED, BAKED + 1, 40, 100]) {
     }
   );
 
-  // 0 and 15 are ordinary. 29 is the last baked piece. 30 is the first mint
-  // after the engine — the case that throws without the fallback. 45 is later
-  // growth.
+  // On chain the dataset always arrives as own CBOR metadata — that is the real
+  // path for every piece, not just the ones past the baked array. 0/15/29 also
+  // exercise the dev path, where the baked array answers.
+  const withOwnMeta = (own) => ({ ownDataset: makeDataset(own, BAKED + 1) });
+
   for (const own of [0, 15, BAKED - 1, BAKED, 45]) {
     const ctx = `init beams own=${own}${own >= BAKED ? ' (past baked array — new mint)' : ''}`;
-    const ds = initDatasetForPiece(baked, own);
+    const ds = initDatasetForPiece(baked, own, withOwnMeta(own));
 
     r.checks++;
     if (!ds) {
-      r.fail(ctx, 'no dataset available for the beam phase pre-advance — init() will throw before the first frame');
+      r.fail(ctx, 'own metadata present but no dataset resolved — the piece would hold black with data in hand');
       continue;
     }
 
     for (const [label, fn, args] of [
-      ['getBeamTempoSeconds(NITROGEN)',   beams.getBeamTempoSeconds, [ds, beams.BEAM?.NITROGEN ?? 0]],
-      ['getBeamTempoSeconds(CREATININE)', beams.getBeamTempoSeconds, [ds, 1]],
-      ['getBeamTempoSeconds(CO2)',        beams.getBeamTempoSeconds, [ds, 4]],
-      ['getBeamTempoSeconds(CALCIUM)',    beams.getBeamTempoSeconds, [ds, 5]],
+      ['getBeamTempoSeconds(NITROGEN)',   beams.getBeamTempoSeconds, [ds, beams.BEAM.NITROGEN,   baked]],
+      ['getBeamTempoSeconds(CREATININE)', beams.getBeamTempoSeconds, [ds, beams.BEAM.CREATININE, baked]],
+      ['getBeamTempoSeconds(CO2)',        beams.getBeamTempoSeconds, [ds, beams.BEAM.CO2,        baked]],
+      ['getBeamTempoSeconds(CALCIUM)',    beams.getBeamTempoSeconds, [ds, beams.BEAM.CALCIUM,    baked]],
       ['sodiumTempoSeconds',              beams.sodiumTempoSeconds,  [ds]],
       ['chlorideTempoSeconds',            beams.chlorideTempoSeconds,[ds]],
     ]) {
@@ -234,6 +265,27 @@ for (const n of [1, 2, 3, BAKED, BAKED + 1, 40, 100]) {
         r.checks++;
         if (t.value <= 0) r.fail(ctx, `${label} returned ${t.value}; a non-positive tempo divides into the phase advance`);
       }
+    }
+  }
+
+  // The failure state, which only exists once the engine ships without datasets:
+  // own metadata never arrives and there is nothing baked to fall back on. The
+  // piece must resolve nothing — so the boot gate holds black — rather than
+  // resolving some other piece's data and rendering it as its own.
+  {
+    const ctx = 'no own metadata';
+    r.checks++;
+    const resolved = initDatasetForPiece([], 30, {});
+    if (resolved !== null) {
+      r.fail(ctx, `resolved ${JSON.stringify(resolved)?.slice(0, 60)} with no baked array and no own metadata; the piece would render data that is not its own`);
+    }
+    // A neighbour's dataset in the collection must not stand in for this piece.
+    r.checks++;
+    const neighbour = initDatasetForPiece([], 30, {
+      collectionDatasets: [{ pieceIndex: 29, dataset: makeDataset(29, BAKED) }],
+    });
+    if (neighbour !== null) {
+      r.fail(ctx, 'a sibling dataset was accepted as this piece\'s own; resolution is not keyed on pieceIndex');
     }
   }
 }

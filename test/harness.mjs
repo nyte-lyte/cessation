@@ -22,11 +22,14 @@ export const ROOT = join(here, '..');
 // Rather than add a package.json (which would change how the project loads
 // everywhere else), strip the module syntax the same way build.js does and
 // evaluate it. Same source of truth either way — no copy to drift.
-export function liftModule(relPath, names) {
+// `inject` supplies bindings the module imports rather than defines — stripping
+// the import leaves the name dangling, and health_data_sets.js calls normalize()
+// at load to enrich every dataset.
+export function liftModule(relPath, names, { inject = '' } = {}) {
   let src = readFileSync(join(ROOT, relPath), 'utf8');
   src = src.replace(/^import\s+.*$/gm, '');
   src = src.replace(/^export\s*\{[^}]+\};?\s*$/gm, '');
-  const factory = new Function(`${src}\nreturn { ${names.join(', ')} };`);
+  const factory = new Function(`${inject}\n${src}\nreturn { ${names.join(', ')} };`);
   const lifted = factory();
   // Constants are liftable too (KARMA_CLEARANCE_K), so require only that the
   // binding exists — an undefined means the name is wrong or has been removed.
@@ -57,25 +60,42 @@ export function liftFromMainJs(names, { inject = '', consts = [] } = {}) {
     if (!m) throw new Error(`harness: could not lift ${name}() from src/main.js — has the file been reformatted?`);
     parts.push(m[0]);
   }
-  const factory = new Function(`${inject}\n${parts.join('\n\n')}\nreturn { ${names.join(', ')} };`);
+  // Consts are returned alongside the functions, not just injected into scope —
+  // otherwise a caller reaching for a lifted const gets undefined and quietly
+  // falls back to a literal, testing a different beam than the label claims.
+  const factory = new Function(`${inject}\n${parts.join('\n\n')}\nreturn { ${[...consts, ...names].join(', ')} };`);
   return factory();
 }
 
 // Mirrors the _initDs fallback in the beam phase pre-advance (src/main.js:1152).
-// A piece minted after the engine has no baked entry, and every tempoFn
-// dereferences the dataset, so an undefined here throws inside init() and the
-// piece never draws.
-export function initDatasetForPiece(bakedDatasets, ownPieceIndex) {
-  return bakedDatasets[ownPieceIndex] ?? bakedDatasets[bakedDatasets.length - 1];
+// Mirrors lcCycleDataset() — how a piece resolves which dataset is its own.
+// On chain the answer comes from its CBOR metadata; the baked array is only
+// consulted in dev. Returns null when nothing resolves, which is a legitimate
+// state (own metadata did not arrive), not a crash: the boot gate holds the
+// canvas black rather than rendering a piece the data does not describe.
+export function initDatasetForPiece(bakedDatasets, ownPieceIndex, lc = {}) {
+  if (lc.cycleDataset) return lc.cycleDataset;
+  if (lc.ownDataset)   return lc.ownDataset;
+  const fromCollection = (lc.collectionDatasets ?? []).find(d => d.pieceIndex === ownPieceIndex);
+  if (fromCollection)  return fromCollection.dataset;
+  return bakedDatasets[ownPieceIndex] ?? null;
 }
 
-const INIT_DS_SOURCE = 'healthDataSets[currentDataSetIndex]\n                  ?? healthDataSets[healthDataSets.length - 1]';
+// Two tripwires against this model going stale. The first pins the resolution
+// order; the second pins the hold-black gate, because a model that returns null
+// only means something if main.js still declines to draw on null.
+const CYCLE_DS_SOURCE = 'if (lc.cycleDataset) return lc.cycleDataset;';
+const HOLD_BLACK_SOURCE = 'const initDs = lcCycleDataset();';
 
 export function assertInitDatasetGuardUnchanged(report) {
   const src = readFileSync(join(ROOT, 'src/main.js'), 'utf8');
   report.checks++;
-  if (!src.includes(INIT_DS_SOURCE)) {
-    report.fail('harness', 'the _initDs fallback in src/main.js no longer matches initDatasetForPiece() in harness.mjs — a piece past the baked array may crash in init() again');
+  if (!src.includes(CYCLE_DS_SOURCE)) {
+    report.fail('harness', 'lcCycleDataset() in src/main.js no longer matches initDatasetForPiece() in harness.mjs — own-dataset resolution has changed underneath the model');
+  }
+  report.checks++;
+  if (!src.includes(HOLD_BLACK_SOURCE) || !src.includes('if (!initDs) {')) {
+    report.fail('harness', 'the boot gate no longer resolves a dataset before drawing — a piece with no own metadata may render midpoint values as if they were its own data');
   }
 }
 
