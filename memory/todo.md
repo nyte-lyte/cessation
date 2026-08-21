@@ -1,14 +1,26 @@
 # Cessation — To Do
 
-Rewritten 2026-08-16, updated end of session 2026-08-16. Every claim was re-verified
-against the code. The previous version of this file asserted a state the code did not
-match — see "Why this file was wrong" at the bottom before trusting any old checkmark.
+Rewritten 2026-08-16, updated 2026-08-21. Every claim was re-verified against the
+code. An earlier version of this file asserted a state the code did not match — see
+"Why this file was wrong" at the bottom before trusting any old checkmark.
 
 ## THE DECISION THAT FRAMES EVERYTHING
 **Re-inscribing the whole project on fresh sats, v3 engine only.** No fourth layer on
 the existing sats. One inscription per sat, clean parent chain, no legacy ancestors.
 The bar is "make sure everything works this time" — two previous attempts failed and
 one of them put a real name on chain permanently.
+
+**Which sats — settled 2026-08-21.** The Nakamoto range already in `ord-cold`:
+907 Satoshi-era sats from block 2485, `12425429610010 → …610916`. 31 needed, 907 held,
+nothing to buy. Re-buying ~23 Omega blacks was the blocker and a fourth layer on the v2
+sats was rejected. See [[wallets]] for the rationale and the fan-out prerequisite.
+
+**Clean parent chain means the engine has no parent.** This is the whole of the load-time
+problem. `lcRefreshSiblings` walks every ancestor and fetches `/r/metadata/<id>` for each
+of its children, so the v1 → v2 → v3 chain meant ~90 metadata round trips at boot instead
+of ~30, growing with every stacked engine. How many layers a sat carries costs the engine
+nothing at runtime — ord serves `/content/<id>` and `/r/metadata/<id>` as direct lookups
+and never scans the sat. The v2 engine was inscribed `--parent v1`; do not repeat that.
 
 ## Current state
 
@@ -25,8 +37,9 @@ Earlier layers sit underneath each sat and are bypassed by viewers (latest inscr
 on a sat wins) but remain retrievable. Stacked inscriptions are also the cause of the
 lag and poor appearance on ordinals.com.
 
-**Repo HEAD** is `8f49340`. **Not inscribed.** Live v2 corresponds to `4fe0114`
-(2026-06-20). HEAD is what the fresh-sat inscription would carry.
+**Repo HEAD** is ahead of `388e1db` with the zero-baked engine work uncommitted.
+**Not inscribed.** Live v2 corresponds to `4fe0114` (2026-06-20). HEAD is what the
+fresh-sat inscription would carry.
 
 **What live v2 is missing** relative to HEAD (`1c80352` and `cdf1eb6`) — these are real,
 running on chain right now:
@@ -44,8 +57,8 @@ running on chain right now:
 
 ## Done this session (2026-08-16)
 
-All committed and pushed. Harness at **9,300 checks, 0 failures**; bundle rebuilds
-byte-identical.
+All committed and pushed. Harness stood at **9,300 checks** that day (14,071 now);
+bundle rebuilds byte-identical.
 
 - `cdf1eb6` — **u_time float32 freeze.** Raw seconds-since-inscription in a float32
   uniform; ULP exceeded a frame, so motion froze and snapped. Wrapped at 200π
@@ -65,19 +78,68 @@ byte-identical.
 - `8f49340` — **karma clearance at the piece's own eGFR**, plus `previewPairing()`
   dev helper. See [[nirvana]].
 
-## Living collection — fixed 2026-08-16
+## Done this session (2026-08-21) — uncommitted
+
+Suites: `test/scale.test.mjs` **14,071 checks**, `test/boot.test.mjs` **84 checks**,
+both 0 failures. Bundle rebuilds byte-identical. Every assertion added was
+mutation-tested — a passing test proves nothing until you break the code and watch it
+fail.
+
+- **The engine stopped carrying the collection.** `build.js` no longer inlines
+  `data/health_data_sets.js`. 100.15 KB → **81.8 KB**.
+- **Three more places were still ranking against the baked array** — the seven ECG
+  rank tables (computed once in `init()`, consumed every frame), `getBeamTempoSeconds`
+  and `getBeamHueAnchorDeg`. Same class as the `setHSBUniforms` bug v3 fixed; these
+  were missed then. The ECG half of a piece stayed frozen at the engine's snapshot
+  while the lab half re-ranked live, so the two drifted apart as the collection grew.
+- **`test/boot.test.mjs`** — boots the shipped bundle against a stubbed DOM, WebGL2
+  and `/r/*`. Everything else in `test/` exercises lifted functions; this runs what
+  actually gets inscribed. Covers uniform completeness (the `u_co2Norm` class), CBOR
+  fidelity, and both boot outcomes.
+- **CBOR fidelity verified exact** — all 17 dataset values round-trip bit-identical.
+  Closes the item that was blocking in [[testing]]. Mutation: float32 encoding drifts
+  potassium 4.1 → 4.099999904632568, and the test names it.
+- **Found and fixed:** `u_inheritedHueDeg` was `undefined` with an empty baked array.
+  `allInheritedHues` derives from `healthDataSets` and nothing stood behind it. Masked
+  in practice by the `hue` attribute every piece carries, but no derivation path
+  existed. Now falls back to `inheritedHueFromCollection()`.
+- **Harness fixes:** `liftFromMainJs` injected lifted consts but never returned them,
+  so `beams.BEAM` was always `undefined` and the beam test fell back to `?? 0` — it
+  would have silently tested NITROGEN while labelled CO2 if the enum were reordered.
+  `liftModule` gained `inject` for modules whose imports the lift strips.
+
+## Living collection — fixed 2026-08-16, completed 2026-08-21
 
 **The first 30 pieces could not affect each other, and that was the whole point of the
 project.** `_lcMergedEntries` seeded the collection from the baked `healthDataSets`
-array, which the engine carries compiled in. So piece 0, alone on chain, already knew
+array, which the engine carried compiled in. So piece 0, alone on chain, already knew
 pieces 1–29. Inscribing a sibling overwrote a baked entry with an identical one:
 percentiles never moved, min/max never moved, nothing re-rendered. The collection only
 began to live once inscriptions went *past* the baked set — piece 30 onward.
 
-Now the collection is strictly what is on chain once discovery succeeds
-(`lc.collectionResolved`). Baked data is fallback only: dev, and the frames before the
-first sibling fetch returns. Verified against the real datasets: **381 of 435
-piece-observations change when a sibling arrives** during a 30-piece run.
+2026-08-16 stopped the collection *seeding* from the baked array. **2026-08-21 removed
+the array from the engine entirely.** `build.js` no longer inlines
+`data/health_data_sets.js`; the bundle declares `healthDataSets = []`. A piece gets its
+own dataset from `/r/metadata/<ownId>` and the collection from `/r/children` discovery,
+and there is no third source. It makes no sense for a living collection to have part of
+itself baked into the engine — and while a fallback existed, a rehearsal could always
+pass on data the chain never supplied.
+
+Verified against the real datasets: **381 of 435 piece-observations change when a
+sibling arrives** during a 30-piece run.
+
+What the removal forced, all now done and covered by tests:
+- ECG rank tables, beam tempo and beam hue anchor had to start ranking against the
+  live collection. They read the baked array directly, so with it empty they returned
+  NaN — the same bug class `setHSBUniforms` had, still live in three more places.
+- `normalize` had to guard an empty collection: `computeMinMaxValues([])` leaves
+  `Infinity/-Infinity`, whose span is `-Infinity`, which the `=== 0` guard missed.
+- The beam phase pre-advance had to move out of `init()` — it needs a dataset, and
+  with nothing baked there is none until own metadata lands.
+- Own metadata had to be fetched *first* in `initLifecycle` and retried, since a
+  failure among the lifecycle fetches used to abort before ever reaching it.
+- A piece that resolves no dataset now holds black rather than rendering midpoints as
+  if they were its own data.
 
 Consequences accepted deliberately:
 - **Piece 0 alone is a collection of one.** No ranking exists, so every percentile is
@@ -93,12 +155,33 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
+- **Fan out the Nakamoto range — DO THIS BEFORE ANY INSCRIBING.** Every sat in
+  `b9c746591981…:0` is Nakamoto-era, so inscribing straight against it spends ~330–546
+  of them as postage padding per inscription and exhausts 907 after two. Split into 31
+  outputs, one Nakamoto sat at offset 0 plus common padding each, then read the numbers
+  back with `ord wallet sats`. Verify the split mechanics against the real `ord 0.27.1`
+  binary first — a mis-built fan-out scatters Satoshi-era sats into fee change and is
+  not recoverable. Sub-decisions still open: whether pieces map to the range in order
+  (piece 0 on `…610010`), and which sat the engine takes.
+- **`PIECE_SATS` is nulled and must be filled from the wallet, not from arithmetic.**
+  It held the v2 Omega blacks until 2026-08-21 — running `inscribe.js` would have
+  generated `--sat` commands putting a fourth layer on sats already carrying three. It
+  now errors on every piece until filled. Fill only from `ord wallet sats` output after
+  the fan-out confirms.
 - **Tail convergence — UNDECIDED.** `getAgedDataset` clamps drift at the end of the
   timeline (`maxSpan`), so when the collection stops growing the final ~20% of pieces
   permanently converge onto the last dataset in old age. While the collection grows,
   new data keeps extending the runway and it does not bite. User's position: "not sure
   about tail convergence." Not a bug — a real structural consequence that should be
   decided rather than discovered.
+- **Beam phase pre-advance runs against a collection of one — UNDECIDED.**
+  `preAdvanceBeamPhases` fires once at boot, after own metadata lands but before the
+  sibling scan, so beam tempos rank against a one-piece collection and every rank is
+  the midpoint. The birth phase is therefore derived from a ranking that is not the
+  real one. It is still deterministic — every viewer boots identically — but the error
+  is larger than the chronological-drift approximation the code comments assume.
+  Fix if wanted: re-run it once `lc.collectionResolved` flips true, which snaps the
+  phase to the real value at the cost of a visible one-time jump a second into load.
 - **`KARMA_CLEARANCE_K = 0.05` is a chosen constant, not data-derived.** It sets the
   tempo of liberation, not the ordering. The project's principle is that the data
   decides the important things. Re-derive alternatives with
@@ -109,9 +192,9 @@ Consequences accepted deliberately:
   `pieceIndex`, `hashTail`, `inscriptionUnix`, `dataset` — and nothing else. Check the
   inscribe command and any batch file for absolute paths; `/Users/<name>/…` leaks
   identity. Run inscribe.js from the repo root so paths stay relative (`dist/…`).
-- **Remaining harness work** — uniform completeness, float32 magnitude, and a
-  frozen-uniform age sweep are still unbuilt. Scale and determinism are done. See
-  [[testing]].
+- **Remaining harness work** — float32 magnitude and a frozen-uniform age sweep are
+  still unbuilt. Scale, determinism and **uniform completeness** (2026-08-21,
+  `test/boot.test.mjs`) are done. See [[testing]].
 - **The regtest growth rehearsal — the one thing that turns "modelled" into "seen."**
   The v1 regtest inscribed 30 and viewed 30, and passed; the failure only appeared when
   a new dataset joined the collection. So the rehearsal must include growth:
@@ -119,15 +202,18 @@ Consequences accepted deliberately:
   2. Open all 30. Baseline — this is the step that already passed for v1.
   3. Add a new dataset to `health_data_sets.js` and inscribe piece 30.
   4. Reopen the originals: still render, discover 31 siblings, re-rank rather than crash.
-  5. Open piece 30 itself — index past the baked array, exercising the `_initDs`
-     fallback and `lc.ownDataReady`.
+  5. Open piece 30 itself — exercising `lc.ownDataReady` and the own-metadata fetch.
+     Note this is no longer a special case: with nothing baked, *every* piece takes
+     the same path piece 30 does, which is the point of removing the array.
   6. Repeat with 31 and 32; one new piece may not surface an off-by-one that two would.
   Also time the first paint — it should be immediate now, not tens of seconds.
 - **Not yet proven on any chain:** boot ordering, batched sibling fetch, and the block
   height fallback all no-op in dev because `/r/*` 404s immediately. Dev verified the
   render path and the init-time fix only.
-- **Downstream copies of the engine — resynced 2026-08-17, still manual.** Both other
-  repos hold copies and neither updates itself. After any change to `data/`,
+- **Downstream copies of the engine — DRIFTED as of 2026-08-21, still manual.** The
+  zero-baked work changed `data/decay_logic.js` and rebuilt `index_bundle.js`, so both
+  copies are now stale and need resyncing. Note `~/nytelyte` is a live site — sync it
+  deliberately, not mid-change. Both repos hold copies and neither updates itself. After any change to `data/`,
   `src/shaders/` or `index_bundle.js`, check both:
   - `~/cessation-tracker` — `src/data/health_data_sets.js`, `src/data/decay_logic.js`,
     `src/shaders/{fragment,vertex}.glsl`. All four byte-identical as of `bc5ccc9`.
@@ -149,7 +235,7 @@ Consequences accepted deliberately:
   point-in-time fact. Cleaned up 2026-08-16 in `inscribe.js`, `build.js`, `MEMORY.md`, and
   `inscription_architecture.md`.
 
-## Verified true (re-checked 2026-08-16)
+## Verified true (re-checked 2026-08-21)
 
 Each confirmed present in `src/main.js` at HEAD. Grep for the name rather than
 trusting a line number — line numbers move with every edit, which is how this file
@@ -168,6 +254,12 @@ went stale before:
 - Dev console API stripped from the bundle via DEV_START/DEV_END
 - No Brotli compression
 - Sats sourced and held; `PIECE_SATS` filled in inscribe.js
+- **Engine carries no datasets** — `grep -c 'date: *"' index_bundle.js` returns 0, and
+  the bundle contains `let healthDataSets = [];`. Asserted by `test/boot.test.mjs`.
+- Own metadata fetched first in `initLifecycle`, retried 4× (`lcFetchOwnDataset`)
+- `_resolveOwnId` tries the ord path, a bare id in the path, then the query string
+- `preAdvanceBeamPhases` called from the boot sequence, not inline in `init()`
+- Boot holds black when `lcCycleDataset()` resolves nothing
 
 ## Why this file was wrong
 

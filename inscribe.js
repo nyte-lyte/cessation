@@ -17,46 +17,36 @@
 //
 
 // ── Per-piece sat numbers ─────────────────────────────────────────────────────
-// REQUIRED — fill in the sat ordinal number for each piece before minting.
-// Piece 0: Nakamoto sat (2009-01-31). Pieces 1–28: Omega black uncommon sats.
-// Leave null to get an error rather than silently inscribing on the wrong sat.
-// Engine is inscribed on Nakamoto sat 12425429610918 (last sat of UTXO ccab20ce:0, block 2485).
-// Pieces 0–28 use Black Uncommons in chronological-by-block order.
+// REQUIRED — fill in the sat ordinal number for each piece before inscribing.
+// Null by design: the script errors rather than silently inscribing on the wrong
+// sat. Do not fill these in from a plan — fill them in from `ord wallet sats`
+// after the fan-out has confirmed, so every number here is one you have verified
+// the wallet actually holds at offset 0 of its own output.
+//
+// DECIDED 2026-08-21: the collection goes on Satoshi-era sats from the Nakamoto
+// range in `ord-cold` — UTXO b9c746591981…:0, 907 sats spanning
+// 12425429610010 → 12425429610916, all from block 2485 (2009-01-31). One block,
+// one day, one miner, 28 days after genesis. 31 inscriptions needed (engine plus
+// pieces 0–29) against 907 eligible sats, so nothing needs buying.
+//
+// PREREQUISITE — the range must be fanned out first. Inscribing straight against
+// it consumes ~330–546 *Nakamoto* sats as postage padding per inscription, which
+// exhausts 907 after two. Split it into 31 outputs, each carrying one Nakamoto sat
+// at offset 0 followed by common padding, then read the numbers back with
+// `ord wallet sats`. See memory/wallets.md.
+//
+// These were previously populated with the Omega black uncommons used for the v2
+// inscription. Those sats already carry three permanent layers and are NOT the
+// target any more — restoring them would put a fourth layer on each. The old
+// numbers are recorded in memory/wallets.md and recoverable from chain.
 const PIECE_SATS = {
-  0:  1073492499999999,  // ggaofldnaso  block 219396
-  1:  1083577499999999,  // geegozsvhly  block 223430
-  2:  1102322499999999,  // gasmtandsqk  block 230928
-  3:  1144884999999999,  // fswrmtkmsde  block 247953
-  4:  1165149999999999,  // fpdqkiwtjgc  block 256059
-  5:  1225639999999999,  // fdzzclsqgnq  block 280255
-  6:  1235642499999999,  // fcebtbyphkc  block 284256
-  7:  1247724999999999,  // ezyfkmhfbio  block 289089
-  8:  1255119999999999,  // eyourxqckxm  block 292047
-  9:  1265207499999999,  // ewsmtjurgus  block 296082
-  10: 1287739999999999,  // esopiujojcc  block 305095
-  11: 1303782499999999,  // epptzdzeziw  block 311512
-  12: 1311874999999999,  // eodakrzsxew  block 314749
-  13: 1312054999999999,  // eoceaafyvvu  block 314821
-  14: 1341682499999999,  // eiqhfztjjyo  block 326672
-  15: 1475882499999999,  // djxqrjryauc  block 380352
-  16: 1520284999999999,  // dbtaiujpvdq  block 398113
-  17: 1520534999999999,  // dbrvfnaybyg  block 398213
-  18: 1528214999999999,  // dahbajgrwjq  block 401285
-  19: 1564052499999999,  // ctrlbuazpyg  block 415620
-  20: 1648302499999999,  // cedznsnbrdq  block 478641
-  21: 1664417499999999,  // cbevdkdbery  block 491533
-  22: 1786754999999999,  // beqznfjhipm  block 589403
-  23: 1806232499999999,  // bbbsmbaumcw  block 604985
-  24: 1836424999999999,  // avndjbdkrqw  block 629139
-  25: 1857229999999999,  // arrnapijeso  block 661567
-  26: 1899107499999999,  // ajyzbtminrm  block 728571
-  27: 1923204999999999,  // afnovbhsioo  block 767127
-  28: 1925117499999999,  // afeksbckasw  block 770187
-  29: 1933139999999999,  // adrzwervqle  block 783023
-  // Spare BUs in wallet (4): adrejuehvqo 783299,
-  // adkoglpialm 785511, abigrncmehu 803651, aaexuaaadws 813455.
+  0:  null,   1:  null,   2:  null,   3:  null,   4:  null,
+  5:  null,   6:  null,   7:  null,   8:  null,   9:  null,
+  10: null,   11: null,   12: null,   13: null,   14: null,
+  15: null,   16: null,   17: null,   18: null,   19: null,
+  20: null,   21: null,   22: null,   23: null,   24: null,
+  25: null,   26: null,   27: null,   28: null,   29: null,
 };
-
 'use strict';
 const { readFileSync, writeFileSync, mkdirSync, existsSync } = require('fs');
 const path = require('path');
@@ -255,7 +245,8 @@ if (isNaN(blockHeight) || blockHeight < 0) {
 
 const satNumber = PIECE_SATS[pieceIndex];
 if (satNumber === null || satNumber === undefined) {
-  console.error(`Error: PIECE_SATS[${pieceIndex}] is not set — fill in the sat ordinal number in inscribe.js before minting.`);
+  console.error(`Error: PIECE_SATS[${pieceIndex}] is not set — fill in the sat ordinal number in inscribe.js before inscribing.`);
+  console.error('  Fill it from `ord wallet sats` after the Nakamoto range is fanned out — not from a plan. See the note above PIECE_SATS.');
   process.exit(1);
 }
 

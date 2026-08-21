@@ -1,14 +1,23 @@
 # Testing — what is verified, what is not
 
-Last updated 2026-08-16.
+Last updated 2026-08-21.
 
 ## Dev mode (Live Server or any local http server)
 
 `[lc] lifecycle engine inactive (not in ord env)` is **expected, not an error.** The
 `/r/*` recursive endpoints only exist inside an ord server; in dev they 404, the
-fetch throws, and `initLifecycle` falls back to the baked `healthDataSets` — which
-*is* the initial 30-piece collection, so the render is correct. `lc.ready` stays false and
-block polling never starts. That is the whole meaning of the message.
+fetch throws, and `initLifecycle` falls back to `healthDataSets` — which dev still
+imports directly from `data/health_data_sets.js`, so the render is correct.
+`lc.ready` stays false and block polling never starts. That is the whole meaning of
+the message.
+
+**Dev and the chain now run on different data sources.** Since 2026-08-21 the engine
+bundle carries no datasets at all: on chain a piece reads its own from
+`/r/metadata/<ownId>` and the rest from `/r/children` discovery. Dev keeps the import,
+so it always shows the finished 30-piece state. This is deliberate — see
+[todo.md](todo.md) — but it means **dev cannot tell you what a piece looks like
+mid-inscription-run**, and a dev screenshot is not evidence about chain behaviour.
+`node test/boot.test.mjs` is what exercises the chain path.
 
 Two things worth knowing when reading a dev console:
 
@@ -47,7 +56,9 @@ architecture current at those dates.
    100+ pieces are untested.
 3. **Visual correctness.** A wrong-but-valid frame renders without error. `u_co2Norm`
    defaulting to 0 and the wrong inherited hue both produced perfectly good images
-   of the wrong thing.
+   of the wrong thing. `test/boot.test.mjs` now closes the mechanical half of this —
+   it catches an unset or non-finite uniform — but says nothing about whether a
+   finite, correctly-wired value is the *right* value.
 
 Every bug that has shipped so far lived in one of these three gaps. See
 [[feedback_engine_version_artifacts]].
@@ -62,9 +73,11 @@ Every bug that has shipped so far lived in one of these three gaps. See
    current source produces.
 3. **`index_bundle.html` is the one-line loader**, not an inlined engine copy. It was
    a fully inlined v1 fossil once (`f90af79`); restored in `8ca13e5`.
-4. **Every uniform declared in fragment.glsl is located and set** in main.js. Compare
-   the `uniform <type> <name>` declarations against the `getUniformLocation` names.
-   This is the `u_co2Norm` check and it is purely static.
+4. **Every uniform declared in fragment.glsl is located and set** in main.js.
+   `node test/boot.test.mjs` now does this dynamically — it boots the bundle and
+   records every `uniform1f`/`uniform2f`/`uniform3fv` call, failing on any
+   non-finite value. This is the `u_co2Norm` check, and it caught
+   `u_inheritedHueDeg` going undefined once the datasets left the engine.
 5. **`PIECE_SATS` is filled in inscribe.js** — the script errors on any null.
 6. **METADATA GATE — no identity on chain. Blocking; nothing is broadcast until this
    passes.** A name reached Bitcoin permanently on the second inscription. It is the
@@ -81,10 +94,18 @@ Every bug that has shipped so far lived in one of these three gaps. See
 7. **Count the layers on each sat.** Each reinscription stacks another permanent layer
    and degrades appearance and load speed on ordinals.com. Know how many a sat already
    carries and whether another is genuinely worth it.
-8. **CBOR number fidelity.** On regtest, decode `/r/metadata/<id>` for several pieces and
-   compare every ecg/labs value *numerically* against the baked dataset — not by eye.
-   If CBOR encodes any value at reduced precision, percentile ranks flip and a piece
-   renders differently from the same data in dev.
+8. **CBOR number fidelity — now verified in Node, still worth one chain check.**
+   `test/boot.test.mjs` encodes a real dataset, decodes it through the engine's own
+   `cborDecode`, and asserts all 17 ecg/labs values are bit-identical. They are.
+   Mutation-tested: float32 encoding drifts potassium 4.1 → 4.099999904632568 and the
+   test names the field.
+
+   This matters far more than it did. While the engine carried the datasets, the baked
+   array was authoritative and a rounded metadata value changed nothing. **The metadata
+   is now the only source of a piece's own data** — a rounded value *is* the piece. The
+   Node test covers the encoding, so what remains for regtest is confirming ord writes
+   what `inscribe.js` hands it: decode `/r/metadata/<id>` for a few pieces and compare
+   numerically against `health_data_sets.js`.
 
    **Note (2026-08-16): dev and chain no longer render identically at launch, by
    design.** That equivalence held only while the engine seeded its collection from
@@ -97,16 +118,19 @@ Every bug that has shipped so far lived in one of these three gaps. See
 
 Only two kinds of bytes, and neither reads `index_bundle.html`:
 
-- **The engine** — `index_bundle.js`, built by `build.js` from exactly six paths:
+- **The engine** — `index_bundle.js`, built by `build.js` from exactly five paths:
   `src/main.js`, `src/shaders/fragment.glsl`, `src/shaders/vertex.glsl`,
-  `style.css`, `data/decay_logic.js`, `data/health_data_sets.js`.
+  `style.css`, `data/decay_logic.js`. **`data/health_data_sets.js` is deliberately
+  not among them** (2026-08-21) — the bundle declares `healthDataSets = []` and each
+  piece supplies its own dataset via CBOR metadata. If that file ever reappears in
+  the bundle, the collection has stopped being alive; `test/boot.test.mjs` fails on it.
 - **Each piece** — a ~300-byte HTML file written from the inline template at
   `inscribe.js` (`const scriptHtml`), carrying `t/ht/unix/hue/block` and `src="/content/{engineId}"`,
   plus its CBOR metadata JSON. Both regenerated into gitignored `dist/` every run.
 
 ## Scale harness — built 2026-08-16
 
-`node test/scale.test.mjs` — ~8,900 assertions, no dependencies, runs in about a
+`node test/scale.test.mjs` — 14,071 assertions, no dependencies, runs in about a
 second. This is the axis that actually broke v1: **regtest inscribed 30 pieces and
 all 30 rendered; the failure only appeared when a new dataset joined the
 collection.** Growth is the main case for this project, not an edge case.
@@ -147,7 +171,41 @@ piece's history in one pass gives bit-identical results to applying cycles one a
 time. If replay diverged, a page reload could change whether a piece had liberated.
 Mutation-tested: perturbing one path by 0.1% fails with the divergence printed.
 
-Current status against HEAD: **9,300 checks, 0 failures.**
+Current status against HEAD: **14,071 checks, 0 failures.**
+
+Growth sensitivity also covers the beam side as of 2026-08-21 — tempo and hue anchor
+must move when a sibling lands, not just the background colour. Mutation-tested by
+freezing the collection to the engine's build-time size inside both functions.
+
+## Boot harness — built 2026-08-21
+
+`node test/boot.test.mjs` — 84 assertions. Everything else in `test/` exercises
+functions lifted out of the source; this boots the **shipped `index_bundle.js`**
+against a stubbed DOM, WebGL2 context and `/r/*` surface, and asks the only question
+that finally matters: given nothing but its own CBOR metadata, does the piece render,
+and does it render finite numbers?
+
+It exists because the engine no longer carries the collection. Before, a piece could
+fall back to the baked array and look right no matter what the chain said — which is
+exactly why a rehearsal could pass on data the chain never supplied.
+
+What it asserts:
+- **The bundle carries no datasets.** Zero `date:` entries, and the empty shell is
+  present — a tripwire against `build.js` going back to inlining the data file.
+- **CBOR fidelity** — see checklist item 8.
+- **A piece with metadata renders**, sets 40+ uniforms, and every one is finite.
+- **A piece without metadata holds black** and says why. Without the gate this is not
+  a neutral render but a `TypeError` inside `preAdvanceBeamPhases`, since every
+  `tempoFn` dereferences the dataset — the gate is load-bearing structurally, not
+  only aesthetically.
+
+Mutation-tested four ways, all caught: float32 CBOR encoding, an unset uniform, the
+hold-black gate removed, and datasets re-baked into the bundle.
+
+A note on plumbing: the engine boots inside an async IIFE, so anything it throws
+surfaces as an unhandled rejection and would kill the process before the report
+printed — a real failure that looks like broken test infrastructure. The test records
+those instead.
 
 ## Design instrument — not a test
 
@@ -177,10 +235,11 @@ Run the uniform computation in Node with a fake `gl` object that records every
 `uniform1f` call instead of drawing. Then assert across the axes regtest can't
 reach. In value-per-effort order:
 
-- **Uniform completeness** (static, cheapest) — catches the `u_co2Norm` class.
+- ~~**Uniform completeness**~~ — built 2026-08-21, `test/boot.test.mjs`.
 - **Float32 magnitude** — assert every value sent through `uniform1f`, rounded to
   float32, has a ULP smaller than one frame's expected change. Guards the `u_time`
-  class permanently.
+  class permanently. `test/boot.test.mjs` already records every `uniform1f` call, so
+  this is now a short addition rather than new infrastructure.
 - **Frozen-uniform detection across an age sweep** — run ages 0→100 years and assert
   no uniform freezes, goes NaN, or jumps discontinuously.
 - **Scale** — synthesize collections of 30/100/300 datasets; assert percentiles,
@@ -188,9 +247,10 @@ reach. In value-per-effort order:
 - **Determinism** — same piece at the same simulated clock computed twice, and with
   siblings arriving in different fetch orders, must produce identical uniforms.
 
-Cost: `main.js` is one large `init()` closure assuming `document`, a canvas, and
-WebGL2, so headless running needs stubs. A day's work, not an hour — but it does not
-touch the shipped engine.
+Cost: this was estimated at a day's work because `main.js` is one large `init()`
+closure assuming `document`, a canvas, and WebGL2. Those stubs now exist in
+`test/boot.test.mjs` and are reusable, so what is left above is smaller than the
+original estimate. None of it touches the shipped engine.
 
 ## What no harness catches
 

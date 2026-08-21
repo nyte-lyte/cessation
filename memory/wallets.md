@@ -6,8 +6,12 @@ node on 2026-08-13. Supersedes all older wallet notes (see "Deprecated" below).
 ## Context
 The **entire collection is being re-inscribed** because the engine code has multiple
 bugs (see `inscription_architecture.md` → "Code Bugs" + "Inscription Failure History").
-New rare sats are being purchased specifically for this fresh re-mint and parked in the
-**cold wallet** until mint time.
+Sats for it are parked in the **cold wallet** until inscription time. **Nothing further
+is being bought** — as of 2026-08-21 the collection goes on the Nakamoto range already
+held there (see below); the purchasing plan this section used to describe is closed.
+
+Terminology: **inscribing** is writing to chain (what the creator does); **minting** is a
+collector claiming. These sats are being inscribed on, not minted.
 
 ## The node
 - Full mainnet Bitcoin Core node. **Data dir: `/Volumes/Bitcoin/Bitcoin`** (807 GB blocks,
@@ -29,10 +33,41 @@ New rare sats are being purchased specifically for this fresh re-mint and parked
 - As of 2026-08-13: ~217,767 sats across 37 UTXOs — one ~178,544-sat fee UTXO plus a large
   cluster of 546/330-sat carrier outputs (mostly from fan-out tx `5d643a3ed027…`).
 
-## Cold wallet — `ord-cold`  ⭐ holds the new rare sats
+## DECIDED 2026-08-21 — the collection goes on the Nakamoto range
+
+**All 31 inscriptions (engine + pieces 0–29) go on Satoshi-era sats from the single
+907-sat Nakamoto UTXO below.** Not on newly-bought Omega black uncommons, and not as a
+fourth layer on the v2 sats.
+
+Why: the v2 collection sits on seven Omega blacks chosen for block *position*, scattered
+across epochs from 2015 to 2024 with no relationship to each other. Re-buying ~23 more
+was the blocker. The Nakamoto UTXO already held here is 907 consecutive sats from block
+2485 — one block, one day, one miner, 28 days after genesis — which is 29× more than the
+collection needs and gives the whole set a single shared provenance. Mapping pieces to
+consecutive sats also mirrors the hue lineage the artwork already carries (piece N
+inherits from N−1).
+
+**Prerequisite — fan out before inscribing.** Unlike the Omega black UTXOs, where the
+rare sat sits at offset 0 with common padding behind it, *every* sat in this output is
+Nakamoto-era. Inscribing straight against it spends ~330–546 Nakamoto sats as postage
+padding per inscription and exhausts 907 after two. Split it first into 31 outputs, each
+holding one Nakamoto sat at offset 0 followed by common padding, then read the numbers
+back with `ord wallet sats` and fill `PIECE_SATS` in `inscribe.js` from that — never from
+the arithmetic. Confirm the split mechanics against the actual `ord 0.27.1` binary before
+moving anything: a mis-built fan-out scatters Satoshi-era sats into fee change, and that
+is not recoverable.
+
+Still open: whether pieces map to the range in order (piece 0 on `…610010`) and which sat
+the engine takes.
+
+The seven Omega black uncommons stay unspent and available for whatever comes next.
+
+## Cold wallet — `ord-cold`  ⭐ holds the sats for the re-inscription
 - Bitcoin Core wallet `ord-cold` at `/Volumes/Bitcoin/Bitcoin/ord-cold/wallet.dat`.
-- **Purpose: cold storage for the newly-bought rare sats for the re-mint.** Each of its
-  UTXOs is a rare sat. Keep sats here until mint time, then transfer the needed one to `ord`.
+- **Purpose: cold storage for the sats the re-inscription will use.** Each UTXO holds a
+  sat of interest. Keep them here until inscription time, then transfer the needed one
+  to `ord`. The collection is going on the Nakamoto range; the seven Omega black
+  uncommons stay unspent.
 - As of 2026-08-13: 8 UTXOs / 4,081 sats. **Contents confirmed via `ord list` + `ord traits`
   (2026-08-13):** 7 Omega black uncommons + 1 Nakamoto-era range. In each carrier UTXO the
   **rare sat sits at offset 0** (first sat of the UTXO); the rest is common padding.
@@ -52,7 +87,7 @@ block position; note it does **not** end in 8 nines, confirming it is not an Ome
 
 | UTXO (txid:vout) | UTXO sats | rare sat # | ord name | block | type |
 |---|---|---|---|---|---|
-| b9c746591981…:0 | 907 | 12425429610010 (range → …610916) | ntlqhrjbmxb | 2485 | **Nakamoto-era** (2009-01-31) — for genesis/engine |
+| b9c746591981…:0 | 907 | 12425429610010 (range → …610916) | ntlqhrjbmxb | 2485 | **Nakamoto-era** (2009-01-31) — **the whole collection** (see above) |
 | d0048b4fa871…:32 | 546 | 1933312499999999 | adrejuehvqo | 783299 | Omega black uncommon |
 | d0048b4fa871…:20 | 546 | 1934694999999999 | adkoglpialm | 785511 | Omega black uncommon |
 | d0048b4fa871…:14 | 546 | 1946032499999999 | abigrncmehu | 803651 | Omega black uncommon |

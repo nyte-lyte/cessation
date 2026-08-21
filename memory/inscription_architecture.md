@@ -7,7 +7,13 @@ Two-inscription model. Engine and pieces are separate inscriptions.
 ### Engine inscription
 - File: `index_bundle.js` (text/javascript)
 - Inscribed once, no parent, no metadata
-- Holds the entire rendering engine: shaders, main.js, health_data_sets.js, decay_logic.js, CSS, DOM creation
+- Holds the entire rendering engine: shaders, main.js, decay_logic.js, CSS, DOM creation
+- **It does NOT hold the health datasets** (2026-08-21). `build.js` stops inlining
+  `data/health_data_sets.js`; the bundle declares `healthDataSets = []`. Each piece
+  carries its own dataset in its CBOR metadata and the collection comes from
+  `/r/children` discovery. A living collection cannot ship with part of itself
+  compiled in — while it did, inscribing a sibling overwrote a baked entry with an
+  identical one and no percentile moved.
 - Creates its own DOM (canvas-container, canvas) and injects CSS as a style element
 - Reads piece parameters from `document.currentScript` attributes
 
