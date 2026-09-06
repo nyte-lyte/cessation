@@ -212,6 +212,66 @@ Every bug that has shipped so far lived in one of these three gaps. See
    always shows the finished state. Compare dev against a piece on a *complete* chain
    collection, not against one mid-run.
 
+9. **NEVER pass `--no-backup` on mainnet. Blocking.** Regtest needs it only because of a
+   Bitcoin Core bug (below). On mainnet it puts a rare sat at risk of permanent loss.
+   Check the Core version before the run: `bitcoin-cli -version`. If it is 30.0–30.2,
+   **downgrade to 29.x before inscribing anything.**
+
+## `--no-backup` — what it actually does, and why regtest needs it
+
+Diagnosed 2026-09-06 after the note in memory had read, harmlessly, "ord 0.27.1 +
+Core 30.2.0 incompatibility, use `--no-backup`". It is not a benign workaround.
+
+**What the recovery key is.** Inscribing is two transactions. The **commit** moves the
+sat being inscribed into a fresh taproot address whose key ord generates on the spot —
+the *recovery key* — with the inscription committed into the script tree. The **reveal**
+spends that output by the script path and sends the sat to its destination. Normally ord
+imports the recovery key into the Core wallet between signing and broadcasting, so the
+commit output stays recoverable. `--no-backup` skips that import, and the key then exists
+only in ord's memory for the length of the run.
+
+Verified on the regtest chain — piece 0's reveal has two inputs:
+
+```
+[0] c9481bec…:0   ismine=True    1 witness item    <- parent (engine) inscription
+[1] f9014382…:0   ismine=False   3 witness items   <- the commit output
+```
+
+`ismine=False` is the point: the wallet does not know that address. Three witness items
+is the taproot script-path spend (signature + reveal script + control block). Between the
+commit confirming and the reveal confirming, **the sat lives at an address only the
+ephemeral key controls.** If the reveal is evicted from the mempool or the machine dies
+between broadcasts, and the key was never backed up, that sat is gone permanently. On
+mainnet that sat is the Nakamoto sat or an Omega uncommon. ord's own failure message —
+"Commit tx {txid} will be recovered once mined" — is false when `--no-backup` was used.
+
+**Why the backup fails: a Core 30 regression, not an ord bug.** ord calls
+`importdescriptors` with `internal: false` plus a label. ord reports only "commit tx
+recovery key import failed"; Core's actual error is `-8 Internal addresses should not
+have a label`. From `src/wallet/rpc/backup.cpp`:
+
+| Core | declaration | result |
+|---|---|---|
+| v26–v29 | `const bool internal = data.exists("internal") ? …get_bool() : false;` | works |
+| **v30.0–v30.2** | `std::optional<bool> internal;` | **broken** |
+| master | `bool desc_internal = internal.has_value() && internal.value();` | fixed |
+
+The guard is `if (internal && data.exists("label"))`. In v30 `internal` became a
+`std::optional<bool>`, so that tests whether the optional *holds a value*, not what the
+value is — sending `internal: false` at all trips it. Confirmed by varying one field at
+a time against Core 30.2:
+
+```
+active:false internal:false +label        FAIL: Internal addresses should not have a label
+active:false internal:false  no label     OK
+active:false  +label (internal omitted)   OK
+```
+
+**Fix for the mainnet run: use Bitcoin Core 29.x.** The bug does not exist there, the
+backup works, and `--no-backup` is dropped entirely. Patching ord means building from
+source; waiting for Core 30.3 means waiting; keeping `--no-backup` with a high fee rate
+lowers the odds but leaves the failure mode intact.
+
 ## What actually reaches the chain
 
 Only two kinds of bytes, and neither reads `index_bundle.html`:

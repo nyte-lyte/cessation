@@ -13,6 +13,10 @@ layer on the existing sats. The bar is "make sure everything works this time."
 - **Mainnet measured at 27s to first paint**, largely because the ancestor walk pulls
   all three stacked layers — 90 metadata fetches to render 30 pieces. Fresh sats plus
   the HEAD fixes take this to ~64ms even under latency.
+- **Bitcoin Core must be downgraded to 29.x before the mainnet run.** Core 30.0–30.2
+  breaks ord's recovery-key backup, which is why regtest needs `--no-backup`; carrying
+  that flag to mainnet risks losing a rare sat permanently. [testing.md](testing.md) →
+  "`--no-backup`".
 - Live on chain right now: **v2** (`4fe0114`). Repo HEAD is ahead and NOT inscribed.
 - `node test/scale.test.mjs` — 14,064 checks, must pass before anything is inscribed.
 - `node test/liberation_model.mjs` — design instrument for the liberation distribution.
