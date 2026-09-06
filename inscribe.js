@@ -22,59 +22,73 @@
 //
 
 // ── Sat assignment ────────────────────────────────────────────────────────────
-// Rewritten 2026-09-06 for the fresh-sat re-mint. The previous table listed the
-// v1/v2 sats — the ones already carrying three stacked inscriptions — and every
-// entry was non-null, so the old "is it filled in?" check would have waved a
-// re-mint straight onto them. See memory/wallets.md and memory/testing.md.
+// Rewritten 2026-09-06, twice. First to drop the stale v1/v2 table (every entry
+// non-null and every entry wrong, so the old "is it filled in?" check would have
+// waved a re-mint onto sats already carrying three inscriptions). Then again once
+// regtest showed how rare sats are actually consumed. See memory/testing.md.
 //
-// THE ENGINE goes on an Omega black uncommon:
-//   1459982499999999  dmvuhsnspyo  block 373992 (2015, 25-BTC epoch) — the oldest
-//   of the seven Omegas held. Inscribed by hand, not by this script:
-//     ord wallet inscribe --fee-rate <R> --sat 1459982499999999 --file index_bundle.js
+// THE ENGINE goes on an Omega black uncommon, inscribed by hand, not by this script:
+//   ord wallet inscribe --fee-rate <R> --sat 1459982499999999 \
+//       --postage <that carrier's rare run> --file index_bundle.js
 //
-// ⚠️ UNRESOLVED — DO NOT INSCRIBE ON THIS MAPPING YET (raised 2026-09-06).
-// Sats flow through a tx in input order: an output of value V takes the next V
-// sats. So an inscription consumes a CONTIGUOUS RUN of `postage` sats starting at
-// its target, and the range here is 907 contiguous sats. Two consequences:
-//   1. At ord's default postage (TARGET_POSTAGE = 10,000) the FIRST inscription
-//      swallows the entire 907-sat range into one output. Every Nakamoto sat gone.
-//   2. Adjacent sats cannot each sit at offset 0 of a separate output, so
-//      "piece N = FIRST + N" is not achievable. At the 330-sat P2TR dust floor the
-//      range carries ~3 pieces, not 30. Padding cannot be interleaved — the range
-//      is contiguous, so padding can only precede or follow the whole run.
-// Must be settled on regtest before any mainnet inscription. See memory/testing.md.
+// EVERY PIECE goes on a CARRIER — a UTXO whose first sat is the piece's sat.
+// Carriers are not a formula. A contiguous rare range cannot be handed out one sat
+// per piece: an inscription consumes a contiguous RUN of `postage` sats starting at
+// its target, so adjacent sats cannot each sit at offset 0 of a separate output.
+// The range must first be SPLIT into carriers (see memory/testing.md, "Option 1"),
+// and the carriers are then real UTXOs with real first sats and real run lengths —
+// including a short final carrier topped up with common padding. So this table is
+// filled in FROM THE SPLIT TRANSACTION, not computed.
 //
-// EVERY PIECE goes on a Nakamoto-era sat, oldest first: piece N takes
-// NAKAMOTO_FIRST + N. These come from the 907-sat range in UTXO b9c746591981…:0,
-// mined in block 2485 on 2009-01-31 when Satoshi was the only miner.
+// Fill one entry per carrier, in the order pieces should claim them:
+//   { sat: <first sat of the carrier>, run: <how many RARE sats it holds> }
+// `run` is what --postage must be set to. Setting it lower lets the reveal fee eat
+// the remainder of the run; ord's default of 10,000 would swallow the whole thing.
+// Read `run` off the split tx with /output/<outpoint> on the ord server.
 //
-// The range is what makes the open-ended collection possible: 907 sats is 907
-// pieces, so this never needs revisiting as the collection grows. Do not hardcode
-// a piece count here — the bound is the range, checked below.
-//
-// Verified 2026-09-06: each Omega sat number equals the last sat of its block
-// computed from the subsidy schedule, and the range lies inside block 2485.
-const NAKAMOTO_FIRST = 12425429610010;   // first sat of the range (oldest)
-const NAKAMOTO_LAST  = 12425429610916;   // last sat of the range — 907 sats total
-const ENGINE_SAT     = 1459982499999999; // dmvuhsnspyo — engine only, never a piece
+// Empty until the mainnet split has actually been made — an empty table is the
+// correct state, and the guard below refuses rather than inventing a sat.
+const PIECE_CARRIERS = [
+  // { sat: 12425429610010, run: 330 },   // carrier 0  — fill from the split tx
+  // { sat: 12425429610340, run: 330 },   // carrier 1
+  // { sat: 12425429610670, run: 247 },   // carrier 2  (+83 common padding)
+];
+
+const ENGINE_SAT = 1459982499999999; // dmvuhsnspyo — engine only, never a piece
 
 // Remaining Omegas, held in ord-cold, deliberately unassigned:
 //   cjcytrkpena 457095, adrejuehvqo 783299, adkoglpialm 785511,
 //   abigrncmehu 803651, aaexuaaadws 813455, ytgwcbgmcw 826035
 
-function satForPiece(index) {
-  const sat = NAKAMOTO_FIRST + index;
-  if (sat > NAKAMOTO_LAST) {
-    console.error(`Error: piece ${index} would need sat ${sat}, past the end of the`);
-    console.error(`  Nakamoto range (${NAKAMOTO_FIRST}–${NAKAMOTO_LAST}, ${NAKAMOTO_LAST - NAKAMOTO_FIRST + 1} sats).`);
-    console.error('  The range is exhausted — a new source of sats is needed.');
+function carrierForPiece(index) {
+  if (PIECE_CARRIERS.length === 0) {
+    console.error('Error: PIECE_CARRIERS is empty.');
+    console.error('  The rare range has to be split into carriers before anything can be');
+    console.error('  inscribed, and each carrier recorded here with its first sat and its');
+    console.error('  rare run. See memory/testing.md -> "Option 1 — pad the range into carriers".');
     process.exit(1);
   }
-  if (sat === ENGINE_SAT) {
+  const c = PIECE_CARRIERS[index];
+  if (!c) {
+    console.error(`Error: no carrier for piece ${index} — only ${PIECE_CARRIERS.length} recorded.`);
+    console.error('  Split more rare range into carriers, or acquire more rare sats.');
+    process.exit(1);
+  }
+  if (!Number.isInteger(c.sat) || !Number.isInteger(c.run) || c.run < 1) {
+    console.error(`Error: carrier ${index} is malformed: ${JSON.stringify(c)}`);
+    process.exit(1);
+  }
+  if (c.sat === ENGINE_SAT) {
     console.error(`Error: piece ${index} resolves to the engine's sat. Refusing.`);
     process.exit(1);
   }
-  return sat;
+  for (let i = 0; i < PIECE_CARRIERS.length; i++) {
+    if (i !== index && PIECE_CARRIERS[i].sat === c.sat) {
+      console.error(`Error: carrier ${index} and ${i} share sat ${c.sat}. Refusing.`);
+      process.exit(1);
+    }
+  }
+  return c;
 }
 
 'use strict';
@@ -273,7 +287,8 @@ if (isNaN(blockHeight) || blockHeight < 0) {
   process.exit(1);
 }
 
-const satNumber = satForPiece(pieceIndex);
+const carrier = carrierForPiece(pieceIndex);
+const satNumber = carrier.sat;
 
 // Height check, now that blockHeight is parsed — same rule as the hash check above.
 for (const [usedBy, rec] of Object.entries(ledger)) {
@@ -292,7 +307,17 @@ writeFileSync(outputDest, scriptHtml, 'utf8');
 
 console.log(`HTML written: dist/${outputName}  (${scriptHtml.length} bytes)`);
 console.log(`Ready to inscribe: dist/${outputName}`);
-console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --sat ${satNumber} --parent ${engineId} --file dist/${outputName} --json-metadata dist/${metadataName}`);
+console.log(`  ord wallet inscribe --fee-rate <FEE_RATE> --sat ${satNumber} --postage ${carrier.run}sat --parent ${engineId} --file dist/${outputName} --json-metadata dist/${metadataName}`);
+console.log('');
+console.log(`  --postage ${carrier.run}sat is not optional and must not be left to default:`);
+console.log(`    it has to equal this carrier's rare run (${carrier.run} sats). Set it lower and the`);
+console.log("    reveal fee eats the rest of the run; ord's default of 10,000 swallows the");
+console.log('    whole carrier. Measured both ways on regtest — see memory/testing.md.');
+console.log('  Before running it:');
+console.log('    - move only this carrier into the inscribing wallet');
+console.log('    - keep every OTHER carrier locked (bitcoin-cli -rpcwallet=ord lockunspent false ...)');
+console.log('      or ord will spend them as ordinary funding and destroy the rare sats');
+console.log('    - afterwards, account for every rare sat by reading the block outputs');
 
 // Record the block this piece claimed, so a later run cannot reuse it.
 ledger[pieceIndex] = { height: blockHeight, hash: rawHash.toLowerCase(), hashTail: lastTwoHashDigits };
