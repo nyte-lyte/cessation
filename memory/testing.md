@@ -242,6 +242,55 @@ Every bug that has shipped so far lived in one of these three gaps. See
    their UTXO sets came back byte-identical. **Inscribe without `--no-backup` from now
    on.** If `bitcoind -version` ever reports 30.x again, stop and re-read this section.
 
+## Sat consumption and padding — UNRESOLVED, blocks the mainnet run
+
+Raised 2026-09-06. Not yet proven on regtest; the analysis below is from ordinal
+theory and must be demonstrated before anything is inscribed.
+
+**The mechanic.** Sats flow through a transaction in input order — an output of value
+`V` takes the next `V` sats from the concatenated input stream. For a piece's sat to be
+*the* inscribed sat it must sit at offset 0 of the inscription output. So **every
+inscription consumes a contiguous run of `postage` sats beginning at its target.**
+
+The Nakamoto holding is **907 contiguous sats** (`12425429610010…610916`, one UTXO).
+
+| postage | pieces the range carries | Nakamoto sats consumed each |
+|---|---|---|
+| **10,000 — ord's default `TARGET_POSTAGE`** | **1** | the whole range + 9,093 common |
+| 546 | 2 | 546 |
+| 330 — P2TR dust floor | 3 | 330 |
+
+**Two problems.**
+
+1. **Default postage destroys the range.** `inscribe.js` prints no `--postage`, so ord
+   uses 10,000. The first inscription would pull all 907 Nakamoto sats into a single
+   output. Nothing currently prevents this.
+2. **`piece N = NAKAMOTO_FIRST + N` is not achievable.** `…610010` and `…610011` are
+   adjacent; they cannot each sit at offset 0 of a separate output that must be ≥330
+   sats. Padding cannot be interleaved either — the range is contiguous, so common sats
+   can only precede or follow the whole run, never sit between two Nakamoto sats. That
+   also means a "split the range into 30 outputs first" step does not rescue it: the
+   same rule applies to the splitting transaction.
+
+**What must be settled before inscribing.**
+- How many pieces the range can genuinely carry, demonstrated on regtest rather than
+  argued — inscribe on a known range with several postages and read back with
+  `ord list` / `ord traits` which sat each inscription actually landed on and where the
+  rest of the range went.
+- Where the remainder of the range ends up after each inscription, and whether it stays
+  identifiable in the wallet rather than becoming ordinary change that a later fee input
+  could spend. **This is the loss scenario: Nakamoto sats swept as change.**
+- Whether pieces should sit on the Nakamoto range at all, given it may only carry ~3, or
+  whether the range is better reserved for the genesis pieces with the rest on Omegas.
+- Whatever is decided, `inscribe.js` should print an explicit `--postage` rather than
+  inheriting 10,000 by default.
+
+The old mint is not a safe precedent here: `MEMORY.md` records the engine on
+`12425429610918` described as "last sat of UTXO ccab20ce:0" with piece 0 on
+`…610917` — adjacent sats, which the rule above says cannot each be at offset 0 of
+separate dust-limit outputs. Either those inscriptions sat at non-zero offsets or the
+note is inaccurate. Worth resolving, since it bears directly on what is actually possible.
+
 ## `--no-backup` — what it actually does, and why regtest needs it
 
 Diagnosed 2026-09-06 after the note in memory had read, harmlessly, "ord 0.27.1 +

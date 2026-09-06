@@ -32,6 +32,18 @@
 //   of the seven Omegas held. Inscribed by hand, not by this script:
 //     ord wallet inscribe --fee-rate <R> --sat 1459982499999999 --file index_bundle.js
 //
+// ⚠️ UNRESOLVED — DO NOT INSCRIBE ON THIS MAPPING YET (raised 2026-09-06).
+// Sats flow through a tx in input order: an output of value V takes the next V
+// sats. So an inscription consumes a CONTIGUOUS RUN of `postage` sats starting at
+// its target, and the range here is 907 contiguous sats. Two consequences:
+//   1. At ord's default postage (TARGET_POSTAGE = 10,000) the FIRST inscription
+//      swallows the entire 907-sat range into one output. Every Nakamoto sat gone.
+//   2. Adjacent sats cannot each sit at offset 0 of a separate output, so
+//      "piece N = FIRST + N" is not achievable. At the 330-sat P2TR dust floor the
+//      range carries ~3 pieces, not 30. Padding cannot be interleaved — the range
+//      is contiguous, so padding can only precede or follow the whole run.
+// Must be settled on regtest before any mainnet inscription. See memory/testing.md.
+//
 // EVERY PIECE goes on a Nakamoto-era sat, oldest first: piece N takes
 // NAKAMOTO_FIRST + N. These come from the 907-sat range in UTXO b9c746591981…:0,
 // mined in block 2485 on 2009-01-31 when Satoshi was the only miner.

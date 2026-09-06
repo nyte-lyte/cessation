@@ -124,6 +124,15 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
+- **Sat consumption / padding — UNRESOLVED, blocks the mainnet run.** Raised 2026-09-06.
+  An inscription consumes a contiguous run of `postage` sats from its target, and the
+  Nakamoto holding is 907 *contiguous* sats in one UTXO. At ord's default 10,000 postage
+  the first inscription swallows the entire range; even at the 330 dust floor it carries
+  ~3 pieces, not 30. So **`piece N = NAKAMOTO_FIRST + N` cannot be inscribed as written**
+  and `inscribe.js` is marked accordingly. Also unresolved: where the rest of the range
+  goes after each inscription, and whether it can be swept as ordinary change — the
+  actual loss scenario. Must be demonstrated on regtest. See [testing.md](testing.md).
+
 - **~~`PIECE_SATS` points at the OLD sats~~ FIXED 2026-09-06.** The table listed the
   v1/v2 sats — the ones already carrying three stacked inscriptions — and every entry
   was non-null, so the "is it filled in?" check would have waved a re-mint onto them.
