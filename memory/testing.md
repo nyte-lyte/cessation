@@ -282,6 +282,23 @@ The commit protects the range; the **reveal fee eats whatever rare sats sit past
 postage boundary**, because they sit between the end of the inscription output and the
 common padding.
 
+### The two UTXO shapes — this is the distinction that matters
+
+The experiments above all used an **all-rare UTXO**, which matches only the Nakamoto
+holding. `ord-cold` actually holds two different shapes, and they behave differently:
+
+| shape | UTXOs | fee behaviour |
+|---|---|---|
+| **1 rare sat at offset 0 + common padding** | the 7 Omega carriers (546/546/546/546/330/330/330) | fees come from the **end** of the stream, so they eat padding. The rare sat at offset 0 is untouched. **Safe** — this is why the one-at-a-time cold→hot workflow has worked. |
+| **entirely rare, no padding** | the Nakamoto 907-sat range | there is nothing but rare sats for a fee to come from, so **every fee burns Nakamoto sats** |
+
+Measured: moving the all-rare 907-sat UTXO with `ord wallet send` cost **111 rare sats**
+to the transfer fee alone, before any inscription. The same operation on a padded Omega
+carrier costs only padding.
+
+So the established procedure is correct for the Omegas and must not be assumed correct
+for the Nakamoto range. Treat that UTXO as a special case in its own right.
+
 ### THE RULE
 
 **`--postage` must equal the number of contiguous rare sats in the UTXO being spent.**

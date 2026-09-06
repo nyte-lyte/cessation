@@ -127,6 +127,12 @@ Consequences accepted deliberately:
 - **Sat consumption / padding — RESOLVED on regtest 2026-09-06, but it changes the plan.**
   Rare sats were destroyed in three of four configurations tested. Full detail and the
   traces in [testing.md](testing.md).
+  - **The distinction that matters: two UTXO shapes.** The 7 Omega carriers are
+    *1 rare sat at offset 0 + common padding*, so fees eat padding and the rare sat
+    survives — the existing one-at-a-time cold→hot workflow is correct for those. The
+    Nakamoto UTXO is *entirely rare, no padding*, so every fee burns Nakamoto sats.
+    Measured: `ord wallet send` on it cost **111 rare sats in transfer fees alone**,
+    before any inscription. Do not assume the established procedure covers it.
   - **THE RULE: `--postage` must equal the contiguous rare run in the UTXO.** Less, and
     the *reveal* fee eats the overhang. A common funding input is **not** sufficient on
     its own — that only protects the commit.
