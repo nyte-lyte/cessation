@@ -213,12 +213,67 @@ carrier: value 330
 Zero sats lost across both rounds. The carrier is structurally identical to the existing
 Omega carriers, so from here the normal rules apply (§3).
 
-**Cost, for 120 carriers.** Naively 240 transactions. Both rounds can be batched, which
-brings it down — round 2 especially: several round-1 outputs can be spent in one
-transaction, each carrier taking its padding from the next input's leading commons.
-Round 1 can isolate one sat per *(commons, chunk)* pair, so pre-splitting the range into
-chunks multiplies what one transaction achieves. **The batched procedure has not been
-built or tested — only the two-round mechanism above.**
+### The batched peel — BUILT AND VERIFIED 2026-09-06
+
+Both rounds batch on the same interleaving principle: **one commons input per chunk**.
+Verified end to end on regtest with K=3, **907 of 907 preserved, zero lost.**
+
+**Step A — split the range into K chunks.** One transaction: `[rare range][commons]`,
+outputs sized so every chunk is at least 331 sats (so it still clears the 330 dust floor
+after losing a sat), the last topped up with commons. Fee off trailing commons.
+
+```
+chunk0: 331 sats, 331 rare
+chunk1: 331 sats, 331 rare
+chunk2: 331 sats, 245 rare + 86 common
+907 of 907 preserved
+```
+
+**Step B — batched round 1. K sats peeled in ONE transaction.**
+Inputs interleaved `[C_1][chunk_1][C_2][chunk_2] … [C_fee]`. For each chunk:
+`out = |C_i| + 1` → that commons UTXO followed by the chunk's first rare sat, so the sat
+lands at the **end** of the output. The next output takes the chunk's remainder.
+
+```
+out0: 1001  rare   1   TAIL (1 rare at END)
+out1:  330  rare 330   chunk remainder
+out2: 1001  rare   1   TAIL
+out3:  330  rare 330   chunk remainder
+out4: 1001  rare   1   TAIL
+out5:  330  rare 244   chunk remainder
+907 of 907 preserved
+```
+
+**Step C — batched round 2. K tails → K carriers in ONE transaction.**
+Inputs are the tails in order, plus one commons input to pad the last carrier. Each tail
+gives up its leading commons as change, its rare sat then leads a carrier, and that
+carrier's padding comes from the **following input's** leading commons.
+
+```
+out0: 1000  change
+out1:  330  CARRIER  first sat …000  padding 329
+out2:  671  change
+out3:  330  CARRIER  first sat …331  padding 329
+out4:  671  change
+out5:  330  CARRIER  first sat …662  padding 329
+3 carriers, zero lost
+```
+
+Each carrier is `1 rare sat at offset 0 + 329 common sats` — structurally identical to the
+existing Omega carriers, so §3 applies from here.
+
+**Scaling.** K carriers per *pair* of transactions, so **120 carriers ≈ 240/K transactions**
+plus the one-off split. A chunk of `S` sats holding `r` rare yields `min(r-1, S-330)` peels.
+
+| K | peels per chunk | chunk shape | transactions for 120 |
+|---|---|---|---|
+| 3 | 40 | ~302 rare + 68 common (370) | ~80 + split |
+| 12 | 10 | ~75 rare + 265 common (340) | ~20 + split |
+| 30 | 4 | ~30 rare + 304 common (334) | ~8 + split |
+
+Higher K means fewer transactions but bigger ones — K=30 is 60 inputs and ~60 outputs per
+transaction, large but legal. It also needs more commons up front for chunk padding
+(K x 330 − 907), though that is only *locked*, not spent, and comes back as change.
 
 Padding alone is 120 x 329 = **39,480 common sats**, plus fees across every transaction.
 Model the total at the intended fee rate before starting; this is the expensive step.
