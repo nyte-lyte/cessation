@@ -215,6 +215,23 @@ Omega carriers, so from here the normal rules apply (§3).
 
 ### The batched peel — BUILT AND VERIFIED 2026-09-06
 
+**Use `peel.js`.** It generates all of this for any K, dry-run by default:
+
+```
+node peel.js plan --range <txid:vout> --carriers 120 --chunks 2 --fee-rate 1
+node peel.js split  [--broadcast]
+node peel.js roundb [--broadcast]     # then wait for confirmation
+node peel.js roundc [--broadcast]     # then wait for confirmation
+node peel.js collect                  # verifies and LOCKS the carriers
+```
+
+It aborts if the rare-sat count fails to reconcile at any step, refuses outputs below
+dust, picks the smallest suitable cardinals so tails stay small, locks each carrier as
+soon as it is verified, and prints ready-made `PIECE_CARRIERS` entries for `inscribe.js`.
+Round B and C are separate commands because ord only indexes **confirmed** outputs, so
+the accounting check cannot run until the previous transaction has a block.
+
+
 Both rounds batch on the same interleaving principle: **one commons input per chunk**.
 Verified end to end on regtest with K=3, **907 of 907 preserved, zero lost.**
 
@@ -262,18 +279,32 @@ out5:  330  CARRIER  first sat …662  padding 329
 Each carrier is `1 rare sat at offset 0 + 329 common sats` — structurally identical to the
 existing Omega carriers, so §3 applies from here.
 
-**Scaling.** K carriers per *pair* of transactions, so **120 carriers ≈ 240/K transactions**
-plus the one-off split. A chunk of `S` sats holding `r` rare yields `min(r-1, S-330)` peels.
+**Scaling — and the constraint that actually binds.** K carriers come out of each
+*pair* of transactions, so the temptation is to raise K. **K is bounded by the size of
+the rare range, not by transaction size.** Chunks are sequential slices of the sat
+stream, and in the split every common sat lands *after* the whole rare run — so only the
+**last** chunk can be padded. Every other chunk must be that many **rare** sats:
 
-| K | peels per chunk | chunk shape | transactions for 120 |
-|---|---|---|---|
-| 3 | 40 | ~302 rare + 68 common (370) | ~80 + split |
-| 12 | 10 | ~75 rare + 265 common (340) | ~20 + split |
-| 30 | 4 | ~30 rare + 304 common (334) | ~8 + split |
+```
+K x (DUST + rounds)  <=  rare sats available
+```
 
-Higher K means fewer transactions but bigger ones — K=30 is 60 inputs and ~60 outputs per
-transaction, large but legal. It also needs more commons up front for chunk padding
-(K x 330 − 907), though that is only *locked*, not spent, and comes back as change.
+For **120 carriers from the 907-sat range**, at 1 sat/vB:
+
+| K | rounds | chunk size | K x chunk | transactions | fees |
+|---|---|---|---|---|---|
+| 1 | 120 | 450 | 450 | 241 | ~68,400 sats |
+| **2** | **60** | **390** | **780** | **121** | **~55,000 sats** |
+| 3 | 40 | 370 | 1110 | — | needs more rare sats than exist |
+| 4 | 30 | 360 | 1440 | — | needs more rare sats than exist |
+
+**K=2 is the maximum: 121 transactions.** An earlier version of this file claimed K=12 or
+K=30 was possible — that was wrong, it ignored the fact that chunks must be carved out of
+the rare run itself. `peel.js` now refuses a too-large K and explains why.
+
+**Total cost for 120 carriers: ~94,500 sats** — ~55,000 in fees at 1 sat/vB plus the
+39,480 of permanent carrier padding. Raising K would need a bigger Nakamoto range, not a
+cleverer transaction.
 
 Padding alone is 120 x 329 = **39,480 common sats**, plus fees across every transaction.
 Model the total at the intended fee rate before starting; this is the expensive step.
