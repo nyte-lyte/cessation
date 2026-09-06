@@ -299,6 +299,46 @@ carrier costs only padding.
 So the established procedure is correct for the Omegas and must not be assumed correct
 for the Nakamoto range. Treat that UTXO as a special case in its own right.
 
+### The v1/v2 mint already did this correctly — read it before redesigning
+
+Checked against the live chain 2026-09-06. The previous mint's own transactions state the
+rule more cleanly than the derivation above, and confirm it.
+
+**The 28-piece batch reveal `5d643a3e…`:**
+
+```
+inputs :  7x330, 20x546, 1x1600, 1x10000,  + one 23,955-sat funding UTXO
+outputs:  7x330, 20x546, 1x1600, 1x10000   (same sizes, same order)
+FEE    :  23,955 - exactly the extra funding input, consumed entirely
+```
+
+Input order mirrors output order, size for size. Each carrier passes through 1:1, so the
+rare sat at offset 0 of input *k* lands at offset 0 of output *k*. The fee comes wholly
+from a dedicated trailing input, so **no rare sat is ever in a position to be spent.**
+Note the output sizes are exactly the `ord-cold` carrier sizes — 330 and 546.
+
+**The single inscriptions follow the same shape:**
+
+```
+piece 0:  in [10000, 1767]   out [10000, 546]    fee 1221
+engine:   in [10000, 71583]  out [10000, 10000]  fee 61583
+piece 29: in [10000, 1764]   out [10000, 546]    fee 1218
+```
+
+`input[0]` size always equals `output[0]` size; the second input pays the fee.
+
+**Restating the rule the way the chain shows it:** the carrier must pass through
+unchanged — `output[0]` the same size as `input[0]` — with the fee coming from a separate
+input. Setting `--postage` to the carrier's full size is how you get ord to do that: it
+then has to pull in a funding input for the reveal fee. This is also why experiment 3
+failed and experiment 4 succeeded — at postage 330 against a 469-sat commit output, ord
+took the reveal fee out of the slack, and the slack was rare sats.
+
+**So the established practice was already right**, for the padded carriers. What is new
+is the 907-sat all-rare Nakamoto range, which has no padding and did not exist in this
+shape for the previous mint — there the Nakamoto sat sat in a padded carrier like any
+other. That range is the genuinely new case.
+
 ### THE RULE
 
 **`--postage` must equal the number of contiguous rare sats in the UTXO being spent.**
