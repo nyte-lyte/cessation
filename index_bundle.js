@@ -1,7 +1,7 @@
 const _selfScript = document.currentScript;
 (function(){
 const _style = document.createElement('style');
-_style.textContent = 'html,body{background:#000}' + `body{margin:0;padding:0;height:100vh;width:100vw;display:flex;justify-content:center;align-items:center;}#canvas-container{box-sizing:border-box;width:min(100vw, 100vh);height:min(100vw, 100vh);display:flex;justify-content:center;align-items:center;border:clamp(8px, 8vmin, 80px) solid black;background-color:black;}#canvas{display:block;aspect-ratio:3 / 2;max-width:100%;max-height:100%;}#canvas-container{position:relative;}#canvas-container:fullscreen{width:100vw;height:100vh;border:clamp(12px, 3vmin, 36px) solid black;}`;
+_style.textContent = 'html,body{background:#000}' + `body{margin:0;padding:0;height:100vh;width:100vw;display:flex;justify-content:center;align-items:center;}#canvas-container{box-sizing:border-box;width:min(100vw, 100vh);height:min(100vw, 100vh);display:flex;justify-content:center;align-items:center;border:clamp(8px, 8vmin, 80px) solid black;background-color:black;}#canvas{display:block;aspect-ratio:3 / 2;width:100%;height:auto;max-width:100%;max-height:100%;}#canvas-container{position:relative;}#canvas-container:fullscreen{width:100vw;height:100vh;border:clamp(12px, 3vmin, 36px) solid black;}`;
 (document.head || document.documentElement).appendChild(_style);
 const _cc = document.createElement('div');
 _cc.id = 'canvas-container';

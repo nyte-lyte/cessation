@@ -23,6 +23,14 @@ body {
 #canvas {
     display: block;
     aspect-ratio: 3 / 2;
+    /* A <canvas> has an intrinsic 300x150 default size. aspect-ratio alone leaves
+       the used width at that intrinsic 300px, and max-* only caps — neither grows
+       the element — so without an explicit width the canvas stays 300x200 at every
+       viewport while the container scales. That shipped: the art rendered at 25% of
+       the frame on a 1200px viewport. width:100% makes it fill the bordered
+       container; height:auto lets aspect-ratio set the height. */
+    width: 100%;
+    height: auto;
     max-width: 100%;
     max-height: 100%;
 }

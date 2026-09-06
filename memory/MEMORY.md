@@ -1,10 +1,20 @@
 # Cessation — Project Memory
 
-## READ FIRST (session ending 2026-08-16)
+## READ FIRST (session ending 2026-09-06)
 **Decision: re-inscribing the whole project on fresh sats, v3 engine only.** No fourth
 layer on the existing sats. The bar is "make sure everything works this time."
+- **Regtest rehearsal is DONE and passed** (2026-09-06) — engine + pieces 0–29, one
+  block each, all 30 verified in a real browser. Living collection confirmed working on
+  chain. Results: [testing.md](testing.md) → "Measured on chain".
+- **Two real bugs found and fixed the same day, neither inscribed yet:** the canvas
+  never scaled (300×200 at every viewport — 25% of the frame; live on mainnet right
+  now), and `build.js` was inscribing CSS comments. See [todo.md](todo.md) →
+  "Done this session (2026-09-06)".
+- **Mainnet measured at 27s to first paint**, largely because the ancestor walk pulls
+  all three stacked layers — 90 metadata fetches to render 30 pieces. Fresh sats plus
+  the HEAD fixes take this to ~64ms even under latency.
 - Live on chain right now: **v2** (`4fe0114`). Repo HEAD is ahead and NOT inscribed.
-- `node test/scale.test.mjs` — 9,300 checks, must pass before anything is inscribed.
+- `node test/scale.test.mjs` — 14,064 checks, must pass before anything is inscribed.
 - `node test/liberation_model.mjs` — design instrument for the liberation distribution.
 - Full state, what's done, and what's still undecided: [todo.md](todo.md).
 - What is and isn't verifiable, plus the blocking metadata gate: [testing.md](testing.md).

@@ -66,11 +66,15 @@ const cssClean = css
   .replace(/[^\n]*#fs-overlay[^\{]*\{[^\}]*\}/g, '')
   // Remove body background-color — engine always sets a plain black background
   .replace(/background-color:\s*#000000;?\s*/g, '')
+  // Strip comments BEFORE minifying: comment bytes are inscribed permanently, and
+  // minification would otherwise rewrite the prose inside them. `[\s\S]*?` rather
+  // than `[^*]*` so a comment containing an asterisk (`max-*`, `/* 2 * n */`) is
+  // still matched — the old pattern silently shipped those to chain.
+  .replace(/\/\*[\s\S]*?\*\//g, '')
   .trim()
   // Minify
   .replace(/\s*\{\s*/g, '{').replace(/\s*\}\s*/g, '}')
   .replace(/\s*:\s*/g, ':').replace(/\s*;\s*/g, ';')
-  .replace(/\s*\/\*[^*]*\*\/\s*/g, '')  // strip any remaining comments
   .replace(/\n+/g, '')
   .replace(/\s{2,}/g, ' ')
   .trim();

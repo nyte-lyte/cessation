@@ -41,6 +41,37 @@ running on chain right now:
   every piece instead of independently.
 - The `u_time` float32 freeze was introduced in v3 and fixed in `cdf1eb6`. It never
   reached chain; live v2 uses `performance.now()`.
+- **The canvas renders at 300×200 regardless of viewport** — 25% of the frame at
+  1200px, 21% at 2400px. Measured on mainnet 2026-09-06, not inferred. Fixed in the
+  repo the same day; the fix has never been inscribed. This affects every piece
+  currently visible on ordinals.com.
+- **27 seconds to first paint on mainnet.** Three compounding causes — 3× metadata
+  from the stacked layers (fresh sats fixes), serial fetches and paint-blocking on the
+  full sibling scan (both fixed by `d6329eb`, in HEAD, not on chain). See
+  [testing.md](testing.md).
+
+## Done this session (2026-09-06)
+
+Regtest run completed and verified end to end, plus the first direct measurement of
+live mainnet. Full detail in [testing.md](testing.md); the short version:
+
+- **Canvas scaling bug found and fixed.** `#canvas` had no `width`, so it stayed
+  300×200 at every viewport — 25% of the frame at 1200px. Shipped, and live on mainnet
+  today. Fixed with `width:100%;height:auto` in `style.css`; verified 84–89% fill and
+  exact 3:2 from 400px to 2400px, portrait included, zero errors.
+- **`build.js` was inscribing CSS comments.** Comment stripper couldn't match across an
+  asterisk and ran after minification. Fixed. Net cost of the canvas fix on chain: **+23
+  bytes** (was +465 with the comment).
+- **Mainnet measured: 27.06s to first paint**, 90 metadata fetches for a 30-piece
+  collection because the ancestor walk pulls all three stacked layers. HEAD paints at
+  64ms under 300ms/request latency, before any fetch completes.
+- Regtest chain fully re-verified: metadata gate passes (exactly four keys, no identity
+  leak), engine bytes on chain identical to local bundle, 30/30 distinct blocks and
+  timestamps, complete index set.
+- Bundle reproducible byte-identical; `node test/scale.test.mjs` 14,064 checks, 0 failed.
+
+**Not yet inscribed anywhere** — the canvas and build fixes are repo-only. The regtest
+chain still carries the pre-fix engine.
 
 ## Done this session (2026-08-16)
 
@@ -112,17 +143,23 @@ Consequences accepted deliberately:
 - **Remaining harness work** — uniform completeness, float32 magnitude, and a
   frozen-uniform age sweep are still unbuilt. Scale and determinism are done. See
   [[testing]].
-- **The regtest growth rehearsal — the one thing that turns "modelled" into "seen."**
-  The v1 regtest inscribed 30 and viewed 30, and passed; the failure only appeared when
-  a new dataset joined the collection. So the rehearsal must include growth:
-  1. Inscribe the engine, then pieces 0–29, each in its own block.
-  2. Open all 30. Baseline — this is the step that already passed for v1.
-  3. Add a new dataset to `health_data_sets.js` and inscribe piece 30.
-  4. Reopen the originals: still render, discover 31 siblings, re-rank rather than crash.
-  5. Open piece 30 itself — index past the baked array, exercising the `_initDs`
-     fallback and `lc.ownDataReady`.
-  6. Repeat with 31 and 32; one new piece may not surface an off-by-one that two would.
-  Also time the first paint — it should be immediate now, not tens of seconds.
+- **The regtest growth rehearsal — DONE 2026-09-06.** Full results in
+  [testing.md](testing.md) under "Measured on chain". Engine + pieces 0–29 inscribed
+  one block each (heights 202–231); all 30 open in Brave with zero errors, all frames
+  distinct, first paint median 45ms.
+
+  **The recipe that used to sit here was stale and is corrected:** it said to add a
+  31st dataset and inscribe piece 30 to force growth. That was the mechanism when the
+  engine seeded its collection from the baked array. Since `5f10fb0` the collection is
+  built from chain, so **inscribing one at a time IS the growth test** — the collection
+  grows 1→30 during the run and every existing piece re-ranks on each arrival. No new
+  health data is needed, and none should be invented to make a test run. All 30 pieces
+  confirm `[lc] collection resolved — 30 piece(s) on chain`.
+
+  Still genuinely untested, and only reachable once real piece 30 data exists: a piece
+  whose index is **past the engine's baked array** (`_initDs` fallback,
+  `lc.ownDataReady`). `test/scale.test.mjs` covers it off-chain at sizes 30/31/40/100;
+  chain has never seen it. Do it with the first real new dataset, not a fabricated one.
 - **Not yet proven on any chain:** boot ordering, batched sibling fetch, and the block
   height fallback all no-op in dev because `/r/*` 404s immediately. Dev verified the
   render path and the init-time fix only.

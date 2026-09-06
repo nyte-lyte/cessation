@@ -31,11 +31,130 @@ broadcasting would have caught, and the second one cannot be undone: the name is
 Bitcoin forever, bypassed by viewers but retrievable by anyone who looks under the
 sat. Nothing in this file matters more than the metadata gate below.
 
+## Measured on chain — 2026-09-06
+
+The v3 regtest run (engine + pieces 0–29, one block each, heights 202–231) plus the
+first direct measurement of **live mainnet v2**. Method below under "Driving a real
+browser". Four things were established that had only been modelled before.
+
+**1. The living collection works on chain.** All 30 regtest pieces log
+`[lc] collection resolved — 30 piece(s) on chain` and `[lc] ready`. Cessation blocks
+differ per piece (981190 … 2722107), so lifespans are individuated. Inscribing
+one-at-a-time *is* the growth test now that the collection is built from chain
+(`5f10fb0`) — the collection grew 1→30 during the run and every piece re-ranked on
+each arrival. No 31st dataset is needed to exercise growth; the old rehearsal recipe
+in [todo.md](todo.md) predates the living-collection change.
+
+**2. THE CANVAS NEVER SCALED — shipped, and live on mainnet.** `#canvas` had
+`aspect-ratio` + `max-width/height` but **no `width`**. A `<canvas>` has an intrinsic
+300×150 default; `aspect-ratio` leaves the used width at 300px and `max-*` only caps,
+never grows. So the canvas sat at 300×200 at every viewport while the container
+scaled:
+
+| viewport | container | canvas | fill |
+|---|---|---|---|
+| 400×400 | 400 | 300×200 | 75% |
+| 1200×1200 | 1200 | 300×200 | **25%** |
+| 2400×1400 | 1400 | 300×200 | **21%** |
+
+Confirmed on mainnet two ways: the on-chain v2 engine's own CSS
+(`#canvas{display:block;aspect-ratio:3 / 2;max-width:100%;max-height:100%;}`) and
+live measurement of mainnet piece 0. Since the live iframe *is* the ordinals.com
+thumbnail, the art has been showing at a quarter size in a black field.
+Fixed by `width:100%;height:auto` — 84–89% fill, exact 3:2, at every viewport
+including portrait. **This is blind-spot #3 in the flesh:** a wrong-but-valid frame,
+rendered without error, through three inscriptions and two regtests.
+
+**3. Mainnet takes 27 seconds to paint, and the reinscriptions are why.** Instrumented
+at the WebGL draw call, mainnet piece 0's first draw is at **27,056ms** — nothing but
+black until then. Request capture explains it:
+
+```
+90  /r/metadata/…      ← for a THIRTY-piece collection
+ 2  /r/children/…      ← v2 engine AND v1 engine
+ 3  /r/parents/…       ← ancestor chain walk
+```
+
+The engine walks piece 0 → v2 engine → v1 engine and pulls children of both. Every
+layer on those sats is a child of one ancestor or the other — v1's 30, v2-leaked's 30,
+v2-fixed's 30 — so it fetches **90 metadata documents to render 30 pieces**. Exactly
+3×, one per reinscription. v1 painted fast; the slowness arrived with the restacking.
+Three independent causes, and fresh sats only fixes the first:
+
+| cause | fixed by |
+|---|---|
+| 3× metadata from three stacked layers | fresh sats (one inscription per sat) |
+| 30 serial round trips | `d6329eb` batching — in HEAD, not on chain |
+| waits for the whole scan before first paint | `d6329eb` first-frame — in HEAD, not on chain |
+
+**4. HEAD fixes the paint blocking — verified under latency, not assumed.** Same
+engine on regtest with CDP latency injection:
+
+| | mainnet v2 | HEAD @ 0ms | HEAD @ 300ms/req |
+|---|---|---|---|
+| first draw | 27,056ms | 29ms | **64ms** |
+| fetches complete at first draw | 96/96 | **0/1** | **0/1** |
+| total fetches | 96 | 35 | 35 |
+
+HEAD paints before *any* network response arrives; 300ms/request latency moves first
+paint by 35ms. That is `d6329eb` doing what it claimed.
+
+### Two smaller findings from the same run
+
+- **ord's JSON→CBOR is not bit-exact for float64.** Piece 25's `healthIndex` came back
+  1 ULP low on chain (`3fdb…2a5f` vs the correctly-rounded `3fdb…2a60`); the JSON on
+  disk was exact. One value in 30 pieces, relative error 1.3e-16. **Harmless here and
+  the reason is worth keeping:** the smallest gap between any two pieces on any ranked
+  field is 8.8e-4 (`healthIndex`; labs are 0.1–1.0 apart), ~10¹³× the error, so no
+  percentile rank can flip. Do not upgrade this to "CBOR round-trips exactly" — it
+  doesn't, it is merely far below the resolution that matters. Re-check if a ranked
+  field ever gains near-duplicate values.
+- **`build.js` was inscribing CSS comments.** The stripper at the CSS minify step used
+  `/\*[^*]*\*/`, which cannot match across an asterisk, so any comment containing one
+  (`max-*`, `/* 2 * n */`) shipped to chain — and it ran *after* minification, which
+  rewrote the prose inside. Now `[\s\S]*?` and stripped before minifying. Caught only
+  because the canvas-fix comment contained `max-*` and added 465 bytes to the bundle.
+
+### hashTail collisions are expected — not a guard failure
+
+Regtest pieces 6/8, 11/13 and 10/29 share a hashTail. `hashTail` is
+`round(byte × 99/255)` → 100 buckets, so 30 pieces collide with ~99% probability. The
+guard in `inscribe.js` checks **block-hash reuse**, and its stated worry ("cease and
+reanimate in lockstep forever") only applies to pieces sharing a block. Colliding
+pieces here have different inscription heights, so `inscriptionHeight +
+lifespan × BLOCKS_PER_YEAR` gives different cessation blocks, and reanimation redraws
+hashTail from each piece's own cessation-block hash. Same duration, different clocks,
+immediate divergence. Do not "fix" this.
+
+## Driving a real browser (headless Brave over CDP)
+
+No extension and no Chrome needed. Launch:
+
+```
+"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" --headless=new \
+  --remote-debugging-port=9222 --user-data-dir=<tmp> --no-first-run \
+  --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader
+```
+
+then drive `ws://…/devtools/browser/…` with node's built-in `WebSocket`. Two lessons:
+
+- **`--screenshot` hangs on this project.** The rAF loop plus the 60s block poll means
+  `--virtual-time-budget` never settles. Use `Page.captureScreenshot` over CDP.
+- **Do not infer "it rendered" from pixel brightness** — these pieces are legitimately
+  dark, and a black frame is ambiguous between "not painted" and "painted dark". Wrap
+  `drawArrays`/`drawElements` via `Page.addScriptToEvaluateOnNewDocument` and record
+  the first call. That is what produced the 27s number; a screenshot only showed black
+  and I first mis-attributed it to the canvas bug.
+- `Emulation.setDeviceMetricsOverride` for viewport sweeps,
+  `Network.emulateNetworkConditions` for latency, and wrapping `window.fetch` to count
+  requests outstanding at first draw.
+
 ## What regtest proves
 
 Endpoints answer, the piece boots, CBOR metadata round-trips, parent/child
 discovery works, MIME types are right. Verified 2026-04-05 and 2026-04-11 for the
-architecture current at those dates.
+architecture current at those dates; re-verified end-to-end 2026-09-06 for v3
+(see "Measured on chain" above).
 
 ## What regtest structurally cannot prove — the three axes
 
