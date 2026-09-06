@@ -26,11 +26,23 @@ node on 2026-08-13. Supersedes all older wallet notes (see "Deprecated" below).
 >   non-fatal "Incompatible old fee estimation data", expected on a version change.
 >   See [testing.md](testing.md) on why: `--no-backup` is no longer needed.
 >
-> **Two blocking gaps found on 2026-09-06, see [todo.md](todo.md):**
-> 1. **`PIECE_SATS` in `inscribe.js` lists the OLD v1/v2 sats** — zero overlap with the
->    cold wallet's holdings below. A re-mint run would target already-stacked sats and
->    the null-check would not catch it.
-> 2. **8 rare sats held, 31 needed** (30 pieces + engine). Short by 23.
+> **Sat assignment settled 2026-09-06 — `inscribe.js` rewritten to match:**
+> - **Engine → `1459982499999999`** (dmvuhsnspyo, Omega black uncommon, block 373992,
+>   2015 / 25-BTC epoch — the oldest Omega held). Inscribed by hand, not by the script.
+> - **Every piece → a Nakamoto-era sat, oldest first:** piece N takes
+>   `12425429610010 + N`, drawn from the 907-sat range in UTXO `b9c746591981…:0`
+>   (block 2485, 2009-01-31). Piece 0 = `…610010`, piece 29 = `…610039`.
+> - The old `PIECE_SATS` table listed the **v1/v2 sats** — already carrying three stacked
+>   inscriptions — and every entry was non-null, so the old "is it filled in?" check would
+>   have waved a re-mint straight onto them. Replaced by a derived
+>   `satForPiece(index)` with a hard range bound; nothing is hand-typed per piece.
+> - The six remaining Omegas (cjcytrkpena, adrejuehvqo, adkoglpialm, abigrncmehu,
+>   aaexuaaadws, ytgwcbgmcw) stay unassigned in `ord-cold`.
+>
+> **Correction:** an earlier note here said "8 rare sats held, 31 needed — short by 23."
+> That was wrong. It counted the Nakamoto entry as one sat; it is a **907-sat range**, so
+> it covers 907 pieces. There is no shortfall, and the open-ended collection has room to
+> grow for as long as the range lasts.
 
 ## Context
 The **entire collection is being re-inscribed** because the engine code has multiple

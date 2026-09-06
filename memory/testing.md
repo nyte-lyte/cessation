@@ -184,12 +184,14 @@ Every bug that has shipped so far lived in one of these three gaps. See
 4. **Every uniform declared in fragment.glsl is located and set** in main.js. Compare
    the `uniform <type> <name>` declarations against the `getUniformLocation` names.
    This is the `u_co2Norm` check and it is purely static.
-5. **`PIECE_SATS` is filled in inscribe.js** — the script errors on any null. **Not
-   sufficient.** Checked 2026-09-06: every entry is non-null and every entry is *wrong*
-   for the re-mint — all 30 are v1/v2 sats, zero overlap with what `ord-cold` actually
-   holds ([wallets.md](wallets.md)). Non-null only proves someone typed a number. Verify
-   each sat is genuinely in the cold wallet before inscribing, or the run targets sats
-   that already carry three inscriptions.
+5. **Sat assignment is derived, not typed — check the range, not a table.**
+   `inscribe.js` has no `PIECE_SATS` table any more (rewritten 2026-09-06; the old one
+   listed the v1/v2 sats and every entry was non-null, so "is it filled in?" would have
+   passed a re-mint straight onto already-stacked sats). Now `satForPiece(index)` returns
+   `12425429610010 + index` from the 907-sat Nakamoto range, bounded at `…610916`, and
+   refuses the engine's sat. Confirm the range still matches what `ord-cold` holds
+   ([wallets.md](wallets.md)) and that the sat has been moved to `ord` before inscribing —
+   **ord fails if `--sat` is not in the wallet, which is the real backstop.**
 
 5b. **There are two Bitcoin datadirs on this machine. Use the right one.**
    `~/Library/Application Support/Bitcoin` is a **pruned** secondary node (`prune=1907`

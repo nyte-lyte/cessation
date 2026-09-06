@@ -124,20 +124,25 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
-- **`PIECE_SATS` in `inscribe.js` points at the OLD sats. Blocking.** Checked
-  2026-09-06: of the 30 sat numbers in `PIECE_SATS`, **zero** appear in the `ord-cold`
-  wallet's holdings per [wallets.md](wallets.md). Those 30 are the v1/v2 sats — the ones
-  already carrying three stacked inscriptions, the exact thing the re-mint exists to get
-  away from. The existing guard only rejects `null`, so a re-mint run would print
-  `--sat <old sat>` and look perfectly normal. `PIECE_SATS` must be rewritten from the
-  cold wallet before anything is inscribed, and the guard should probably cross-check
-  against the wallet rather than just non-null.
-- **Only 8 rare sats are held; the re-mint needs 31.** `ord-cold` holds 7 Omega black
-  uncommons + 1 Nakamoto-era range (2026-08-13 audit in [wallets.md](wallets.md)). A
-  30-piece collection plus the engine needs 31. **Short by 23.** Either more sats get
-  bought, or the re-mint is staged, or pieces go on non-rare sats — an open decision, not
-  a detail. `MEMORY.md`'s "All sats sourced and held ✓" refers to the *old* mint and is
-  misleading for the re-mint.
+- **~~`PIECE_SATS` points at the OLD sats~~ FIXED 2026-09-06.** The table listed the
+  v1/v2 sats — the ones already carrying three stacked inscriptions — and every entry
+  was non-null, so the "is it filled in?" check would have waved a re-mint onto them.
+  Replaced in `inscribe.js` by a derived `satForPiece(index)`:
+  - **Engine → `1459982499999999`** (dmvuhsnspyo, oldest Omega held, block 373992).
+    Inscribed by hand; the script never emits it, and refuses if a piece resolves to it.
+  - **Piece N → `12425429610010 + N`**, Nakamoto-era sats from the 907-sat range in
+    UTXO `b9c746591981…:0` (block 2485, 2009-01-31), oldest first. Piece 0 = `…610010`,
+    piece 29 = `…610039`. Hard bound at `…610916`; piece 907 is refused.
+  - Nothing is hand-typed per piece any more, so the stale-table failure cannot recur.
+  - Verified: each Omega sat number equals the last sat of its block computed from the
+    subsidy schedule, and the range lies inside block 2485.
+  - **The real backstop is ord itself** — the printed command carries `--sat`, and ord
+    fails if that sat is not in the wallet. Move the sat from `ord-cold` to `ord` first;
+    if ord cannot find it, stop rather than dropping the flag.
+
+- **~~Only 8 rare sats held; 31 needed~~ — WRONG, retracted 2026-09-06.** That counted
+  the Nakamoto entry as a single sat. It is a **907-sat range**, so it covers 907 pieces.
+  No shortfall; the open-ended collection has room for as long as the range lasts.
 
 - **~~Upgrade Bitcoin Core to 31.x~~ DONE 2026-09-06** — machine now on brew
   `bitcoin 31.1_1`; mainnet node restarted on it, both wallets verified unchanged.

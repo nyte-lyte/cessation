@@ -11,51 +11,59 @@
 // engineId      : inscription ID of the engine (text/javascript) inscription
 // blockHeight   : block height at inscription time
 //
-// Every piece uses --parent engineId. Fill in PIECE_SATS before running.
+// Every piece uses --parent engineId. Sats are derived, not typed — see below.
 // The collection grows: a new piece is minted whenever new ECG/lab data arrives.
 // Never hardcode a piece count here — index the collection, don't count it.
 //
+// The printed `ord wallet inscribe` command carries --sat, and ord fails outright
+// if that sat is not in the wallet. That is the real backstop against inscribing
+// on the wrong sat: move the sat from ord-cold to ord first, and if ord cannot
+// find it, stop and work out why rather than dropping the flag.
+//
 
-// ── Per-piece sat numbers ─────────────────────────────────────────────────────
-// REQUIRED — fill in the sat ordinal number for each piece before minting.
-// Piece 0: Nakamoto sat (2009-01-31). Pieces 1–28: Omega black uncommon sats.
-// Leave null to get an error rather than silently inscribing on the wrong sat.
-// Engine is inscribed on Nakamoto sat 12425429610918 (last sat of UTXO ccab20ce:0, block 2485).
-// Pieces 0–28 use Black Uncommons in chronological-by-block order.
-const PIECE_SATS = {
-  0:  1073492499999999,  // ggaofldnaso  block 219396
-  1:  1083577499999999,  // geegozsvhly  block 223430
-  2:  1102322499999999,  // gasmtandsqk  block 230928
-  3:  1144884999999999,  // fswrmtkmsde  block 247953
-  4:  1165149999999999,  // fpdqkiwtjgc  block 256059
-  5:  1225639999999999,  // fdzzclsqgnq  block 280255
-  6:  1235642499999999,  // fcebtbyphkc  block 284256
-  7:  1247724999999999,  // ezyfkmhfbio  block 289089
-  8:  1255119999999999,  // eyourxqckxm  block 292047
-  9:  1265207499999999,  // ewsmtjurgus  block 296082
-  10: 1287739999999999,  // esopiujojcc  block 305095
-  11: 1303782499999999,  // epptzdzeziw  block 311512
-  12: 1311874999999999,  // eodakrzsxew  block 314749
-  13: 1312054999999999,  // eoceaafyvvu  block 314821
-  14: 1341682499999999,  // eiqhfztjjyo  block 326672
-  15: 1475882499999999,  // djxqrjryauc  block 380352
-  16: 1520284999999999,  // dbtaiujpvdq  block 398113
-  17: 1520534999999999,  // dbrvfnaybyg  block 398213
-  18: 1528214999999999,  // dahbajgrwjq  block 401285
-  19: 1564052499999999,  // ctrlbuazpyg  block 415620
-  20: 1648302499999999,  // cedznsnbrdq  block 478641
-  21: 1664417499999999,  // cbevdkdbery  block 491533
-  22: 1786754999999999,  // beqznfjhipm  block 589403
-  23: 1806232499999999,  // bbbsmbaumcw  block 604985
-  24: 1836424999999999,  // avndjbdkrqw  block 629139
-  25: 1857229999999999,  // arrnapijeso  block 661567
-  26: 1899107499999999,  // ajyzbtminrm  block 728571
-  27: 1923204999999999,  // afnovbhsioo  block 767127
-  28: 1925117499999999,  // afeksbckasw  block 770187
-  29: 1933139999999999,  // adrzwervqle  block 783023
-  // Spare BUs in wallet (4): adrejuehvqo 783299,
-  // adkoglpialm 785511, abigrncmehu 803651, aaexuaaadws 813455.
-};
+// ── Sat assignment ────────────────────────────────────────────────────────────
+// Rewritten 2026-09-06 for the fresh-sat re-mint. The previous table listed the
+// v1/v2 sats — the ones already carrying three stacked inscriptions — and every
+// entry was non-null, so the old "is it filled in?" check would have waved a
+// re-mint straight onto them. See memory/wallets.md and memory/testing.md.
+//
+// THE ENGINE goes on an Omega black uncommon:
+//   1459982499999999  dmvuhsnspyo  block 373992 (2015, 25-BTC epoch) — the oldest
+//   of the seven Omegas held. Inscribed by hand, not by this script:
+//     ord wallet inscribe --fee-rate <R> --sat 1459982499999999 --file index_bundle.js
+//
+// EVERY PIECE goes on a Nakamoto-era sat, oldest first: piece N takes
+// NAKAMOTO_FIRST + N. These come from the 907-sat range in UTXO b9c746591981…:0,
+// mined in block 2485 on 2009-01-31 when Satoshi was the only miner.
+//
+// The range is what makes the open-ended collection possible: 907 sats is 907
+// pieces, so this never needs revisiting as the collection grows. Do not hardcode
+// a piece count here — the bound is the range, checked below.
+//
+// Verified 2026-09-06: each Omega sat number equals the last sat of its block
+// computed from the subsidy schedule, and the range lies inside block 2485.
+const NAKAMOTO_FIRST = 12425429610010;   // first sat of the range (oldest)
+const NAKAMOTO_LAST  = 12425429610916;   // last sat of the range — 907 sats total
+const ENGINE_SAT     = 1459982499999999; // dmvuhsnspyo — engine only, never a piece
+
+// Remaining Omegas, held in ord-cold, deliberately unassigned:
+//   cjcytrkpena 457095, adrejuehvqo 783299, adkoglpialm 785511,
+//   abigrncmehu 803651, aaexuaaadws 813455, ytgwcbgmcw 826035
+
+function satForPiece(index) {
+  const sat = NAKAMOTO_FIRST + index;
+  if (sat > NAKAMOTO_LAST) {
+    console.error(`Error: piece ${index} would need sat ${sat}, past the end of the`);
+    console.error(`  Nakamoto range (${NAKAMOTO_FIRST}–${NAKAMOTO_LAST}, ${NAKAMOTO_LAST - NAKAMOTO_FIRST + 1} sats).`);
+    console.error('  The range is exhausted — a new source of sats is needed.');
+    process.exit(1);
+  }
+  if (sat === ENGINE_SAT) {
+    console.error(`Error: piece ${index} resolves to the engine's sat. Refusing.`);
+    process.exit(1);
+  }
+  return sat;
+}
 
 'use strict';
 const { readFileSync, writeFileSync, mkdirSync, existsSync } = require('fs');
@@ -253,11 +261,7 @@ if (isNaN(blockHeight) || blockHeight < 0) {
   process.exit(1);
 }
 
-const satNumber = PIECE_SATS[pieceIndex];
-if (satNumber === null || satNumber === undefined) {
-  console.error(`Error: PIECE_SATS[${pieceIndex}] is not set — fill in the sat ordinal number in inscribe.js before minting.`);
-  process.exit(1);
-}
+const satNumber = satForPiece(pieceIndex);
 
 // Height check, now that blockHeight is parsed — same rule as the hash check above.
 for (const [usedBy, rec] of Object.entries(ledger)) {
