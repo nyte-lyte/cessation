@@ -178,6 +178,53 @@ run in `PIECE_CARRIERS` in `inscribe.js`.
 
 ---
 
+## 5b. Peeling single Nakamoto sats into carriers — VERIFIED 2026-09-06
+
+The plan is ~120 pieces on Nakamoto sats, the 6 spare Omegas held back. That needs 120
+carriers of the **1 rare sat + common padding** shape (§4), not the 330-sat all-rare
+chunks of §5 — those only yield ~3.
+
+**Why it takes two transactions per sat.** Common padding cannot be interleaved between
+contiguous Nakamoto sats inside one transaction: the range arrives as one uninterrupted
+run in the sat stream, so any output boundary can only *cut* the run, never insert
+commons into it. The way round it is to first move the target sat to the **end** of a
+commons-led output, then peel it to the **front** of a new one.
+
+**Round 1 — land the target at the end of a commons output.**
+Inputs in this order: `[commons A] [rare range] [commons B]`.
+- `out0 = |A| + 1` → all of A, then N0. **N0 is now the last sat of out0.**
+- `out1 = rest of the range` (N1…)
+- `out2 = change from B`; the fee comes off B's tail, so the range is untouched.
+
+**Round 2 — peel it to offset 0 with padding.**
+Inputs: `[out0 from round 1] [a commons UTXO]`.
+- `out0 = |A|` → the leading commons, as change
+- `out1 = 330` → **N0 followed by 329 common sats — the carrier**
+- `out2 = remaining commons`; fee off the tail.
+
+Measured result:
+
+```
+carrier: value 330
+  ranges: [[1250000000802, 1250000000803]]   <- 1 Nakamoto sat at offset 0
+          [[1245000000000, 1245000000329]]   <- 329 common sats of padding
+```
+
+Zero sats lost across both rounds. The carrier is structurally identical to the existing
+Omega carriers, so from here the normal rules apply (§3).
+
+**Cost, for 120 carriers.** Naively 240 transactions. Both rounds can be batched, which
+brings it down — round 2 especially: several round-1 outputs can be spent in one
+transaction, each carrier taking its padding from the next input's leading commons.
+Round 1 can isolate one sat per *(commons, chunk)* pair, so pre-splitting the range into
+chunks multiplies what one transaction achieves. **The batched procedure has not been
+built or tested — only the two-round mechanism above.**
+
+Padding alone is 120 x 329 = **39,480 common sats**, plus fees across every transaction.
+Model the total at the intended fee rate before starting; this is the expensive step.
+
+---
+
 ## 6. The run
 
 For each piece, in order, one block apart:
@@ -237,8 +284,8 @@ expensive mistake this project has made and it cannot be undone.
 
 ## 9. Still open
 
-- **The sat plan.** 907 Nakamoto sats gives ~3 carriers against 30 pieces. Needs more
-  sats, or pieces on Omegas, or a staged mint. Not decided.
+- **The sat plan — DECIDED 2026-09-06:** the 6 spare Omegas do **not** carry pieces for
+  now; ~120 Nakamoto sats get peeled out of the 907 into single-sat carriers (§5b).
+  Still to design: the *batched* peel procedure, and its cost at a real fee rate.
 - **`PIECE_CARRIERS` is empty** and correctly so until a real split exists.
 - **Batch vs one-at-a-time** — §6.
-- Whether the 6 unassigned Omegas carry pieces.
