@@ -242,54 +242,81 @@ Every bug that has shipped so far lived in one of these three gaps. See
    their UTXO sets came back byte-identical. **Inscribe without `--no-backup` from now
    on.** If `bitcoind -version` ever reports 30.x again, stop and re-read this section.
 
-## Sat consumption and padding — UNRESOLVED, blocks the mainnet run
+## Sat consumption and padding — RESOLVED ON REGTEST 2026-09-06
 
-Raised 2026-09-06. Not yet proven on regtest; the analysis below is from ordinal
-theory and must be demonstrated before anything is inscribed.
+Run on regtest with a synthetic 907-sat contiguous range standing in for the Nakamoto
+UTXO. **Rare sats were destroyed in three of four configurations.** Read this before
+inscribing on any rare sat.
 
-**The mechanic.** Sats flow through a transaction in input order — an output of value
-`V` takes the next `V` sats from the concatenated input stream. For a piece's sat to be
-*the* inscribed sat it must sit at offset 0 of the inscription output. So **every
-inscription consumes a contiguous run of `postage` sats beginning at its target.**
+**The mechanic.** Sats flow through a transaction in input order; an output of value `V`
+takes the next `V` sats. Whatever is left at the **end** of the stream is the fee, and
+goes to the miner. An inscription is two transactions, so the fee is taken **twice** —
+and the reveal's only input is the commit output, which begins with the rare run.
 
-The Nakamoto holding is **907 contiguous sats** (`12425429610010…610916`, one UTXO).
-
-| postage | pieces the range carries | Nakamoto sats consumed each |
+| # | setup | outcome |
 |---|---|---|
-| **10,000 — ord's default `TARGET_POSTAGE`** | **1** | the whole range + 9,093 common |
-| 546 | 2 | 546 |
-| 330 — P2TR dust floor | 3 | 330 |
+| 1 | 907 rare, **default postage (10,000)** | all 907 preserved — but every one of them locked inside a **single** inscription output |
+| 2 | 907 rare, postage 330, rare UTXO the sole input | **577 of 907 burned to fees** |
+| 3 | 400 rare, postage 330, common funding input present | **70 of 400 burned** — commit was safe, the *reveal* fee ate the overhang |
+| 4 | 400 rare, **postage 400 = the full rare run** | **400 of 400 preserved, zero lost** ✓ |
 
-**Two problems.**
+**Experiment 2, the worst case, traced:**
 
-1. **Default postage destroys the range.** `inscribe.js` prints no `--postage`, so ord
-   uses 10,000. The first inscription would pull all 907 Nakamoto sats into a single
-   output. Nothing currently prevents this.
-2. **`piece N = NAKAMOTO_FIRST + N` is not achievable.** `…610010` and `…610011` are
-   adjacent; they cannot each sit at offset 0 of a separate output that must be ≥330
-   sats. Padding cannot be interleaved either — the range is contiguous, so common sats
-   can only precede or follow the whole run, never sit between two Nakamoto sats. That
-   also means a "split the range into 30 outputs first" step does not rescue it: the
-   same rule applies to the splitting transaction.
+```
+commit:  in 907 (whole rare range)  ->  out 796   FEE 111  <- rare sats
+reveal:  in 796                     ->  out 330   FEE 466  <- rare sats
+                                              577 rare sats paid to the miner
+```
 
-**What must be settled before inscribing.**
-- How many pieces the range can genuinely carry, demonstrated on regtest rather than
-  argued — inscribe on a known range with several postages and read back with
-  `ord list` / `ord traits` which sat each inscription actually landed on and where the
-  rest of the range went.
-- Where the remainder of the range ends up after each inscription, and whether it stays
-  identifiable in the wallet rather than becoming ordinary change that a later fee input
-  could spend. **This is the loss scenario: Nakamoto sats swept as change.**
-- Whether pieces should sit on the Nakamoto range at all, given it may only carry ~3, or
-  whether the range is better reserved for the genesis pieces with the rest on Omegas.
-- Whatever is decided, `inscribe.js` should print an explicit `--postage` rather than
-  inheriting 10,000 by default.
+ord used the rare UTXO as the only input and paid both fees from it. **Silently — no
+warning, exit code 0, output looks completely normal.**
 
-The old mint is not a safe precedent here: `MEMORY.md` records the engine on
-`12425429610918` described as "last sat of UTXO ccab20ce:0" with piece 0 on
-`…610917` — adjacent sats, which the rule above says cannot each be at offset 0 of
-separate dust-limit outputs. Either those inscriptions sat at non-zero offsets or the
-note is inaccurate. Worth resolving, since it bears directly on what is actually possible.
+**Experiment 3 shows a funding input is not sufficient:**
+
+```
+commit:  in [400 rare][4999952395 common] -> out [469][4999952114]  fee 212 all common  OK
+reveal:  in [469 = 400 rare + 69 common]  -> out [330]              fee 139 = 70 rare + 69 common  LOST
+```
+
+The commit protects the range; the **reveal fee eats whatever rare sats sit past the
+postage boundary**, because they sit between the end of the inscription output and the
+common padding.
+
+### THE RULE
+
+**`--postage` must equal the number of contiguous rare sats in the UTXO being spent.**
+Less, and the reveal fee takes the overhang. There is no default that is safe:
+`inscribe.js` currently prints no `--postage`, so ord uses `TARGET_POSTAGE = 10,000`.
+
+### Why ord does not protect them
+
+ord's rarity enum covers only *alpha* sats (first sat of a block/epoch). As
+[wallets.md](wallets.md) already notes, an **Omega/black uncommon is labelled `common`**
+by ord, and the Nakamoto-era sats are not an ord rarity either. **ord cannot see that
+these sats are special and will spend them as fees or change without hesitation.** No
+safeguard exists to switch on.
+
+### What this means for the 907-sat Nakamoto range
+
+- To preserve all 907, postage must be 907 — i.e. **one inscription carrying the entire
+  range**.
+- For N pieces each on a Nakamoto sat, the range must **first be split into N chunks**,
+  each at least the 330-sat P2TR dust floor, with the split transaction funded by common
+  sats so its fee comes from the end of the stream. Then inscribe each chunk with
+  `--postage` equal to that chunk's rare run.
+- 907 sats at the 330 floor gives **2 chunks of 330 plus a 247 remainder** (which needs
+  ~83 common sats appended to clear dust). So the range carries **about 3 pieces, not
+  30** — confirming `piece N = NAKAMOTO_FIRST + N` is not inscribable.
+
+### Procedure, whenever a rare sat is inscribed
+
+1. Know the exact contiguous rare run in the UTXO (`/output/<outpoint>` on the ord
+   server, or `ord list`; the server holds the index lock, so use HTTP while it runs).
+2. Set `--postage` to exactly that run length.
+3. Ensure a common-sat input is available so the *commit* fee comes from commons.
+4. **Afterwards, account for every rare sat**: scan the block's outputs and confirm the
+   count preserved equals the count you started with. Experiments 2 and 3 both looked
+   entirely successful from ord's output alone.
 
 ## `--no-backup` — what it actually does, and why regtest needs it
 

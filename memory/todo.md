@@ -124,14 +124,28 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
-- **Sat consumption / padding — UNRESOLVED, blocks the mainnet run.** Raised 2026-09-06.
-  An inscription consumes a contiguous run of `postage` sats from its target, and the
-  Nakamoto holding is 907 *contiguous* sats in one UTXO. At ord's default 10,000 postage
-  the first inscription swallows the entire range; even at the 330 dust floor it carries
-  ~3 pieces, not 30. So **`piece N = NAKAMOTO_FIRST + N` cannot be inscribed as written**
-  and `inscribe.js` is marked accordingly. Also unresolved: where the rest of the range
-  goes after each inscription, and whether it can be swept as ordinary change — the
-  actual loss scenario. Must be demonstrated on regtest. See [testing.md](testing.md).
+- **Sat consumption / padding — RESOLVED on regtest 2026-09-06, but it changes the plan.**
+  Rare sats were destroyed in three of four configurations tested. Full detail and the
+  traces in [testing.md](testing.md).
+  - **THE RULE: `--postage` must equal the contiguous rare run in the UTXO.** Less, and
+    the *reveal* fee eats the overhang. A common funding input is **not** sufficient on
+    its own — that only protects the commit.
+  - Worst case measured: 907-sat range, postage 330 → **577 rare sats paid to a miner**,
+    silently, exit code 0, output looking entirely normal.
+  - ord will not protect them: its rarity enum covers only alpha sats, so an Omega is
+    labelled `common` and Nakamoto-era sats are not a rarity at all. **There is no
+    safeguard to switch on.**
+  - `inscribe.js` prints no `--postage`, so ord defaults to 10,000 — which would pull the
+    entire 907-sat range into the first inscription. **Must print an explicit
+    `--postage`.** Still to do.
+  - **Capacity: the 907-sat range carries ~3 pieces, not 30** (2 chunks of 330 at the
+    P2TR dust floor plus a 247 remainder needing common padding). So the sat plan needs
+    rethinking — either far more Nakamoto sats, or pieces on Omegas with the Nakamoto
+    range reserved for the genesis pieces.
+  - Any multi-piece use of the range needs a **split transaction first**, funded by
+    common sats, then one inscription per chunk at `--postage` = that chunk's run.
+  - **Always account for every rare sat afterwards** by scanning the block's outputs.
+    Experiments 2 and 3 both looked successful from ord's output alone.
 
 - **~~`PIECE_SATS` points at the OLD sats~~ FIXED 2026-09-06.** The table listed the
   v1/v2 sats — the ones already carrying three stacked inscriptions — and every entry
