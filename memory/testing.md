@@ -358,10 +358,19 @@ cardinals, and ord already auto-locks inscription-bearing outputs (visible in
 bitcoin-cli -rpcwallet=ord lockunspent false '[{"txid":"<split txid>","vout":0}, ...]'
 ```
 
-*Caveat: locking is established from ord's source and from ord's own use of the same
-mechanism; a clean end-to-end demo of a locked carrier surviving an inscribe was not
-completed because the regtest wallet had become fragmented. Worth confirming once on a
-fresh regtest wallet before mainnet.*
+**Confirmed end-to-end on a fresh regtest wallet (2026-09-06).** A clean wallet, a
+660-sat all-rare source split into two 330-sat carriers (660/660 preserved), carrier 1
+locked, carrier 0 inscribed at `--postage 330`:
+
+```
+commit inputs:  carrier 0 (the target, 330 sats) + a commons UTXO (2,499,999,185)
+                the locked carrier 1 does NOT appear
+carrier 1:      spent=false, ranges [[1250000000330, 1250000000660]] — intact
+accounting:     660 of 660 preserved, LOST 0
+```
+
+Compare the same operation with carrier 1 *unlocked*, where ord pulled it in as funding
+and burned all 330. **The lock is the difference between 0 and 330 sats destroyed.**
 
 **Step 3 — inscribe one carrier at a time.** Unlock only that carrier, then
 `--postage` = exactly that carrier's rare run (330, or 247 for the padded remainder).
