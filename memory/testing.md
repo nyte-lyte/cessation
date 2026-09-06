@@ -325,6 +325,55 @@ safeguard exists to switch on.
   ~83 common sats appended to clear dust). So the range carries **about 3 pieces, not
   30** — confirming `piece N = NAKAMOTO_FIRST + N` is not inscribable.
 
+### Option 1 — pad the range into carriers. THE CHOSEN APPROACH, tested 2026-09-06.
+
+Verified on regtest. Preserves the whole range, but adds a step that must not be skipped.
+
+**Step 1 — split the all-rare range into carriers. Works: 907/907 preserved, zero lost.**
+One transaction, **rare UTXO as input[0]** so its sats lead the stream, plus a common
+funding input. Outputs are sized to the chunks; the final short chunk is topped up to the
+330 dust floor with commons (which land *after* the rare sats, so they are the padding).
+Fee comes from trailing commons. Measured result on a 907-sat range:
+
+```
+out0: 330 sats, all rare        first sat rare  <- carrier 0
+out1: 330 sats, all rare        first sat rare  <- carrier 1
+out2: 330 = 247 rare + 83 common  first sat rare  <- carrier 2
+out3: change, all common
+907 of 907 rare sats preserved
+```
+
+**Step 2 — LOCK EVERY CARRIER IMMEDIATELY. Skipping this destroys them.**
+Measured: inscribing carrier 0 with the correct `--postage 330`, ord pulled **carrier 1
+in as an ordinary funding input** and burned its 330 rare sats. The commit showed 660
+sats of input — carrier 0 plus carrier 1. Carrier 0 came through intact (330/330) while
+carrier 1 was silently destroyed; range total went 907 -> 577.
+
+ord cannot see the sats are rare, so it treats every unlocked carrier as spendable
+change. It **does** honour locks — `plan.rs` skips `locked_utxos` when selecting
+cardinals, and ord already auto-locks inscription-bearing outputs (visible in
+`listlockunspent`). It just does not lock *uninscribed* rare carriers.
+
+```
+bitcoin-cli -rpcwallet=ord lockunspent false '[{"txid":"<split txid>","vout":0}, ...]'
+```
+
+*Caveat: locking is established from ord's source and from ord's own use of the same
+mechanism; a clean end-to-end demo of a locked carrier surviving an inscribe was not
+completed because the regtest wallet had become fragmented. Worth confirming once on a
+fresh regtest wallet before mainnet.*
+
+**Step 3 — inscribe one carrier at a time.** Unlock only that carrier, then
+`--postage` = exactly that carrier's rare run (330, or 247 for the padded remainder).
+Re-lock anything left. Verified: full commit+reveal cycle on carrier 0 preserved 330/330,
+both fees paid from commons.
+
+**Step 4 — account for every rare sat after every step**, by scanning the block's
+outputs. Three of the failing configurations returned exit code 0 and looked entirely
+normal.
+
+**Capacity: ~3 pieces from 907 sats** (2 x 330 + a 247 remainder). Confirmed again here.
+
 ### Procedure, whenever a rare sat is inscribed
 
 1. Know the exact contiguous rare run in the UTXO (`/output/<outpoint>` on the ord
