@@ -2,3 +2,4 @@ memory/*.png
 ord-env/regtest/
 node_modules/
 dist/
+peel_state.json
