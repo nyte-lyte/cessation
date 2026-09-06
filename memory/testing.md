@@ -184,7 +184,23 @@ Every bug that has shipped so far lived in one of these three gaps. See
 4. **Every uniform declared in fragment.glsl is located and set** in main.js. Compare
    the `uniform <type> <name>` declarations against the `getUniformLocation` names.
    This is the `u_co2Norm` check and it is purely static.
-5. **`PIECE_SATS` is filled in inscribe.js** — the script errors on any null.
+5. **`PIECE_SATS` is filled in inscribe.js** — the script errors on any null. **Not
+   sufficient.** Checked 2026-09-06: every entry is non-null and every entry is *wrong*
+   for the re-mint — all 30 are v1/v2 sats, zero overlap with what `ord-cold` actually
+   holds ([wallets.md](wallets.md)). Non-null only proves someone typed a number. Verify
+   each sat is genuinely in the cold wallet before inscribing, or the run targets sats
+   that already carry three inscriptions.
+
+5b. **There are two Bitcoin datadirs on this machine. Use the right one.**
+   `~/Library/Application Support/Bitcoin` is a **pruned** secondary node (`prune=1907`
+   in its `settings.json`, set via Bitcoin-Qt; 13 GB, ~2 GB of blocks, last run
+   2026-04-18) with an empty `ord` wallet. It is **not** the inscribing node and its
+   presence is misleading — a check that finds it will wrongly conclude the node is
+   pruned and unusable. The real node is **`/Volumes/Bitcoin/Bitcoin`** on the external
+   volume: full chain (812 GB blocks, `blk00000.dat` present, 5,732 files), `txindex=1`,
+   no pruning, with `ord` and `ord-cold` wallets in the datadir root. ord's index is
+   `/Volumes/Bitcoin/Ord` (405 GB including `.old` backups). Read
+   [wallets.md](wallets.md) first — it documents all of this.
 6. **METADATA GATE — no identity on chain. Blocking; nothing is broadcast until this
    passes.** A name reached Bitcoin permanently on the second inscription. It is the
    most expensive mistake this project has made and it is not reversible.

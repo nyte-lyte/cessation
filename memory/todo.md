@@ -124,6 +124,21 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
+- **`PIECE_SATS` in `inscribe.js` points at the OLD sats. Blocking.** Checked
+  2026-09-06: of the 30 sat numbers in `PIECE_SATS`, **zero** appear in the `ord-cold`
+  wallet's holdings per [wallets.md](wallets.md). Those 30 are the v1/v2 sats — the ones
+  already carrying three stacked inscriptions, the exact thing the re-mint exists to get
+  away from. The existing guard only rejects `null`, so a re-mint run would print
+  `--sat <old sat>` and look perfectly normal. `PIECE_SATS` must be rewritten from the
+  cold wallet before anything is inscribed, and the guard should probably cross-check
+  against the wallet rather than just non-null.
+- **Only 8 rare sats are held; the re-mint needs 31.** `ord-cold` holds 7 Omega black
+  uncommons + 1 Nakamoto-era range (2026-08-13 audit in [wallets.md](wallets.md)). A
+  30-piece collection plus the engine needs 31. **Short by 23.** Either more sats get
+  bought, or the re-mint is staged, or pieces go on non-rare sats — an open decision, not
+  a detail. `MEMORY.md`'s "All sats sourced and held ✓" refers to the *old* mint and is
+  misleading for the re-mint.
+
 - **Upgrade Bitcoin Core to 31.x before the mainnet run. Blocking.** Core 30.0–30.3
   carries a regression that breaks ord's recovery-key backup, which is why every regtest
   inscription this project has run used `--no-backup`. That flag skips importing the

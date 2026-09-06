@@ -3,6 +3,19 @@
 Source of truth for the wallets used to inscribe Cessation. Verified live against the
 node on 2026-08-13. Supersedes all older wallet notes (see "Deprecated" below).
 
+> **File-level recheck 2026-09-06** (node not started, so UTXO contents below are still
+> the 2026-08-13 audit): both wallet files present and SQLite —
+> `/Volumes/Bitcoin/Bitcoin/ord/wallet.dat` (389 KB) and `.../ord-cold/wallet.dat`
+> (73 KB), both modified 2026-08-30. Node last ran 2026-08-31. ord index is now **405 GB**
+> (`index.redb` plus three `.old` backups), not the 176 GB noted below — the external
+> volume has **491 GB free**, so the backups are worth pruning before a re-index.
+>
+> **Two blocking gaps found on 2026-09-06, see [todo.md](todo.md):**
+> 1. **`PIECE_SATS` in `inscribe.js` lists the OLD v1/v2 sats** — zero overlap with the
+>    cold wallet's holdings below. A re-mint run would target already-stacked sats and
+>    the null-check would not catch it.
+> 2. **8 rare sats held, 31 needed** (30 pieces + engine). Short by 23.
+
 ## Context
 The **entire collection is being re-inscribed** because the engine code has multiple
 bugs (see `inscription_architecture.md` → "Code Bugs" + "Inscription Failure History").
