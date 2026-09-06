@@ -3,12 +3,23 @@
 Source of truth for the wallets used to inscribe Cessation. Verified live against the
 node on 2026-08-13. Supersedes all older wallet notes (see "Deprecated" below).
 
-> **File-level recheck 2026-09-06** (node not started, so UTXO contents below are still
-> the 2026-08-13 audit): both wallet files present and SQLite —
-> `/Volumes/Bitcoin/Bitcoin/ord/wallet.dat` (389 KB) and `.../ord-cold/wallet.dat`
-> (73 KB), both modified 2026-08-30. Node last ran 2026-08-31. ord index is now **405 GB**
-> (`index.redb` plus three `.old` backups), not the 176 GB noted below — the external
-> volume has **491 GB free**, so the backups are worth pruning before a re-index.
+> **Re-verified live 2026-09-06 against the node at tip 965827** (`ibd=false`,
+> `pruned=false`, progress 100%). Everything below still holds:
+>
+> - **`ord-cold`: all 8 UTXOs present and unspent, 4,081 sats, amounts unchanged, no
+>   extras.** Confirmations 9,984–13,086 — every one predates the 2026-08-13 audit and
+>   has not been touched since. A UTXO's sats cannot change without spending it, so the
+>   7 Omega black uncommons and the Nakamoto-era range are intact. (Sat *numbers* were
+>   not re-derived; that needs the ord index caught up, and the untouched outpoints make
+>   it unnecessary.)
+> - **`ord`: 37 UTXOs / 217,767 sats**, unchanged.
+> - Wallet files both SQLite, modified 2026-08-30; node had last run 2026-08-31 and was
+>   ~980 blocks behind on startup.
+> - ord index is now **405 GB** (`index.redb` plus three `.old` backups), not the 176 GB
+>   noted below — the volume has **491 GB free**, so the backups are worth pruning before
+>   any re-index.
+> - Started with brew `bitcoind` **30.2** deliberately: see [testing.md](testing.md) on
+>   the Core 31 upgrade, which has not been applied to this node.
 >
 > **Two blocking gaps found on 2026-09-06, see [todo.md](todo.md):**
 > 1. **`PIECE_SATS` in `inscribe.js` lists the OLD v1/v2 sats** — zero overlap with the
