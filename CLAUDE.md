@@ -5,6 +5,7 @@ Full project memory is in the `memory/` directory. Read `memory/MEMORY.md` first
 Key files for quick orientation:
 - `memory/MEMORY.md` — master index of all context
 - `memory/nirvana.md` — lifecycle engine, karma, reanimation, void
+- `memory/inscribe.md` — **how to inscribe; the rules that protect the rare sats**
 - `memory/todo.md` — pre-mint checklist
 - `memory/inscription_architecture.md` — on-chain structure
 - `memory/testing.md` — what regtest does and does not verify; pre-inscription checklist

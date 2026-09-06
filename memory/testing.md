@@ -1,6 +1,9 @@
 # Testing — what is verified, what is not
 
-Last updated 2026-08-16.
+Last updated 2026-09-06.
+
+**For the procedure itself, see [inscribe.md](inscribe.md).** This file is the evidence
+behind it — what was measured, and what is still unverifiable.
 
 ## Dev mode (Live Server or any local http server)
 

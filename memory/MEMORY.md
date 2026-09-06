@@ -13,13 +13,18 @@ layer on the existing sats. The bar is "make sure everything works this time."
 - **Mainnet measured at 27s to first paint**, largely because the ancestor walk pulls
   all three stacked layers — 90 metadata fetches to render 30 pieces. Fresh sats plus
   the HEAD fixes take this to ~64ms even under latency.
-- **Bitcoin Core must be upgraded to 31.x before the mainnet run.** Core 30.0–30.3
-  breaks ord's recovery-key backup, which is why regtest needs `--no-backup`; carrying
-  that flag to mainnet risks losing a rare sat permanently. Fixed in Core 31.0 — a
-  forward upgrade, not a downgrade. [testing.md](testing.md) → "`--no-backup`".
+- **Bitcoin Core upgraded to 31.1 (DONE 2026-09-06).** Core 30.0–30.3 broke ord's
+  recovery-key backup, which is why regtest needed `--no-backup`. **That flag is now
+  retired — never pass it.** Both wallets verified unchanged after the upgrade.
+- **Rare sats are destroyed by default settings.** ord cannot see that Omega or
+  Nakamoto-era sats are special and will spend them as fees or funding. Measured on
+  regtest: 577 of 907 burned in one inscription. **[inscribe.md](inscribe.md) is
+  mandatory reading before any mainnet inscription.**
 - Live on chain right now: **v2** (`4fe0114`). Repo HEAD is ahead and NOT inscribed.
 - `node test/scale.test.mjs` — 14,064 checks, must pass before anything is inscribed.
 - `node test/liberation_model.mjs` — design instrument for the liberation distribution.
+- **How to inscribe — the operational reference: [inscribe.md](inscribe.md).** Read it
+  before any mainnet inscription; it consolidates the rules that protect the rare sats.
 - Full state, what's done, and what's still undecided: [todo.md](todo.md).
 - What is and isn't verifiable, plus the blocking metadata gate: [testing.md](testing.md).
 - **Two decisions still open:** tail convergence, and whether `KARMA_CLEARANCE_K = 0.05`

@@ -45,6 +45,8 @@ node on 2026-08-13. Supersedes all older wallet notes (see "Deprecated" below).
 > grow for as long as the range lasts.
 
 ## Context
+
+**Procedure for actually inscribing: [inscribe.md](inscribe.md).**
 The **entire collection is being re-inscribed** because the engine code has multiple
 bugs (see `inscription_architecture.md` → "Code Bugs" + "Inscription Failure History").
 New rare sats are being purchased specifically for this fresh re-mint and parked in the

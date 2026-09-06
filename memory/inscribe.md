@@ -1,0 +1,244 @@
+# Inscribing — the operational reference
+
+Written 2026-09-06. **This is the single source of truth for how a Cessation piece gets
+onto Bitcoin.** Everything here is either read off the chain from the previous mint or
+measured on regtest; where something is only reasoned, it says so.
+
+Related: [wallets.md](wallets.md) for what is held where, [testing.md](testing.md) for the
+experiments behind these rules, [todo.md](todo.md) for what is still undecided.
+
+---
+
+## 1. The environment
+
+| | |
+|---|---|
+| Node datadir | `/Volumes/Bitcoin/Bitcoin` — external volume, **must be mounted** |
+| Node config | `txindex=1`, `server=1`, `rpcuser=bitcoin`, `rpcpassword=bitcoin`, an `assumevalid` |
+| Bitcoin Core | **31.1** (upgraded 2026-09-06 — see §3) |
+| ord | 0.27.1, data dir `/Volumes/Bitcoin/Ord` (`index.redb`, ~176 GB + `.old` backups) |
+| ord wrapper | `ord2.sh` — mainnet RPC + that data dir + `--index-sats` |
+| Hot wallet | `ord` — the inscribing wallet, fee sats + carriers |
+| Cold wallet | `ord-cold` — the rare sats, moved to `ord` one at a time |
+
+```
+bitcoind -datadir=/Volumes/Bitcoin/Bitcoin -daemon
+bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin loadwallet ord
+bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin loadwallet ord-cold
+bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin stop
+```
+
+**There is a second, decoy datadir** at `~/Library/Application Support/Bitcoin`. It is a
+**pruned** node with an empty `ord` wallet, and it is not the inscribing node. Checking it
+leads to the wrong conclusion that the node is pruned and unusable.
+
+---
+
+## 2. The model — how a sat ends up inscribed
+
+Sats flow through a transaction **in input order**. An output of value `V` takes the next
+`V` sats from the concatenated input stream. **Whatever is left at the end of the stream
+is the fee, and goes to the miner.**
+
+An inscription is two transactions — commit, then reveal — so the fee is taken **twice**.
+For a sat to be *the* inscribed sat, it must sit at **offset 0** of the inscription output.
+
+A **carrier** is a UTXO whose first sat is the rare sat you intend to inscribe. Everything
+after it in that UTXO is padding.
+
+---
+
+## 3. Rules that are not negotiable
+
+### 3.1 The carrier must pass through unchanged
+
+**`output[0]` the same size as `input[0]`, with the fee coming from a separate input.**
+
+This is how the v1/v2 mint did it, read off the chain. The 28-piece batch reveal
+`5d643a3e…`:
+
+```
+inputs :  7x330, 20x546, 1x1600, 1x10000,  + one 23,955-sat funding UTXO
+outputs:  7x330, 20x546, 1x1600, 1x10000   (same sizes, same order)
+FEE    :  23,955 — exactly the extra input, consumed entirely
+```
+
+Input order mirrors output order size-for-size, so each carrier passes through 1:1 and no
+rare sat is ever in a position to be spent. Single inscriptions are the same shape:
+
+```
+piece 0:  in [10000, 1767]   out [10000, 546]    fee 1221
+engine:   in [10000, 71583]  out [10000, 10000]  fee 61583
+piece 29: in [10000, 1764]   out [10000, 546]    fee 1218
+```
+
+**In practice you get this by setting `--postage` to the carrier's full size.** ord then
+has to pull in a funding input to pay the reveal fee, instead of taking it out of slack.
+
+### 3.2 Never leave `--postage` to default
+
+ord's default is `TARGET_POSTAGE = 10,000`. Measured on regtest against a 907-sat all-rare
+UTXO, that pulled **the entire range into a single inscription output**.
+
+Set it lower than the carrier and the *reveal* fee eats the remainder — measured: postage
+330 against a 469-sat commit output destroyed **70 rare sats**, while the commit itself
+was fine. A funding input alone does **not** save you; it only protects the commit.
+
+### 3.3 Lock every carrier you are not currently inscribing
+
+**ord cannot see that these sats are rare.** Its rarity enum covers only *alpha* sats, so
+an Omega black uncommon is labelled `common` and Nakamoto-era sats are not a rarity at
+all. Every unlocked carrier is ordinary spendable change to ord.
+
+Measured: inscribing carrier 0 with the correct postage, ord pulled **carrier 1 in as a
+funding input and burned its 330 rare sats.** With carrier 1 locked, the same operation
+left it untouched — `spent=false`, all 330 intact.
+
+```
+bitcoin-cli -rpcwallet=ord lockunspent false '[{"txid":"<txid>","vout":<n>}, ...]'
+bitcoin-cli -rpcwallet=ord listlockunspent
+```
+
+ord honours locks (`plan.rs` skips `locked_utxos` when selecting cardinals) and already
+auto-locks *inscribed* outputs. It just never locks uninscribed rare carriers.
+
+**The lock is the difference between zero and 330 sats destroyed, and ord gives no signal
+either way.**
+
+### 3.4 Never pass `--no-backup`
+
+It skips importing the ephemeral key that controls the commit output — and the sat being
+inscribed sits at that address until the reveal confirms. If the reveal is evicted or the
+machine dies between broadcasts, the sat is unrecoverable.
+
+It was only ever needed because **Core 30.0–30.3** has a regression breaking ord's
+recovery-key backup. **Core 31.1 is installed and the flag is retired.** If
+`bitcoind -version` ever reports 30.x again, stop and read [testing.md](testing.md).
+
+Confirm the backup actually happened: the commit output should come back `ismine=true`,
+`solvable=true`, labelled `commit tx recovery key`.
+
+### 3.5 One block per piece
+
+Lifespan derives from the block hash, so two pieces sharing a block share a lifespan.
+`inscribe.js` keeps `inscribed_blocks.json` as the ledger and refuses a reused block or
+height. **Reset that file before a fresh mint** — it currently holds regtest heights.
+
+### 3.6 Account for every rare sat after every step
+
+Three of the four failing regtest configurations returned **exit code 0** and looked
+entirely normal. ord will not tell you. After each transaction, scan the block's outputs
+and confirm the count preserved equals the count you started with.
+
+```
+curl -s -H 'Accept: application/json' http://<ord>/output/<txid>:<vout>
+```
+
+(The ord server holds the index lock, so use HTTP while it is running, not `ord list`.)
+
+---
+
+## 4. The two carrier shapes
+
+| shape | which | behaviour |
+|---|---|---|
+| **1 rare sat at offset 0 + common padding** | the 7 Omega carriers (546/546/546/546/330/330/330) | fees come off the end of the stream and eat padding. The rare sat survives. **This is the shape the v1/v2 mint used throughout, and the one-at-a-time cold→hot workflow is correct for it.** |
+| **entirely rare, no padding** | the Nakamoto 907-sat range | nothing but rare sats exists for a fee to come from, so **every fee burns Nakamoto sats**. Measured: `ord wallet send` on it cost 111 rare sats in transfer fees alone. |
+
+The all-rare range is the genuinely new case — v1/v2 never had one; its Nakamoto sat sat
+in a padded carrier like everything else.
+
+---
+
+## 5. Preparing the Nakamoto range (the split)
+
+Only needed for the all-rare range. **Verified on regtest: 907/907 preserved, zero lost.**
+
+One transaction:
+- **`input[0]` = the rare UTXO** so its sats lead the stream
+- `input[1]` = a common funding UTXO
+- outputs sized to the chunks you want; the final short chunk topped up to the **330-sat
+  P2TR dust floor** with commons, which land *after* the rare sats and become its padding
+- change output last; the fee comes off trailing commons
+
+Measured result on 907 sats:
+
+```
+out0: 330 all rare                first sat rare   <- carrier 0
+out1: 330 all rare                first sat rare   <- carrier 1
+out2: 330 = 247 rare + 83 common  first sat rare   <- carrier 2
+out3: change, all common
+907 of 907 preserved
+```
+
+**Then lock all of them immediately** (§3.3), and record each carrier's first sat and rare
+run in `PIECE_CARRIERS` in `inscribe.js`.
+
+**Capacity: ~3 carriers from 907 sats.** The range does not stretch to 30 pieces.
+
+---
+
+## 6. The run
+
+For each piece, in order, one block apart:
+
+1. **Read the block** you are anchoring to — height, hash, timestamp.
+2. **Unlock only this carrier**; everything else stays locked.
+3. **Move it** from `ord-cold` to `ord` if it is not already there.
+4. `node inscribe.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>` — from the
+   repo root, so paths stay relative (`/Users/<name>/…` leaks identity onto chain).
+5. **Read the metadata before broadcasting** — see §7. Blocking.
+6. Run the printed `ord wallet inscribe` command. It carries `--sat` and `--postage`
+   already; do not drop either. No `--no-backup`.
+7. **Wait for confirmation**, then account for every rare sat (§3.6).
+8. Re-lock, and read the *new* block before starting the next piece.
+
+The engine is inscribed by hand, once, before any piece:
+
+```
+ord wallet inscribe --fee-rate <R> --sat 1459982499999999 \
+    --postage <that carrier's full size> --file index_bundle.js
+```
+
+**Batch mode is worth considering.** v1/v2 did 28 pieces in one batch reveal
+(`mode: separate-outputs`, per-inscription postages matching each carrier). That gives the
+input↔output mirroring of §3.1 by construction. It does mean all those pieces share a
+block, which conflicts with §3.5 — resolve that before choosing.
+
+---
+
+## 7. The metadata gate — blocking, nothing is broadcast until it passes
+
+A real name reached Bitcoin permanently on the second inscription. It is the most
+expensive mistake this project has made and it cannot be undone.
+
+- Decode the CBOR of the **composed inscription**, not just the source JSON, and confirm
+  exactly four keys: `pieceIndex`, `hashTail`, `inscriptionUnix`, `dataset`. Any fifth is
+  a stop.
+- Grep the decoded output for the username, real name, and `/Users/`.
+- **Absolute paths leak identity.** Run `inscribe.js` from the repo root; check the
+  inscribe command and any batch YAML the same way.
+
+---
+
+## 8. Pre-flight
+
+- [ ] External volume mounted; node synced; `pruned=false`
+- [ ] `bitcoind -version` reports **31.x** (not 30.x)
+- [ ] Both wallets load; UTXOs match [wallets.md](wallets.md)
+- [ ] All carriers locked except the one in hand
+- [ ] `inscribed_blocks.json` reset for a fresh mint
+- [ ] `PIECE_CARRIERS` filled from the real split tx — it ships empty on purpose
+- [ ] Engine bundle rebuilds byte-identical; `node test/scale.test.mjs` passes
+- [ ] Metadata gate passed (§7)
+- [ ] Wallet backups taken
+
+---
+
+## 9. Still open
+
+- **The sat plan.** 907 Nakamoto sats gives ~3 carriers against 30 pieces. Needs more
+  sats, or pieces on Omegas, or a staged mint. Not decided.
+- **`PIECE_CARRIERS` is empty** and correctly so until a real split exists.
+- **Batch vs one-at-a-time** — §6.
+- Whether the 6 unassigned Omegas carry pieces.
