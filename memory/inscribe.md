@@ -95,9 +95,21 @@ funding input and burned its 330 rare sats.** With carrier 1 locked, the same op
 left it untouched — `spent=false`, all 330 intact.
 
 ```
-bitcoin-cli -rpcwallet=ord lockunspent false '[{"txid":"<txid>","vout":<n>}, ...]'
+bitcoin-cli -rpcwallet=ord lockunspent false '[{"txid":"<txid>","vout":<n>}, ...]' true
 bitcoin-cli -rpcwallet=ord listlockunspent
 ```
+
+**That trailing `true` is `persistent`, and it is not optional.** Core's default stores
+locks **in memory only** — *"always cleared (by virtue of process exit) when a node stops
+or fails."* Measured 2026-09-06: 7 locks before a node restart, **1 after** — only the
+persistent one survived. Carriers may sit for years across countless restarts; a
+non-persistent lock evaporates on the first one and silently returns the rare sats to
+the spendable pool.
+
+**A lock is the second line of defence, not the first.** Keep carriers in `ord-cold`,
+a wallet never used to fund anything, and move exactly one to `ord` at inscription time.
+The lock protects against a mistake inside the hot wallet; the wallet separation protects
+against the lock being lost.
 
 ord honours locks (`plan.rs` skips `locked_utxos` when selecting cardinals) and already
 auto-locks *inscribed* outputs. It just never locks uninscribed rare carriers.

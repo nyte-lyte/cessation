@@ -97,7 +97,13 @@ const smallest = (minSat, exclude, n) =>
   cardinals(minSat, exclude).slice().reverse().slice(0, n);
 function lockOutputs(list) {
   if (!list.length) return;
-  bcli(['lockunspent', 'false', JSON.stringify(list.map(o => ({ txid: o.txid, vout: o.vout })))], true);
+  // persistent=true is NOT optional here. Core's default stores locks in MEMORY
+  // ONLY — "always cleared (by virtue of process exit) when a node stops or
+  // fails". Carriers may sit untouched for years across countless restarts; a
+  // non-persistent lock would silently evaporate on the first one and leave the
+  // rare sats as ordinary spendable change.
+  bcli(['lockunspent', 'false',
+        JSON.stringify(list.map(o => ({ txid: o.txid, vout: o.vout }))), 'true'], true);
 }
 
 // ── Transaction assembly ─────────────────────────────────────────────────────
