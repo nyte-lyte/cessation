@@ -139,7 +139,10 @@ Consequences accepted deliberately:
   a detail. `MEMORY.md`'s "All sats sourced and held ✓" refers to the *old* mint and is
   misleading for the re-mint.
 
-- **Upgrade Bitcoin Core to 31.x before the mainnet run. Blocking.** Core 30.0–30.3
+- **~~Upgrade Bitcoin Core to 31.x~~ DONE 2026-09-06** — machine now on brew
+  `bitcoin 31.1_1`; mainnet node restarted on it, both wallets verified unchanged.
+  Inscribe without `--no-backup`. Original context follows.
+- **Was: upgrade Bitcoin Core to 31.x before the mainnet run.** Core 30.0–30.3
   carries a regression that breaks ord's recovery-key backup, which is why every regtest
   inscription this project has run used `--no-backup`. That flag skips importing the
   ephemeral key controlling the commit output — and the sat being inscribed sits at that

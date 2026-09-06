@@ -18,8 +18,13 @@ node on 2026-08-13. Supersedes all older wallet notes (see "Deprecated" below).
 > - ord index is now **405 GB** (`index.redb` plus three `.old` backups), not the 176 GB
 >   noted below — the volume has **491 GB free**, so the backups are worth pruning before
 >   any re-index.
-> - Started with brew `bitcoind` **30.2** deliberately: see [testing.md](testing.md) on
->   the Core 31 upgrade, which has not been applied to this node.
+> - **Core upgraded 30.2 -> 31.1_1 the same day**, after this verification. Wallet
+>   backups taken first to `~/bitcoin-wallet-backups/2026-09-06-pre-core31/` (both
+>   wallets plus UTXO snapshots). Node restarted on 31.1.0: chain fine (`pruned=false`,
+>   `ibd=false`), both wallets reloaded with no warning, and both UTXO sets came back
+>   **byte-identical** to the pre-upgrade snapshot. Only startup notice was the
+>   non-fatal "Incompatible old fee estimation data", expected on a version change.
+>   See [testing.md](testing.md) on why: `--no-backup` is no longer needed.
 >
 > **Two blocking gaps found on 2026-09-06, see [todo.md](todo.md):**
 > 1. **`PIECE_SATS` in `inscribe.js` lists the OLD v1/v2 sats** — zero overlap with the

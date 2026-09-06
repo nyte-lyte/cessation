@@ -233,10 +233,12 @@ Every bug that has shipped so far lived in one of these three gaps. See
    Check the Core version before the run: `bitcoin-cli -version`. If it is **30.0–30.3**,
    **upgrade to 31.x** — the fix shipped in Core 31.0. ord 0.27.1 sets only a *minimum*
    Core version (28.0, `MIN_VERSION = 280000` in `src/wallet.rs`) and no maximum, so 31.x
-   is acceptable to it. **Verified on regtest against Core 31.1 (2026-09-06):** inscribe
-   without the flag succeeds and the recovery key is actually imported. Note the machine
-   still has brew `bitcoin 30.2` installed — `brew upgrade bitcoin` (or point `PATH` at a
-   31.x build) before the mainnet run, and confirm with `bitcoind -version`.
+   is acceptable to it. **DONE 2026-09-06 — the machine now runs Core 31.1.**
+   Verified on regtest first (inscribe without the flag succeeds and the recovery key is
+   actually imported), then `brew upgrade bitcoin` 30.2 -> 31.1_1 and the mainnet node
+   restarted on it. Wallet backups were taken first; both wallets reloaded clean and
+   their UTXO sets came back byte-identical. **Inscribe without `--no-backup` from now
+   on.** If `bitcoind -version` ever reports 30.x again, stop and re-read this section.
 
 ## `--no-backup` — what it actually does, and why regtest needs it
 
