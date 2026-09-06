@@ -214,8 +214,11 @@ Every bug that has shipped so far lived in one of these three gaps. See
 
 9. **NEVER pass `--no-backup` on mainnet. Blocking.** Regtest needs it only because of a
    Bitcoin Core bug (below). On mainnet it puts a rare sat at risk of permanent loss.
-   Check the Core version before the run: `bitcoin-cli -version`. If it is 30.0–30.2,
-   **downgrade to 29.x before inscribing anything.**
+   Check the Core version before the run: `bitcoin-cli -version`. If it is **30.0–30.3**,
+   **upgrade to 31.x** — the fix shipped in Core 31.0. ord 0.27.1 sets only a *minimum*
+   Core version (28.0, `MIN_VERSION = 280000` in `src/wallet.rs`) and no maximum, so 31.x
+   is acceptable to it. Rehearse the upgrade on regtest first: inscribe once *without*
+   `--no-backup` and confirm it succeeds.
 
 ## `--no-backup` — what it actually does, and why regtest needs it
 
@@ -250,16 +253,24 @@ mainnet that sat is the Nakamoto sat or an Omega uncommon. ord's own failure mes
 recovery key import failed"; Core's actual error is `-8 Internal addresses should not
 have a label`. From `src/wallet/rpc/backup.cpp`:
 
-| Core | declaration | result |
-|---|---|---|
-| v26–v29 | `const bool internal = data.exists("internal") ? …get_bool() : false;` | works |
-| **v30.0–v30.2** | `std::optional<bool> internal;` | **broken** |
-| master | `bool desc_internal = internal.has_value() && internal.value();` | fixed |
-
 The guard is `if (internal && data.exists("label"))`. In v30 `internal` became a
 `std::optional<bool>`, so that tests whether the optional *holds a value*, not what the
-value is — sending `internal: false` at all trips it. Confirmed by varying one field at
-a time against Core 30.2:
+value is — sending `internal: false` at all trips it. Fixed in v31 by evaluating the
+contained value into a plain `bool` first:
+
+| Core | the guard | verdict |
+|---|---|---|
+| ≤ v29.4 | `if (internal && …)`, `internal` a plain `bool` | works |
+| **v30.0 – v30.3** | same guard, `internal` now `std::optional<bool>` | **broken** |
+| **v31.0, v31.1, master** | `if (desc_internal && …)` where `desc_internal = internal.has_value() && internal.value()` | **fixed** |
+
+**Check the guard line, not the declaration.** `desc_internal = internal.has_value() &&
+internal.value()` also appears in v30.2 — in the *multipath descriptor* loop, nothing to
+do with the label check. Grepping for it reports every broken version as fixed. This
+cost a wrong recommendation once (downgrade to 29.x, when the real answer is upgrade to
+31.x); check what `if (… && data.exists("label"))` actually tests.
+
+Confirmed by varying one field at a time against Core 30.2:
 
 ```
 active:false internal:false +label        FAIL: Internal addresses should not have a label
@@ -267,10 +278,16 @@ active:false internal:false  no label     OK
 active:false  +label (internal omitted)   OK
 ```
 
-**Fix for the mainnet run: use Bitcoin Core 29.x.** The bug does not exist there, the
-backup works, and `--no-backup` is dropped entirely. Patching ord means building from
-source; waiting for Core 30.3 means waiting; keeping `--no-backup` with a high fee rate
-lowers the odds but leaves the failure mode intact.
+**Fix for the mainnet run: upgrade Bitcoin Core to 31.x** (30.3 is still broken — the
+fix landed in 31.0, released 2026-04-20). A forward upgrade, which Core supports; no
+downgrade needed, and ord 0.27.1 imposes no maximum Core version. Then drop
+`--no-backup` entirely and let the recovery key be backed up as designed.
+
+Rehearse it on regtest before mainnet: inscribe once *without* `--no-backup` and confirm
+it succeeds. ord 0.27.1 against Core 31 is otherwise untested here.
+
+Keeping `--no-backup` with a high fee rate lowers the odds but leaves the failure mode
+intact, and patching ord means building from source.
 
 ## What actually reaches the chain
 

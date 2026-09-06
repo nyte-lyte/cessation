@@ -124,13 +124,15 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
-- **Downgrade Bitcoin Core to 29.x before the mainnet run. Blocking.** Core 30.0–30.2
+- **Upgrade Bitcoin Core to 31.x before the mainnet run. Blocking.** Core 30.0–30.3
   carries a regression that breaks ord's recovery-key backup, which is why every regtest
   inscription this project has run used `--no-backup`. That flag skips importing the
   ephemeral key controlling the commit output — and the sat being inscribed sits at that
   address until the reveal confirms. Carrying the flag to mainnet risks losing the
-  Nakamoto sat or an Omega uncommon permanently. Full diagnosis, including the Core
-  source and the reproduction, in [testing.md](testing.md) → "`--no-backup`".
+  Nakamoto sat or an Omega uncommon permanently. Fixed in Core 31.0, so this is a normal
+  forward upgrade, not a downgrade; ord 0.27.1 sets no maximum Core version. Rehearse on
+  regtest without the flag first. Full diagnosis in [testing.md](testing.md) →
+  "`--no-backup`".
 
 - **Tail convergence — UNDECIDED.** `getAgedDataset` clamps drift at the end of the
   timeline (`maxSpan`), so when the collection stops growing the final ~20% of pieces
