@@ -217,8 +217,10 @@ Every bug that has shipped so far lived in one of these three gaps. See
    Check the Core version before the run: `bitcoin-cli -version`. If it is **30.0–30.3**,
    **upgrade to 31.x** — the fix shipped in Core 31.0. ord 0.27.1 sets only a *minimum*
    Core version (28.0, `MIN_VERSION = 280000` in `src/wallet.rs`) and no maximum, so 31.x
-   is acceptable to it. Rehearse the upgrade on regtest first: inscribe once *without*
-   `--no-backup` and confirm it succeeds.
+   is acceptable to it. **Verified on regtest against Core 31.1 (2026-09-06):** inscribe
+   without the flag succeeds and the recovery key is actually imported. Note the machine
+   still has brew `bitcoin 30.2` installed — `brew upgrade bitcoin` (or point `PATH` at a
+   31.x build) before the mainnet run, and confirm with `bitcoind -version`.
 
 ## `--no-backup` — what it actually does, and why regtest needs it
 
@@ -278,16 +280,33 @@ active:false internal:false  no label     OK
 active:false  +label (internal omitted)   OK
 ```
 
-**Fix for the mainnet run: upgrade Bitcoin Core to 31.x** (30.3 is still broken — the
-fix landed in 31.0, released 2026-04-20). A forward upgrade, which Core supports; no
-downgrade needed, and ord 0.27.1 imposes no maximum Core version. Then drop
-`--no-backup` entirely and let the recovery key be backed up as designed.
+**Fix: upgrade Bitcoin Core to 31.x — VERIFIED ON REGTEST 2026-09-06.** (30.3 is still
+broken; the fix landed in 31.0.) A forward upgrade, which Core supports; no downgrade,
+and ord 0.27.1 imposes no maximum Core version (`MIN_VERSION = 280000`, no ceiling).
 
-Rehearse it on regtest before mainnet: inscribe once *without* `--no-backup` and confirm
-it succeeds. ord 0.27.1 against Core 31 is otherwise untested here.
+Tested by running the regtest env against a standalone Core 31.1 (checksum-verified
+against the published `SHA256SUMS`, brew's 30.2 left untouched — put the 31.1 `bin/`
+first on `PATH` and `ord env` picks it up). Results:
+
+- `ord wallet inscribe` **without** `--no-backup` succeeded — no "recovery key import
+  failed".
+- The wallet gained the label `commit tx recovery key` and a `rawtr(...)` descriptor
+  (`active=false`), which is the backup actually landing.
+- The decisive check, comparing the same field on both kinds of inscription:
+
+  | | `--no-backup` (Core 30.2) | backup enabled (Core 31.1) |
+  |---|---|---|
+  | `ismine` | **False** | **True** |
+  | `solvable` | False | True |
+  | `labels` | `[]` | `['commit tx recovery key']` |
+
+  `ismine=True` is the whole point: if the reveal fails, the wallet can spend the commit
+  output and recover the sat. Under `--no-backup` it cannot.
+- Rest of the pipeline healthy on 31.1: ord indexed the new inscription, all 30 engine
+  children still resolve, `ord wallet balance` fine.
 
 Keeping `--no-backup` with a high fee rate lowers the odds but leaves the failure mode
-intact, and patching ord means building from source.
+intact, and patching ord means building from source. Neither is needed now.
 
 ## What actually reaches the chain
 

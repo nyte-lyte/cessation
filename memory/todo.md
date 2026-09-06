@@ -130,9 +130,12 @@ Consequences accepted deliberately:
   ephemeral key controlling the commit output — and the sat being inscribed sits at that
   address until the reveal confirms. Carrying the flag to mainnet risks losing the
   Nakamoto sat or an Omega uncommon permanently. Fixed in Core 31.0, so this is a normal
-  forward upgrade, not a downgrade; ord 0.27.1 sets no maximum Core version. Rehearse on
-  regtest without the flag first. Full diagnosis in [testing.md](testing.md) →
-  "`--no-backup`".
+  forward upgrade, not a downgrade; ord 0.27.1 sets no maximum Core version.
+  **Verified on regtest against Core 31.1 (2026-09-06)** — inscribing without the flag
+  succeeds, and the commit output comes back `ismine=True` / `solvable=True` labelled
+  `commit tx recovery key`, where a `--no-backup` inscription gives `ismine=False`.
+  Remaining action is only to upgrade the machine's own Core (still brew `30.2`) before
+  inscribing. Full diagnosis in [testing.md](testing.md) → "`--no-backup`".
 
 - **Tail convergence — UNDECIDED.** `getAgedDataset` clamps drift at the end of the
   timeline (`maxSpan`), so when the collection stops growing the final ~20% of pieces
