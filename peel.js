@@ -315,9 +315,15 @@ function cmdRoundC(broadcast) {
   if (!s || !s.pendingTails) { console.error('No round B pending. Run: node peel.js roundb'); process.exit(1); }
   const { txid: txB, tails, chunksNext } = s.pendingTails;
 
-  // B is confirmed by now — verify nothing was lost before building on it
-  assertNoLoss('round B', [...tails, ...chunksNext].map(o => `${txB}:${o.vout}`),
-               s.lo, s.hi, s.rare - s.carriersMade.length);
+  // B is confirmed by now — verify nothing was lost before building on it.
+  // The reserve (chunks deliberately held back, e.g. when K was reduced) must be
+  // counted too: its sats are still part of the range, just not being peeled.
+  // Including it also means every round re-verifies the reserve is intact.
+  const reserveOps = (s.reserve || []).map(o => `${o.txid}:${o.vout}`);
+  const carrierOps = s.carriersMade.map(o => `${o.txid}:${o.vout}`);
+  assertNoLoss('round B',
+    [...tails, ...chunksNext].map(o => `${txB}:${o.vout}`).concat(reserveOps, carrierOps),
+    s.lo, s.hi, s.rare);
   for (const t of tails) {
     const r = rareIn(`${txB}:${t.vout}`, s.lo, s.hi);
     if (r.count !== 1) { console.error(`STOP — tail ${t.vout} holds ${r.count} rare sats, expected 1.`); process.exit(1); }
