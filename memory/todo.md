@@ -124,6 +124,33 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
+- **Move the node off `rpcuser`/`rpcpassword` to cookie auth. Do it when the index is
+  caught up and the node is being stopped anyway — NOT mid-index.**
+  The mainnet node's RPC credentials are `bitcoin` / `bitcoin` and they are in the public
+  repo in three places, on `main`:
+  - `ord2.sh:2` — since `10a8764` (2026-06-06)
+  - `memory/wallets.md:59` — since `93b6662` (2026-08-13)
+  - `memory/inscribe.md:17` — added 2026-09-06 (duplicated what was already public)
+
+  **Not urgent, and no funds are at risk from this alone.** Verified 2026-09-06: the node
+  listens on `127.0.0.1:8332` and `[::1]:8332` only, with no `rpcbind` or `rpcallowip` in
+  `bitcoin.conf`. RPC is unreachable from outside the machine. Anyone who could use these
+  credentials already has code execution locally, and could read the wallet files directly.
+  It is hygiene, not an open door.
+
+  When the moment comes:
+  1. Delete `rpcuser=` and `rpcpassword=` from `/Volumes/Bitcoin/Bitcoin/bitcoin.conf`.
+     Core generates `.cookie` automatically — this is what Core 31's own startup warning
+     recommends ("switch to cookie-based auth, or otherwise to use hashed rpcauth").
+  2. Drop `--bitcoin-rpc-username` / `--bitcoin-rpc-password` from `ord2.sh`; ord reads the
+     cookie from the bitcoin data dir.
+  3. Remove the credential from the three doc lines above.
+
+  **Do not rewrite git history to erase them.** The repo is public and already cloned and
+  mirrored; the old values are out regardless. Changing the credential is what helps —
+  erasing the record of it does not, and it would break every commit SHA referenced in
+  `tracker.md` and `todo.md`.
+
 - **Sat consumption / padding — RESOLVED on regtest 2026-09-06, but it changes the plan.**
   Rare sats were destroyed in three of four configurations tested. Full detail and the
   traces in [testing.md](testing.md).
