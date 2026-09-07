@@ -426,10 +426,68 @@ expensive mistake this project has made and it cannot be undone.
 
 ---
 
+## 8b. WHERE THE MAINNET RUN ACTUALLY IS — 2026-09-07
+
+**The peel has started.** State lives in `peel_state.json` (gitignored) — that file is the
+resume point; do not delete it.
+
+```
+range      12425429610010 .. 12425429610916   (907 sats, contiguous, verified on chain)
+source     b9c74659198160579a1b6616f2ca6f435a8e168d73d02bd19da64b2871521150:0
+plan       246 carriers, K=2, 123 rounds, chunk size 453
+split tx   3779b85871adb678c4e0688364062b0d754a62abdd80fc1de5d7f72e67efed3c
+           chunks: vout0 = 453 sats, vout1 = 454 sats
+feeRate    2 sat/vB
+running    the first 15 rounds only (30 carriers) — then it stops
+```
+
+**Run it with:**
+```
+export PEEL_NETWORK=mainnet PEEL_DATADIR=/Volumes/Bitcoin/Bitcoin \
+       PEEL_WALLET=ord-cold PEEL_ORD_URL=http://127.0.0.1:8080
+node peel.js roundb --broadcast   # wait for confirmation AND ord indexing
+node peel.js roundc --broadcast   # wait again
+node peel.js collect              # verifies and locks
+```
+
+### What was settled getting here
+
+- **Carriers stay in `ord-cold`.** Every output goes to a cold address and is locked
+  persistently as it is made. Only the single carrier being inscribed moves to `ord`.
+- **A locked UTXO can still be signed** when passed explicitly — the lock only blocks
+  *automatic* coin selection. Verified. So the Nakamoto UTXO stays locked throughout;
+  nothing ever needs unlocking.
+- **Oldest-first is preserved.** `peel.js status` sorts ascending, so piece 0 gets
+  `12425429610010`. With K=2 the 246 carriers form two runs of 123 with a 331-sat gap
+  (the chunk-0 remainder at the dust floor), so ascending but not unbroken.
+- **The split was RBF-bumped** from 1 to 2 sat/vB when fees rose. `bumpfee` pulled in an
+  extra input and produced 4 outputs instead of 3 — **the chunk outputs were re-verified
+  intact** (453 @ vout0, 454 @ vout1) and the Nakamoto UTXO is still `input[0]`, so the
+  sat ordering and the fee source are unchanged. The original txid `bef636ea…` is dead.
+
+### THE BUDGET CONSTRAINT — the full peel only fits at 1 sat/vB
+
+`ord-cold` holds ~198,000 sats. Total cost of all 246 carriers:
+
+| rate | fees (123 rounds) | + padding | total | fits? |
+|---|---|---|---|---|
+| **1/vB** | 112,299 | 80,934 | **193,233** | yes, 4,600 margin |
+| 2/vB | 224,598 | 80,934 | 305,532 | **no** |
+| 3/vB | 336,897 | 80,934 | 417,831 | **no** |
+
+The first 15 rounds are affordable at any of these (37,260 sats at 2/vB). **Rounds 16–123
+need either 1 sat/vB or more funding.** They are not urgent — those carriers are not
+needed until new health data arrives, years out — so waiting for a quiet fee period costs
+nothing. Do not start them on a whim at 2+ sat/vB.
+
 ## 9. Still open
 
 - **The sat plan — DECIDED 2026-09-06:** the 6 spare Omegas do **not** carry pieces for
   now; **246** Nakamoto sats get peeled out of the 907 (the maximum; 247 is one sat short because both chunks peel together) into single-sat carriers (§5b).
   Still to design: the *batched* peel procedure, and its cost at a real fee rate.
-- **`PIECE_CARRIERS` is empty** and correctly so until a real split exists.
+- **`PIECE_CARRIERS` is still empty** — fill it from `peel.js status` once the first 15
+  rounds finish. It prints entries oldest-first, ready to paste.
 - **Batch vs one-at-a-time** — §6.
+- **Rounds 16–123 of the peel**, waiting on 1 sat/vB (§8b).
+- **An index backup.** The index is current as of 2026-09-07 after a 13.5-hour catch-up;
+  the only copies are from 2024. Deprioritised by the creator, recorded as a known risk.
