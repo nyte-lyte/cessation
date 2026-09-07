@@ -388,8 +388,21 @@ function cmdStatus() {
   console.log(`  rounds     : ${s.roundsDone} / ${s.roundsNeeded}`);
   console.log(`  carriers   : ${s.carriersMade.length} / ${s.carriers}`);
   if (s.carriersMade.length) {
-    console.log('\n  PIECE_CARRIERS entries for inscribe.js:');
-    s.carriersMade.forEach((c) => console.log(`    { sat: ${c.sat}, run: 1 },   // ${c.txid}:${c.vout}`));
+    // SORTED ASCENDING — oldest sat first, which is the assignment plan: piece N
+    // takes the Nth oldest Nakamoto sat. Carriers are *created* in a different
+    // order: with K chunks each round peels one sat from every chunk, so creation
+    // order alternates between chunks (+0, +453, +1, +454 …). Pasting that order
+    // in would give piece 0 the oldest sat and piece 1 the 454th.
+    const sorted = [...s.carriersMade].sort((a, b) => a.sat - b.sat);
+    console.log('\n  PIECE_CARRIERS entries for inscribe.js (oldest sat first):');
+    sorted.forEach((c) => console.log(`    { sat: ${c.sat}, run: 1 },   // ${c.txid}:${c.vout}`));
+    const runs = [];
+    for (const c of sorted) {
+      const last = runs[runs.length - 1];
+      if (last && c.sat === last[1] + 1) last[1] = c.sat; else runs.push([c.sat, c.sat]);
+    }
+    console.log(`\n  ${sorted.length} carriers in ${runs.length} contiguous run(s) — one per chunk:`);
+    runs.forEach(([a, b]) => console.log(`    ${a} .. ${b}  (${b - a + 1} sats)`));
   }
 }
 
