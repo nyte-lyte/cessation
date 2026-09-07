@@ -16,7 +16,7 @@ experiments behind these rules, [todo.md](todo.md) for what is still undecided.
 | Node datadir | `/Volumes/Bitcoin/Bitcoin` — external volume, **must be mounted** |
 | Node config | `txindex=1`, `server=1`, `rpcuser=bitcoin`, `rpcpassword=bitcoin`, an `assumevalid` |
 | Bitcoin Core | **31.1** (upgraded 2026-09-06 — see §3) |
-| ord | 0.27.1, data dir `/Volumes/Bitcoin/Ord` (`index.redb`, ~176 GB + `.old` backups) |
+| ord | 0.27.1, data dir `/Volumes/Bitcoin/Ord` (`index.redb` ~164 GiB + three 2024 `.old` copies) |
 | ord wrapper | `ord2.sh` — mainnet RPC + that data dir + `--index-sats` |
 | Hot wallet | `ord` — the inscribing wallet, fee sats + carriers |
 | Cold wallet | `ord-cold` — the rare sats, moved to `ord` one at a time |
@@ -27,6 +27,26 @@ bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin loadwallet ord
 bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin loadwallet ord-cold
 bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin stop
 ```
+
+### The ord index is a month of work — protect it
+
+**A full `--index-sats` rebuild from genesis took over a month** (creator's own experience).
+ord has **no compaction command** — `ord index` offers only `export`, `info`, `update` —
+so the only way to reclaim the 90 GB of fragmentation (51% of the file) is to delete
+`index.redb` and re-index from scratch. **Do not.** The space is not worth a month, and
+489 GB is free on the volume anyway. Earlier notes framing a rebuild as merely "not
+urgent" understated this badly.
+
+Practical consequences:
+- **Never delete or move `index.redb`.**
+- ord commits every **5,000 blocks** by default (`--commit-interval`). Catching up less
+  than that reports no height change at all until it finishes and commits once — the file's
+  mtime advancing is the only live progress signal. Killing ord mid-catch-up discards the
+  uncommitted work and restarts from the last commit.
+- The three `index.redb.*.old` copies date from Sep/Oct 2024, ~80 GB each. Stale by
+  months, but restoring one and catching up beats starting from genesis. **A current
+  backup, taken once the index is caught up and ord is stopped, is worth far more than
+  the three 2024 ones** — and would let those be deleted, reclaiming 242 GB.
 
 **There is a second, decoy datadir** at `~/Library/Application Support/Bitcoin`. It is a
 **pruned** node with an empty `ord` wallet, and it is not the inscribing node. Checking it
