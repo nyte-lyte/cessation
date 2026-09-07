@@ -318,7 +318,7 @@ the rare run itself. `peel.js` now refuses a too-large K and explains why.
 39,480 of permanent carrier padding. Raising K would need a bigger Nakamoto range, not a
 cleverer transaction.
 
-Padding alone is 120 x 329 = **39,480 common sats**, plus fees across every transaction.
+Padding alone is 246 carriers x 329 = **80,934 common sats**, plus fees across every transaction.
 Model the total at the intended fee rate before starting; this is the expensive step.
 
 ---
@@ -352,6 +352,32 @@ block, which conflicts with §3.5 — resolve that before choosing.
 
 ---
 
+## 6b. What it costs — MEASURED on regtest 2026-09-06
+
+Measured by actually inscribing, not estimated. vsize is network-independent, so these
+scale linearly with whatever fee rate is current.
+
+| | vsize | at 1 sat/vB |
+|---|---|---|
+| **Engine** (`index_bundle.js`, 100,173 bytes) | 25,478 vB | 25,478 sats |
+| **One piece** (277-byte HTML + 581-byte CBOR, with `--parent`) | 608 vB | 608 sats |
+
+Engine breakdown: commit 154 vB, reveal 25,324 vB. Piece: commit 212 vB, reveal 396 vB.
+
+**The engine is 58% of a 30-piece re-mint on its own** — one engine costs as much as 41
+pieces. It is the single item worth checking the fee rate for.
+
+| rate | engine | 30 pieces | re-mint total |
+|---|---|---|---|
+| 1/vB | 25,478 | 18,240 | **43,718 sats** |
+| 5/vB | 127,390 | 91,200 | 218,590 |
+| 10/vB | 254,780 | 182,400 | 437,180 |
+| 50/vB | 1,273,900 | 912,000 | 2,185,900 |
+
+Add the peel if the Nakamoto range is being prepared: **193,488 sats** at 1 sat/vB for 246
+carriers (`peel.js plan --carriers 246 --chunks 2`), of which 80,934 is carrier padding
+that does not scale with the fee rate.
+
 ## 7. The metadata gate — blocking, nothing is broadcast until it passes
 
 A real name reached Bitcoin permanently on the second inscription. It is the most
@@ -383,7 +409,7 @@ expensive mistake this project has made and it cannot be undone.
 ## 9. Still open
 
 - **The sat plan — DECIDED 2026-09-06:** the 6 spare Omegas do **not** carry pieces for
-  now; ~120 Nakamoto sats get peeled out of the 907 into single-sat carriers (§5b).
+  now; **246** Nakamoto sats get peeled out of the 907 (the maximum; 247 is one sat short because both chunks peel together) into single-sat carriers (§5b).
   Still to design: the *batched* peel procedure, and its cost at a real fee rate.
 - **`PIECE_CARRIERS` is empty** and correctly so until a real split exists.
 - **Batch vs one-at-a-time** — §6.
