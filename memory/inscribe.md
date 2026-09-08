@@ -426,59 +426,70 @@ expensive mistake this project has made and it cannot be undone.
 
 ---
 
-## 8b. WHERE THE MAINNET RUN ACTUALLY IS — 2026-09-07
+## 8b. WHERE THE MAINNET RUN ACTUALLY IS — updated 2026-09-08
 
-**The peel has started.** State lives in `peel_state.json` (gitignored) — that file is the
-resume point; do not delete it.
+**30 carriers made and verified. Batch two (30 → 60) running.**
+State lives in `peel_state.json` (gitignored) — that file is the resume point; do not
+delete it. The driver script lives at `/tmp/rounds3.sh` (`TARGET=` sets the batch end).
 
 ```
-range      12425429610010 .. 12425429610916   (907 sats, contiguous, verified on chain)
+range      12425429610010 .. 12425429610916   (907 sats)
 source     b9c74659198160579a1b6616f2ca6f435a8e168d73d02bd19da64b2871521150:0
-plan       246 carriers, K=2, 123 rounds, chunk size 453
 split tx   3779b85871adb678c4e0688364062b0d754a62abdd80fc1de5d7f72e67efed3c
-           chunks: vout0 = 453 sats, vout1 = 454 sats
-feeRate    2 sat/vB
-running    the first 15 rounds only (30 carriers) — then it stops
+K          1        (ONE carrier per round — chosen for consecutive ordering)
+feeRate    1 sat/vB
+
+carriers   30, all verified: 330 sats, 1 Nakamoto sat at offset 0, persistently locked
+             12425429610010 .. 12425429610036   (27 consecutive)
+             12425429610463 .. 12425429610465   (3, made before the K=1 switch)
+chunk A    8ff73420…:1   426 sats, holds 610037..610462  <- being peeled
+reserve    729c98e0…:3   451 sats, holds 610466..610916  <- held back
+ord-cold   ~180,900 sats spendable
+accounting carriers 30 + chunkA 426 + reserve 451 = 907 / 907, nothing lost
 ```
 
-**Run it with:**
-```
-export PEEL_NETWORK=mainnet PEEL_DATADIR=/Volumes/Bitcoin/Bitcoin \
-       PEEL_WALLET=ord-cold PEEL_ORD_URL=http://127.0.0.1:8080
-node peel.js roundb --broadcast   # wait for confirmation AND ord indexing
-node peel.js roundc --broadcast   # wait again
-node peel.js collect              # verifies and locks
-```
+**Run a batch:** edit `TARGET=` in `/tmp/rounds3.sh`, then `nohup bash /tmp/rounds3.sh &`.
+It counts actual carriers (not rounds), is resume-aware (finishes a pending round B or C
+first), and halts on any accounting mismatch.
 
-### What was settled getting here
+### Why K=1 — decided 2026-09-07
 
-- **Carriers stay in `ord-cold`.** Every output goes to a cold address and is locked
-  persistently as it is made. Only the single carrier being inscribed moves to `ord`.
-- **A locked UTXO can still be signed** when passed explicitly — the lock only blocks
-  *automatic* coin selection. Verified. So the Nakamoto UTXO stays locked throughout;
-  nothing ever needs unlocking.
-- **Oldest-first is preserved.** `peel.js status` sorts ascending, so piece 0 gets
-  `12425429610010`. With K=2 the 246 carriers form two runs of 123 with a 331-sat gap
-  (the chunk-0 remainder at the dust floor), so ascending but not unbroken.
-- **The split was RBF-bumped** from 1 to 2 sat/vB when fees rose. `bumpfee` pulled in an
-  extra input and produced 4 outputs instead of 3 — **the chunk outputs were re-verified
-  intact** (453 @ vout0, 454 @ vout1) and the Nakamoto UTXO is still `input[0]`, so the
-  sat ordering and the fee source are unchanged. The original txid `bef636ea…` is dead.
+K is not just a cost knob: **it determines whether the sats come out consecutive.** With
+K=2 each round peels one sat from *each* chunk, so carriers alternate (+0, +453, +1, +454)
+and the collection ends up as two runs. K=1 peels one chunk strictly in order.
 
-### THE BUDGET CONSTRAINT — the full peel only fits at 1 sat/vB
+The price is **2 transactions per carrier instead of 1** — roughly double the fees. The
+creator chose K=1 deliberately: the collection is to be inscribed in consecutive order.
+**This should have been surfaced before K=2 was started; it was presented as a pure cost
+optimisation.** Three carriers off chunk B exist because of that (`…610463–610465`) — not
+wasted, they sit exactly where chunk A's run will eventually reach.
 
-`ord-cold` holds ~198,000 sats. Total cost of all 246 carriers:
+### The consecutive run can be gapless
 
-| rate | fees (123 rounds) | + padding | total | fits? |
-|---|---|---|---|---|
-| **1/vB** | 112,299 | 80,934 | **193,233** | yes, 4,600 margin |
-| 2/vB | 224,598 | 80,934 | 305,532 | **no** |
-| 3/vB | 336,897 | 80,934 | 417,831 | **no** |
+Chunk A stops at the 330-sat dust floor with `…610133–610462` still inside — normally
+stranded. **It can be topped up with common sats and peeled further**, because padding
+added *after* the rare run does not disturb ordering. With top-ups the run continues to
+`…610462`, meets the three chunk-B strays at `…610463`, and carries on into chunk B. A
+fully gapless collection is achievable. Untested — the top-up has not been done yet.
 
-The first 15 rounds are affordable at any of these (37,260 sats at 2/vB). **Rounds 16–123
-need either 1 sat/vB or more funding.** They are not urgent — those carriers are not
-needed until new health data arrives, years out — so waiting for a quiet fee period costs
-nothing. Do not start them on a whim at 2+ sat/vB.
+### Budget
+
+At ~840 sats per carrier (2 × 255 fees + 329 padding), measured:
+
+| target | more needed | approx cost |
+|---|---|---|
+| 60 | 30 | ~25,000 |
+| 123 (chunk A's floor) | 93 | ~78,000 |
+| 246 (everything, needs top-ups) | 216 | ~181,000 |
+
+~180,900 available. **246 at K=1 is roughly break-even and leaves nothing for the
+re-mint** (43,718). Fund more, or stop around 123 and leave chunk B for later.
+
+### Confirmations at 1 sat/vB — measured, not estimated
+
+Median **6 minutes**, range 3–34, across eight consecutive carrier transactions. Core's
+`estimatesmartfee` said 2.12 sat/vB for next block and mempool.space showed higher still,
+but 1 sat/vB is confirming promptly. **Measure actual waits before raising the bid.**
 
 ## 9. Still open
 
