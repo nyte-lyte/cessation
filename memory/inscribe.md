@@ -485,11 +485,41 @@ At ~840 sats per carrier (2 × 255 fees + 329 padding), measured:
 ~180,900 available. **246 at K=1 is roughly break-even and leaves nothing for the
 re-mint** (43,718). Fund more, or stop around 123 and leave chunk B for later.
 
-### Confirmations at 1 sat/vB — measured, not estimated
+### Do not use `estimatesmartfee` to decide the bid — measure the backlog instead
 
-Median **6 minutes**, range 3–34, across eight consecutive carrier transactions. Core's
-`estimatesmartfee` said 2.12 sat/vB for next block and mempool.space showed higher still,
-but 1 sat/vB is confirming promptly. **Measure actual waits before raising the bid.**
+`estimatesmartfee` is a **conservative historical estimator** and it lags real conditions
+badly. It misled this run twice on 2026-09-07/08, both times toward overpaying:
+
+| moment | `estimatesmartfee` 1 blk | reality |
+|---|---|---|
+| deciding the peel rate | 2.12 sat/vB | 1 sat/vB confirming in a median of **6 min** |
+| after a genuine spike drained | 3.0 sat/vB | only **0.16 MvB** outbid 1 sat/vB — under a fifth of one block |
+
+**The number that decides whether a transaction confirms is how much of the mempool
+outbids it**, not what the estimator predicts:
+
+```
+bitcoin-cli getrawmempool true | python3 -c "
+import sys,json
+m=json.load(sys.stdin); above=tot=0
+for t,d in m.items():
+    vs=d['vsize']; tot+=vs
+    if d['fees']['base']*1e8/vs > RATE: above+=vs
+print(f'above RATE: {above/1e6:.2f} MvB of {tot/1e6:.2f} MvB -> ~{above/1e6:.1f} blocks ahead')"
+```
+
+A block is roughly 1 MvB. If less than ~1 MvB outbids your rate, you are in the next
+block or two. **mempool.space shows this directly and was right both times the estimator
+was wrong** — the creator read it correctly on both occasions while I was quoting the RPC.
+
+Also measured, and the reason not to panic-bump: at 1 sat/vB the carrier transactions
+confirmed in a **median of 6 minutes** (range 3–34) across eight consecutive rounds. One
+transaction did stall 4 hours during a real spike (next-block hit 4.18 sat/vB) — it
+confirmed on its own once the spike drained, with no bump and nothing wasted. The driver's
+4-hour timeout is there to stop the run in that case, not to trigger a fee increase.
+
+**Rule: before raising a bid, check the backlog above your rate and the actual confirmation
+times of recent transactions. Do not raise it because the estimator says so.**
 
 ## 9. Still open
 
