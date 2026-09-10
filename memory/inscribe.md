@@ -426,31 +426,37 @@ expensive mistake this project has made and it cannot be undone.
 
 ---
 
-## 8b. WHERE THE MAINNET RUN ACTUALLY IS — updated 2026-09-08
+## 8b. WHERE THE MAINNET RUN ACTUALLY IS — updated 2026-09-10
 
-**30 carriers made and verified. Batch two (30 → 60) running.**
-State lives in `peel_state.json` (gitignored) — that file is the resume point; do not
-delete it. The driver script lives at `/tmp/rounds3.sh` (`TARGET=` sets the batch end).
+**80 carriers made and verified.** Batches chained: → 90, then → 123.
+State lives in `peel_state.json` (gitignored) — the resume point; do not delete it.
+Driver: `/tmp/rounds3.sh`, `TARGET=` sets the batch end.
 
 ```
 range      12425429610010 .. 12425429610916   (907 sats)
-source     b9c74659198160579a1b6616f2ca6f435a8e168d73d02bd19da64b2871521150:0
 split tx   3779b85871adb678c4e0688364062b0d754a62abdd80fc1de5d7f72e67efed3c
-K          1        (ONE carrier per round — chosen for consecutive ordering)
+K          1        (one carrier per round — chosen for consecutive ordering)
 feeRate    1 sat/vB
 
-carriers   30, all verified: 330 sats, 1 Nakamoto sat at offset 0, persistently locked
-             12425429610010 .. 12425429610036   (27 consecutive)
+carriers   80, all verified: 330 sats, 1 Nakamoto sat at offset 0, persistently locked
+             12425429610010 .. 12425429610086   (77 CONSECUTIVE)
              12425429610463 .. 12425429610465   (3, made before the K=1 switch)
-chunk A    8ff73420…:1   426 sats, holds 610037..610462  <- being peeled
-reserve    729c98e0…:3   451 sats, holds 610466..610916  <- held back
-ord-cold   ~180,900 sats spendable
-accounting carriers 30 + chunkA 426 + reserve 451 = 907 / 907, nothing lost
+chunk A    d74e06a4…:1   376 sats, holds 610087..610462   <- being peeled
+reserve    729c98e0…:3   451 sats, holds 610466..610916   <- held back
+ord-cold   ~152,500 sats spendable
+accounting carriers 80 + chunkA 376 + reserve 451 = 907 / 907, nothing lost
 ```
 
 **Run a batch:** edit `TARGET=` in `/tmp/rounds3.sh`, then `nohup bash /tmp/rounds3.sh &`.
-It counts actual carriers (not rounds), is resume-aware (finishes a pending round B or C
-first), and halts on any accounting mismatch.
+Counts actual carriers (not rounds), resume-aware (finishes a pending round B or C first),
+halts on any accounting mismatch, and times out after 4h on a stuck transaction.
+
+**123 is chunk A's natural limit** — it stops at the 330-sat dust floor with
+`…610133–610462` still inside. Going past that needs the common-sat top-up (§5b), which is
+proven in principle but **has never actually been run**. So 123 is the real milestone.
+
+**Cost so far: ~46,000 sats for 80 carriers** (~575 each, better than the ~950 projected —
+most transactions cleared at the 255-sat floor). Remaining budget covers roughly 160 more.
 
 ### Why K=1 — decided 2026-09-07
 
