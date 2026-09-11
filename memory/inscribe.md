@@ -426,37 +426,59 @@ expensive mistake this project has made and it cannot be undone.
 
 ---
 
-## 8b. WHERE THE MAINNET RUN ACTUALLY IS — updated 2026-09-10
+## 8b. WHERE THE MAINNET RUN ACTUALLY IS — updated 2026-09-11
 
-**80 carriers made and verified.** Batches chained: → 90, then → 123.
-State lives in `peel_state.json` (gitignored) — the resume point; do not delete it.
+**123 carriers made and verified. A top-up is in flight, then 30 more → 153, then stop.**
+State: `peel_state.json` (gitignored) — the resume point, do not delete.
 Driver: `/tmp/rounds3.sh`, `TARGET=` sets the batch end.
 
 ```
 range      12425429610010 .. 12425429610916   (907 sats)
 split tx   3779b85871adb678c4e0688364062b0d754a62abdd80fc1de5d7f72e67efed3c
-K          1        (one carrier per round — chosen for consecutive ordering)
-feeRate    1 sat/vB
+K          1,  feeRate 1 sat/vB
 
-carriers   80, all verified: 330 sats, 1 Nakamoto sat at offset 0, persistently locked
-             12425429610010 .. 12425429610086   (77 CONSECUTIVE)
-             12425429610463 .. 12425429610465   (3, made before the K=1 switch)
-chunk A    d74e06a4…:1   376 sats, holds 610087..610462   <- being peeled
-reserve    729c98e0…:3   451 sats, holds 610466..610916   <- held back
-ord-cold   ~152,500 sats spendable
-accounting carriers 80 + chunkA 376 + reserve 451 = 907 / 907, nothing lost
+carriers   123, all verified: 330 sats, 1 Nakamoto sat at offset 0, persistently locked
+             12425429610010 .. 12425429610129   (120 CONSECUTIVE)
+             12425429610463 .. 12425429610465   (3, pre-K=1)
+chunk A    333 sats, holds 610130..610462   — AT the 330 dust floor, only 3 free
+reserve    451 sats, holds 610466..610916   — chunk B, untouched
+ord-cold   ~128,000 sats
+accounting 123 + 333 + 451 = 907 / 907, nothing lost across ~250 transactions
 ```
 
-**Run a batch:** edit `TARGET=` in `/tmp/rounds3.sh`, then `nohup bash /tmp/rounds3.sh &`.
-Counts actual carriers (not rounds), resume-aware (finishes a pending round B or C first),
-halts on any accounting mismatch, and times out after 4h on a stuck transaction.
+**Cost: ~70,000 sats for 123 carriers** — about 570 each, well under the ~950 projected,
+because most transactions cleared at the 255-sat floor.
 
-**123 is chunk A's natural limit** — it stops at the 330-sat dust floor with
-`…610133–610462` still inside. Going past that needs the common-sat top-up (§5b), which is
-proven in principle but **has never actually been run**. So 123 is the real milestone.
+### The dust floor is the real limit, and the top-up is how past it
 
-**Cost so far: ~46,000 sats for 80 carriers** (~575 each, better than the ~950 projected —
-most transactions cleared at the 255-sat floor). Remaining budget covers roughly 160 more.
+A chunk yields only `size − 330` carriers; the last 330 Nakamoto sats are **stranded**.
+Chunk A hit that at 333 sats with `610130..610462` still inside.
+
+**The top-up (first run 2026-09-11, tx `d4d2ee96bbc1590f52c7663ad89181e635fcfcba2b9a07d8684a0ca2e946aeb5`):**
+
+```
+inputs   [chunk A]  <- input[0], so its Nakamoto sats lead the sat stream
+         [a commons UTXO]
+outputs  [chunk A + padding]   = all the Nakamoto + N common sats behind them
+         [change]
+fee      off the commons tail — never touches a Nakamoto sat
+```
+
+333 + 120 padding = 453 sats, which can then peel 123 more. Cost: 120 padding + 300 fee.
+Same sat-flow rule as the split; only the direction differs (growing a chunk rather than
+dividing one). **Verify before peeling from a topped-up chunk:** assert it holds the
+expected Nakamoto count AND that its *first* sat is one of them. The chained script does
+this and aborts rather than peeling from a malformed chunk.
+
+### What is left after 153
+
+```
+chunk A  ~303 Nakamoto still inside, needs another top-up to extract
+reserve   451 Nakamoto in chunk B, never touched — needs its own split/peel
+```
+
+So even at 153 carriers, **754 of the 907 sats are still locked in chunks.** Getting them
+out is more top-ups, not new theory. Not needed for decades.
 
 ### Why K=1 — decided 2026-09-07
 
