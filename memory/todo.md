@@ -124,6 +124,12 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
+- **NOT INSCRIBING YET — more regtest first (creator, 2026-09-12).** The rare sats are
+  peeled and ready (153 carriers, 150 consecutive, `PIECE_CARRIERS` filled), but the
+  engine and inscribe path need more verification before anything goes on chain. There is
+  no time pressure: the carriers sit locked in `ord-cold` indefinitely. See
+  [inscribe.md](inscribe.md) §8b.
+
 - **Move the node off `rpcuser`/`rpcpassword` to cookie auth. Do it when the index is
   caught up and the node is being stopped anyway — NOT mid-index.**
   The mainnet node's RPC credentials are `bitcoin` / `bitcoin` and they are in the public

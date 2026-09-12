@@ -434,59 +434,70 @@ expensive mistake this project has made and it cannot be undone.
 
 ---
 
-## 8b. WHERE THE MAINNET RUN ACTUALLY IS — updated 2026-09-11
+## 8b. WHERE THINGS STAND — 2026-09-12
 
-**123 carriers made and verified. A top-up is in flight, then 30 more → 153, then stop.**
-State: `peel_state.json` (gitignored) — the resume point, do not delete.
-Driver: `/tmp/rounds3.sh`, `TARGET=` sets the batch end.
+**The sats are done. The code is not yet trusted. NOTHING IS BEING INSCRIBED.**
+Decision (creator, 2026-09-12): more regtest work first, to be sure the code is right.
+The carriers are peeled and waiting — there is no time pressure on them.
 
-```
-range      12425429610010 .. 12425429610916   (907 sats)
-split tx   3779b85871adb678c4e0688364062b0d754a62abdd80fc1de5d7f72e67efed3c
-K          1,  feeRate 1 sat/vB
-
-carriers   123, all verified: 330 sats, 1 Nakamoto sat at offset 0, persistently locked
-             12425429610010 .. 12425429610129   (120 CONSECUTIVE)
-             12425429610463 .. 12425429610465   (3, pre-K=1)
-chunk A    333 sats, holds 610130..610462   — AT the 330 dust floor, only 3 free
-reserve    451 sats, holds 610466..610916   — chunk B, untouched
-ord-cold   ~128,000 sats
-accounting 123 + 333 + 451 = 907 / 907, nothing lost across ~250 transactions
-```
-
-**Cost: ~70,000 sats for 123 carriers** — about 570 each, well under the ~950 projected,
-because most transactions cleared at the 255-sat floor.
-
-### The dust floor is the real limit, and the top-up is how past it
-
-A chunk yields only `size − 330` carriers; the last 330 Nakamoto sats are **stranded**.
-Chunk A hit that at 333 sats with `610130..610462` still inside.
-
-**The top-up (first run 2026-09-11, tx `d4d2ee96bbc1590f52c7663ad89181e635fcfcba2b9a07d8684a0ca2e946aeb5`):**
+### Done — the rare sats are ready
 
 ```
-inputs   [chunk A]  <- input[0], so its Nakamoto sats lead the sat stream
-         [a commons UTXO]
-outputs  [chunk A + padding]   = all the Nakamoto + N common sats behind them
-         [change]
-fee      off the commons tail — never touches a Nakamoto sat
+153 carriers made from the 907-sat Nakamoto range, every one verified on chain:
+  330 sats, ONE Nakamoto sat at offset 0, persistently locked in ord-cold
+
+  12425429610010 .. 12425429610159   150 CONSECUTIVE  -> the piece assignments
+  12425429610463 .. 12425429610465     3 spares (pre-K=1, sit after a gap)
+
+chunk A   423 sats, 303 Nakamoto still inside (needs another top-up to extract)
+reserve   451 Nakamoto in chunk B, never touched
+accounting  153 + 303 + 451 = 907 / 907 — nothing lost across ~310 mainnet txs
+cost        ~87,000 sats total, about 570 per carrier
+ord-cold    ~111,000 sats left    ord (hot) ~101,000 for the re-mint
 ```
 
-333 + 120 padding = 453 sats, which can then peel 123 more. Cost: 120 padding + 300 fee.
-Same sat-flow rule as the split; only the direction differs (growing a chunk rather than
-dividing one). **Verify before peeling from a topped-up chunk:** assert it holds the
-expected Nakamoto count AND that its *first* sat is one of them. The chained script does
-this and aborts rather than peeling from a malformed chunk.
+`PIECE_CARRIERS` in `inscribe.js` is **filled** with the 150 consecutive sats, oldest
+first — piece 0 on `12425429610010`, the oldest Nakamoto sat held. The 3 spares are in
+`SPARE_CARRIERS`, deliberately not assigned.
 
-### What is left after 153
+**150 consecutive sats is ~37 years at four pieces a year.**
 
-```
-chunk A  ~303 Nakamoto still inside, needs another top-up to extract
-reserve   451 Nakamoto in chunk B, never touched — needs its own split/peel
-```
+### Still to do before anything is inscribed
 
-So even at 153 carriers, **754 of the 907 sats are still locked in chunks.** Getting them
-out is more top-ups, not new theory. Not needed for decades.
+- **More regtest verification of the engine and inscribe path** — the creator's call, and
+  the right one. The v1/v2 history is two collections inscribed on code that had not been
+  proven. Nothing about the peel changes that.
+- **The metadata gate is only PARTLY satisfied** — see below.
+- Engine not inscribed. `inscribed_blocks.json` reset to `{}` and the block-reuse guard
+  re-tested (a repeated block is refused).
+
+### The metadata gate — what passed, and what cannot be checked pre-broadcast
+
+Passed:
+- Source JSON has exactly four keys: `pieceIndex`, `hashTail`, `inscriptionUnix`, `dataset`.
+- Identity scan clean across the metadata JSON, the 277-byte piece HTML, and the CBOR —
+  no name, username, `/Users/`, `/Volumes/`, `.local`, or `@gmail`.
+- **Composed** CBOR verified for 30 regtest pieces built by this same `inscribe.js`:
+  exactly four keys, no identity, read back from `/r/metadata`.
+
+**Not verifiable in advance:** the *mainnet* composed CBOR. ord embeds metadata in the
+reveal **witness**, which does not exist until signing — `--dry-run` returns an unsigned
+PSBT with no witness. Encoding the CBOR by hand to inspect it is a proxy, not the gate.
+
+**So the only real check is to inscribe piece 0 alone, read `/r/metadata/<id>`, verify,
+and only then continue.** One piece at risk instead of thirty-one.
+
+### Operational gotchas found 2026-09-12
+
+- **ord cannot use the `ord-cold` wallet** — *"contains unexpected output descriptors, and
+  does not appear to be an `ord` wallet"*. Carriers must be moved to `ord` before
+  inscribing. This matches [wallets.md](wallets.md)'s one-at-a-time workflow, but it is a
+  hard refusal, not a preference.
+- **`ord2.sh` lacks `--server-url`**, so `ord wallet` commands hunt for a server on port
+  80 and fail with `Connection refused`. Add
+  `wallet --server-url http://127.0.0.1:8080` (or whatever port the index server is on).
+- A piece inscription dry-ran at **544 sats** on mainnet at 1 sat/vB (608 measured on
+  regtest) — the estimate holds.
 
 ### Why K=1 — decided 2026-09-07
 
