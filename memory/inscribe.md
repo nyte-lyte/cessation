@@ -104,6 +104,14 @@ Set it lower than the carrier and the *reveal* fee eats the remainder — measur
 330 against a 469-sat commit output destroyed **70 rare sats**, while the commit itself
 was fine. A funding input alone does **not** save you; it only protects the commit.
 
+**`--postage` is the carrier's FULL OUTPUT SIZE, not its rare-sat count.** For the mainnet
+carriers that is **330** — 1 Nakamoto sat + 329 common padding. Earlier wording here said
+"postage must equal the contiguous rare run", which was the same number while carriers were
+all-rare chunks and became wrong the moment they were padded: `inscribe.js` printed
+`--postage 1sat`, below the dust floor. Its field is now `postage` (holding 330) rather
+than `run`, and the guard rejects anything under the dust floor. Found by running
+`inscribe.js` and reading the command it printed — not by reasoning about it.
+
 ### 3.3 Lock every carrier you are not currently inscribing
 
 **ord cannot see that these sats are rare.** Its rarity enum covers only *alpha* sats, so
