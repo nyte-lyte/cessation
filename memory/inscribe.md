@@ -484,27 +484,74 @@ child of the engine, so `/r/children/<engineId>` returns exactly the collection 
 nothing else. That is the durable identity, and it is already working — verified at
 31 pieces on regtest.
 
-## 7c. Where v3 goes — decided 2026-09-13
+## 7c. Where v3 goes — decided 2026-09-13, transfer step VERIFIED on regtest
 
-**Pieces go to a fresh `ord` wallet, created for v3.** An external address was
-considered and dropped. The fresh wallet is reached with
-`ord wallet inscribe --destination <addr from the fresh wallet>`, so each piece lands
-there in its own reveal transaction, carrier and rare sat included — no separate
-transfer, nothing extra in flight.
+**v3 is inscribed from a FRESH wallet. `ord-cold` stays exactly as it is — sat
+storage.** v1/v2 live in the hot `ord` wallet and are never touched, which is the
+whole point: they must not share a wallet with v3.
 
-**The engine does NOT go with them, and this is not optional.** ord spends the engine
-as a parent input and re-creates it on every child inscription — verified on regtest,
-where the engine's satpoint is now piece 30's reveal tx (`7c8043bd…:0:0`). It has to
-stay in the wallet doing the inscribing, permanently, because every future piece needs
-it as `--parent`. Send the engine away and the collection can never grow again.
+This is not a new workflow. It is the one v1/v2 already used, confirmed on chain:
+**65 carrier-sized arrivals across 38 transactions, 2026-05-03 to 2026-06-20, median
+15 minutes apart** — carriers moved from storage into the inscribing wallet one or two
+at a time, with inscribing in between. The only change for v3 is that the destination
+is a fresh wallet rather than `ord`.
 
-So the run is: inscribe FROM the wallet holding the carriers and the engine, with
-`--destination` pointing at the fresh wallet. Engine stays behind.
+An earlier draft of this plan said a fresh wallet would cost "160 extra transactions".
+**That was wrong.** Those transfers happen anyway, one per piece. Whether the carrier
+lands in `ord` or in a fresh wallet is the same transaction either way, so a fresh
+wallet costs nothing over reusing the hot one.
 
-Not yet done: the fresh wallet does not exist. Create it at inscription time, not
-before — and note that a new Core wallet on this machine has the same key-exposure
-properties as the existing ones (see §7d, next session's work). What it buys is
-separation of the finished collection from the inscribing machinery, not isolation.
+### The loop, per piece
+
+1. Unlock exactly ONE carrier in `ord-cold` (`lockunspent true '[{...}]'`).
+2. `ord wallet send --fee-rate <R> --postage 330sat <fresh-wallet-addr> <txid>:<vout>:0`
+   — **`--postage` is mandatory, see the measurement below.**
+3. Confirm, then inscribe that piece from the fresh wallet with `--sat` and
+   `--postage 330sat` as `inscribe.js` prints.
+4. Next piece. Never two carriers in the fresh wallet at once.
+
+### Why one at a time is the safety property, not just a habit
+
+§3.3 measured ord pulling a second carrier in as a funding input and burning its rare
+sats. **With only one carrier in the wallet there is no second one to take.** That is
+what the one-at-a-time loop buys, and it is why it must not be "optimised" into a
+batch move. Confirmed again 2026-09-13: a carrier arriving in a fresh wallet reports
+as `cardinal: 330, ordinal: 0` — ord sees an uninscribed rare carrier as ordinary
+spendable change and will fund from it.
+
+### Measured on regtest 2026-09-13 — `ord wallet send` postage
+
+A bare 330-sat carrier (first sat 4505000000737) sent to a fresh wallet:
+
+| invocation | resulting output | first sat |
+|---|---|---|
+| `--postage 330sat` | **330 sat** — carrier identical | preserved at offset 0 |
+| no `--postage` (default 10000) | **10,000 sat** | preserved at offset 0 |
+
+The default is **not** destructive — the rare sat survives at offset 0 either way —
+but it inflates the carrier to 10,000 sats by pulling 9,670 from the funding input,
+which then contradicts the `--postage 330sat` that `inscribe.js` prints for the
+inscribe step, and wastes the difference. Always pass `--postage 330sat` on the
+transfer. (Omega carriers are 546: pass `--postage 546sat` for those.)
+
+Rehearsed end to end on regtest with a second wallet created via
+`ord --datadir <dd> wallet --name v3test create`.
+
+### The engine does NOT go to storage, and this is not optional
+
+ord spends the engine as a parent input and re-creates it on every child inscription —
+verified on regtest, where the engine's satpoint is now piece 30's reveal tx
+(`7c8043bd…:0:0`). It must stay in the fresh wallet permanently, because every future
+piece needs it as `--parent`. Send the engine away and the collection can never grow.
+
+So the fresh wallet ends up holding: the engine (permanently), and whichever carrier is
+in flight. Nothing else.
+
+### Note on creating the real wallet
+
+`ord wallet create` prints the BIP39 mnemonic to stdout, once. If it is run inside an
+assistant session, the seed enters that transcript. Stated as a fact about the command,
+not a recommendation about who should run it.
 
 ## 8. Pre-flight
 

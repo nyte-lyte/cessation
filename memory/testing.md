@@ -1154,3 +1154,37 @@ re-ranks, nothing throws, nothing goes non-finite.
 Not settled by this: that a specific FUTURE reading is well-formed. That is what the
 `inscribe.js` validity gate and `any_reading.test.mjs` cover instead — and they are
 generic, so they do not need re-running per reading.
+
+
+## Carrier transfer, cold -> fresh wallet — rehearsed 2026-09-13
+
+The step that moves a rare sat out of storage, tested before doing it on mainnet.
+
+**Rig:** regtest ord runs with `index_sats: true`, so individual sats are traceable.
+A second wallet was created with `ord --datadir <dd> wallet --name v3test create`, and
+bare (uninscribed) 330-sat carriers were made with `ord wallet send <own-addr> 330sat`.
+Each carrier's first sat was read off `/output/<txid>:<vout>` before and after.
+
+**Result:**
+
+| invocation | output | first sat |
+|---|---|---|
+| `send --postage 330sat <addr> <txid>:0:0` | **330 sat, carrier identical** | 4505000000737, offset 0 |
+| `send <addr> <txid>:0:0` (default 10000) | **10,000 sat** | preserved, offset 0 |
+
+So the default is not destructive — the rare sat survives at offset 0 either way —
+but it inflates the carrier by pulling 9,670 sats from the funding input, and the
+inscribe step then expects 330. **Always pass `--postage` matching the carrier**
+(330 for peeled Nakamoto carriers, 546 for the four Omegas).
+
+**The finding that matters more:** the carrier arrives in the fresh wallet reporting
+as `cardinal: 330, ordinal: 0`. ord sees an uninscribed rare carrier as ordinary
+spendable change — the §3.3 hazard, now confirmed to apply in the destination wallet
+too, not only in storage. This is the real argument for the one-at-a-time loop: with
+exactly one carrier in the wallet there is no second one for ord to fund from. It is a
+safety property, not a habit, and must not be optimised into a batch move.
+
+**Also established, from chain rather than docs:** the v1/v2 run already worked this
+way — 65 carrier-sized arrivals across 38 transactions between 2026-05-03 and
+2026-06-20, median 15 minutes apart. The one-at-a-time loop is the proven procedure;
+v3 changes only the destination wallet.
