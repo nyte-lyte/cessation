@@ -28,6 +28,34 @@ bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin loadwallet ord-cold
 bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin stop
 ```
 
+### Mainnet ord is STOPPED as of 2026-09-13 — how to bring it back
+
+Shut down deliberately at the end of the 2026-09-13 session to free memory: it held
+~5.3 GB resident and was starving the machine during regtest runs (background tasks
+were being killed, and the 30-piece run visibly slowed). It was fully caught up at
+966,856 and was stopped with `kill -INT`, NOT killed — it committed on the way out
+(index.redb mtime advanced, 173 GB intact).
+
+Restart with the existing wrapper:
+
+```
+./ord2.sh server                 # mainnet RPC + /Volumes/Bitcoin/Ord + --index-sats
+```
+
+It will catch up from 966,856. Expect that to take a while but not a rebuild — the
+index is intact. Verify before trusting it:
+
+```
+curl -s http://127.0.0.1:8080/r/blockheight          # ord
+bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin getblockcount   # should converge
+```
+
+**Only stop it again when those two match.** Stopping mid-catch-up loses the
+uncommitted work. `kill -INT` and wait; never `kill -9`.
+
+Note it is not needed for regtest work at all — the regtest env is a separate ord on
+port 9001 and is unaffected.
+
 ### The ord index is a month of work — protect it
 
 **A full `--index-sats` rebuild from genesis took over a month** (creator's own experience).
