@@ -819,15 +819,8 @@ immutability reason.
 
 ## Known and deliberately NOT fixed
 
-- **`lc.reanimationTriggerMs` is set once and never cleared.** After a live
-  reanimation, `u_reanimationProgress` latches at 1.0, so `lifeRestores` pins
-  `finalColor = rgbColor` and the piece stops aging for the rest of that cycle;
-  the `=== null` guard also blocks any SECOND live reanimation. Real, but it needs
-  a tab left open across two full lifespans — minimum lifespan is 3 years, median
-  ~42. Every page load replays history through `lcFastForward` with the trigger
-  null, so a fresh viewer is always correct. Measured visual difference mid-cycle:
-  mean 5.4/255, max 58. Fixing it means deciding what happens at the moment the
-  flourish ends, which changes rendering — not worth the risk unprompted.
+- ~~`lc.reanimationTriggerMs` is set once and never cleared.~~ **FIXED 2026-09-13.**
+  See "Reanimation latch" below.
 - ~~7 dead uniforms~~ **REMOVED 2026-09-12.** `u_nitrogenHueDeg`,
   `u_creatinineHueDeg`, `u_sodiumHueDeg`, `u_chlorideHueDeg`, `u_co2HueDeg`,
   `u_calciumHueDeg`, `u_partnerInheritedHueDeg` — declared in GLSL, never read by
@@ -873,3 +866,56 @@ old and new bundles and dumped the uniform set the compiled program exposes:
 
 The 7 inactive names in the old run were exactly the 7 removed. Bundle 83052 ->
 81927 bytes (1,125 saved). All suites green.
+
+
+## Reanimation latch (fixed 2026-09-13)
+
+`lc.reanimationTriggerMs` was set at reanimation and never cleared, so
+`reanimationProgress` climbed to 1.0 and stayed. Two separate breakages.
+
+**The render.** Worth understanding precisely, because it is not what the shader
+reads at a glance. Everything reanimation-shaped — `partnerArrival`, the
+`meetingField`, `nirvanaState` — reaches the frame only through
+
+    finalColor = mix(livingColor, nirvanaState, nirvanaProgress);   // line 505
+
+and `nirvanaProgress = clamp((u_totalYears - u_lifespanYears) / 0.5, 0, 1)`. Since
+age went cycle-relative, a NEW cycle starts at `u_totalYears ≈ 0` against a lifespan
+of at least 3 years, so **nirvanaProgress is 0 for the whole new cycle** and all of
+that is multiplied out. The only surviving effect of reanimationProgress is the very
+next line:
+
+    lifeRestores = smoothstep(0.5, 1.0, u_reanimationProgress);
+    finalColor   = mix(finalColor, rgbColor, lifeRestores);          // line 506
+
+Pinned at 1.0 that resolves to `rgbColor` exactly — the piece renders as its flat
+base colour, with all of livingColor's structure and ageing discarded, for the rest
+of the cycle.
+
+**The lifecycle.** lcPoll's cessation check requires `reanimationTriggerMs === null`,
+so once set the piece could never reanimate a SECOND time. It would reach its next
+cessation block and do nothing at all.
+
+**The fix.** Run a symmetric arc in `lcTick` and then re-arm:
+
+    t <= 1  -> progress = t       bloom  0 -> 1
+    t <  2  -> progress = 2 - t   settle 1 -> 0
+    else    -> progress = 0, trigger = null
+
+No shader change. Because `lifeRestores` is `smoothstep(0.5, 1.0, progress)`, coming
+back down through the 0.5 edge fades it out smoothly rather than snapping — asserted,
+not eyeballed: `test/reanimation.test.mjs` samples the arc 4,000 times and fails if
+either `progress` or the shader's `lifeRestores` moves more than ~3 steps' worth
+between adjacent samples.
+
+**What a viewer now sees at rebirth:** the piece blooms into pure base colour over
+`BLOCK_WINDOW_MS` (10 min), then settles back into its living self over another 10 —
+a 20-minute event, once per cycle. Change `BLOCK_WINDOW_MS` to retime it; make the
+settle asymmetric by changing the `2` in the `t < 2` branch.
+
+Only a live viewer sees it. A piece loaded later replays history through
+`lcFastForward`, which never sets the trigger, so it opens already settled. That is
+correct and unchanged.
+
+`test/reanimation.test.mjs`: 4,018 checks; fails 6 against the pre-fix engine
+(covering both the pinned render and the blocked second cycle).

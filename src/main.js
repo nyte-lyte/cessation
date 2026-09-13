@@ -618,7 +618,35 @@ async function init() {
   // Per-frame: interpolate reanimation and void transition progress values
   function lcTick(nowMs) {
     if (lc.reanimationTriggerMs !== null) {
-      lc.reanimationProgress = Math.min(1.0, (nowMs - lc.reanimationTriggerMs) / BLOCK_WINDOW_MS);
+      // Reanimation is an EVENT, not a state. It used to latch: progress climbed
+      // to 1 and stayed, because the trigger was set once and never cleared. Two
+      // things broke.
+      //
+      // First the render. In a new cycle `nirvanaProgress` is 0 — cycle-relative
+      // age starts at ~0 against a lifespan of at least 3 years — so the shader's
+      // `mix(livingColor, nirvanaState, nirvanaProgress)` keeps livingColor, and
+      // the ONLY thing reanimationProgress still does is the next line,
+      // `mix(livingColor, rgbColor, lifeRestores)`. Pinned at 1 that resolves to
+      // rgbColor for ever: the piece renders as its flat base colour and stops
+      // ageing for the rest of the cycle.
+      //
+      // Second the lifecycle. The cessation check requires trigger === null, so
+      // once set the piece could never reanimate a SECOND time — it would reach
+      // the next cessation block and do nothing.
+      //
+      // So run a symmetric arc and then re-arm. lifeRestores is
+      // smoothstep(0.5, 1.0, progress), so coming back down through 0.5 fades it
+      // out smoothly — the piece blooms into pure colour and settles into its new
+      // life, with no jump at either end and no shader change.
+      const t = (nowMs - lc.reanimationTriggerMs) / BLOCK_WINDOW_MS;
+      if (t <= 1) {
+        lc.reanimationProgress = t;              // bloom  0 -> 1
+      } else if (t < 2) {
+        lc.reanimationProgress = 2 - t;          // settle 1 -> 0
+      } else {
+        lc.reanimationProgress = 0.0;
+        lc.reanimationTriggerMs = null;          // re-armed: the next cessation can reanimate
+      }
     } else if (!lc.isLiberated) {
       lc.reanimationProgress = 0.0;
     }

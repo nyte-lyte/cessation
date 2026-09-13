@@ -1047,7 +1047,16 @@ async function init() {
 
   function lcTick(nowMs) {
     if (lc.reanimationTriggerMs !== null) {
-      lc.reanimationProgress = Math.min(1.0, (nowMs - lc.reanimationTriggerMs) / BLOCK_WINDOW_MS);
+
+      const t = (nowMs - lc.reanimationTriggerMs) / BLOCK_WINDOW_MS;
+      if (t <= 1) {
+        lc.reanimationProgress = t;
+      } else if (t < 2) {
+        lc.reanimationProgress = 2 - t;
+      } else {
+        lc.reanimationProgress = 0.0;
+        lc.reanimationTriggerMs = null;
+      }
     } else if (!lc.isLiberated) {
       lc.reanimationProgress = 0.0;
     }

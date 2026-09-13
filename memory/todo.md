@@ -29,11 +29,11 @@ failures. Suites green after: 29 purity + 14,033 scale + 14 refresh-integrity.
    own comment describes, previously unguarded.
 
 ### Open decisions from this audit
-- **`reanimationTriggerMs` is never cleared.** After a live reanimation the piece
-  stops aging for the rest of that cycle and cannot reanimate a second time. Needs a
-  tab open across two full lifespans (min 3 years, median ~42) so effectively
-  unreachable, and every page load replays correctly. Fixing it changes rendering at
-  the moment the flourish ends — a deliberate design call, not a silent patch.
+- ~~`reanimationTriggerMs` is never cleared.~~ **FIXED 2026-09-13.** lcTick now runs
+  a symmetric arc — bloom 0->1, settle 1->0 — then clears the trigger, so the piece
+  returns to its living render and the next cessation can reanimate it. No shader
+  change; the settle rides smoothstep's 0.5 edge so there is no pop. A rebirth is now
+  a visible 20-minute bloom for a live viewer. See [[testing]] "Reanimation latch".
 - ~~Remove the 7 dead `*HueDeg` uniforms?~~ **DONE 2026-09-12.** Removed with their
   lookups and uploads; 49 uniforms declared, 0 unread. Proven a no-op: the active
   uniform set is identical before and after (49 both), same draw count, no errors.
