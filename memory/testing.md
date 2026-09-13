@@ -919,3 +919,86 @@ correct and unchanged.
 
 `test/reanimation.test.mjs`: 4,018 checks; fails 6 against the pre-fix engine
 (covering both the pinned render and the blocked second cycle).
+
+
+## The newcomer problem — found and fixed 2026-09-13
+
+The question that prompted it: *"if we inscribe and go live and then test a new
+data set and it doesn't work — we have a broken project again."* Correct instinct,
+and there was a real bug behind it.
+
+### What was wrong
+
+`computeMinMaxValues` took `Math.min`/`Math.max` straight over raw values with no
+guard. Those ranges are computed across the WHOLE collection and every piece
+normalizes through them, so one bad field in one future reading does not damage
+that piece — it corrupts every piece already on chain, permanently, with no way to
+patch an inscribed engine. Measured against the real thirty:
+
+| newcomer | glucose range becomes | effect on piece 0 |
+|---|---|---|
+| missing `glucose` | `{NaN, NaN}` | normalized glucose = **NaN on every live piece** |
+| `glucose: null` | `{0, 160}` (null coerces to 0) | 0.5352 → **0.7937**, silently |
+
+The second is the nastier one: no error, no NaN, nothing that looks wrong — every
+piece just quietly re-ranks against a reading that never happened.
+
+### The fix — two layers
+
+1. **Engine side (`data/decay_logic.js`), the durable one.** `computeMinMaxValues`
+   now only lets a *finite number* widen a range — a missing key, null, undefined,
+   NaN or numeric-looking string is skipped. A key no dataset supplies collapses to
+   `{0,0}`, which `normalize()` already answers 0.5 for. A malformed piece is
+   therefore absent from the ranking rather than able to redefine it, and the
+   degradation is per-FIELD, not per-piece: the piece still contributes every field
+   it got right.
+2. **Mint side (`inscribe.js`), the preventable one.** A blocking gate refuses to
+   build metadata unless `date` matches `YYYY-MM-DD` and all 8 ECG + 9 lab values
+   are finite numbers. Verified both directions: passes the real reading, blocks a
+   nulled one before anything is written.
+
+Layer 1 is what matters — it is on chain and cannot be changed. Layer 2 is a script
+and can always be fixed later.
+
+### Coverage
+
+`test/newcomer.test.mjs` — 6,346 checks, fails 94 against the pre-fix engine. Uses
+the REAL thirty readings plus one newcomer, and asserts that neither the ranges nor
+any existing piece's normalized values can be pushed non-finite or out of `[0,1]`:
+
+- newcomers 0.5x / 5x / 100x outside every prior range, both directions
+- malformed newcomers: missing field, null, undefined, string, NaN
+- ranges must not silently WIDEN on a value that is not real
+- ecgRanks stays finite and sorted; karma, threshold and the aged path stay finite
+- and the collection must still be LIVING — ranges and percentiles do move
+
+The newcomer is a test fixture derived from the real data, never written to `dist/`
+and never inscribed. No invented reading goes on chain.
+
+### What is still untested
+
+**An actual 31st inscription.** `inscribe.js` hard-stops at `pieceIndex >=
+healthDataSets.length`, and there are exactly 30 real readings, so piece 30 cannot
+be minted until a new reading exists. That guard fails LOUDLY before any broadcast,
+so it is safe-fail, not a silent break. When the next reading arrives, mint it on
+regtest first — that closes the last link.
+
+### On-chain growth, measured
+
+The 2026-09-13 regtest run (engine + 30 pieces, blocks 984–1013) proved discovery
+and re-ranking on real inscriptions. Piece 0 was then served a TRUNCATED view of the
+same chain — 5, then 15, then 30 siblings — and 38 of 43 collection-derived uniforms
+changed:
+
+    u_rAxisNorm     5: 1.0000   15: 0.6000   30: 0.2400
+    u_pAxisNorm     5: 1.0000   15: 0.9999   30: 0.2900
+    u_ventRateNorm  5: 1.0000   15: 0.1428   30: 0.2800
+
+At N=5 piece 0 is pinned at the extreme of every range; it settles into its true
+position as siblings arrive. The five that did not move are correct to stay put —
+`u_inheritedHueDeg`, `u_inheritedStrength`, `u_nirvanaRGB`, `u_partnerRGB` (own
+lineage and fixed partner) and `u_resolution`.
+
+`truncproxy.mjs` in the scratchpad does this: serves the real chain but shows only
+the first N children. It is the cheapest way to ask "what did this piece look like
+when the collection was smaller" without touching the chain.

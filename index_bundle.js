@@ -454,14 +454,21 @@ function computeMinMaxValues(allDatasets) {
   const result = {};
   for (const k of ECG_KEYS) result[k] = { min: Infinity, max: -Infinity };
   for (const k of LAB_KEYS) result[k] = { min: Infinity, max: -Infinity };
+
+  const consider = (slot, v) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return;
+    slot.min = Math.min(slot.min, v);
+    slot.max = Math.max(slot.max, v);
+  };
   for (const d of allDatasets) {
-    for (const k of ECG_KEYS) {
-      result[k].min = Math.min(result[k].min, d.ecg[k]);
-      result[k].max = Math.max(result[k].max, d.ecg[k]);
-    }
-    for (const k of LAB_KEYS) {
-      result[k].min = Math.min(result[k].min, d.labs[k]);
-      result[k].max = Math.max(result[k].max, d.labs[k]);
+    for (const k of ECG_KEYS) consider(result[k], d?.ecg?.[k]);
+    for (const k of LAB_KEYS) consider(result[k], d?.labs?.[k]);
+  }
+
+  for (const k of Object.keys(result)) {
+    if (!Number.isFinite(result[k].min) || !Number.isFinite(result[k].max)) {
+      result[k].min = 0;
+      result[k].max = 0;
     }
   }
   return result;

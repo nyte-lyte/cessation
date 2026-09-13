@@ -359,6 +359,44 @@ if (pieceIndex >= healthDataSets.length) {
   process.exit(1);
 }
 
+// ── Reading validity gate — blocking ─────────────────────────────────────────
+// A malformed reading is the one input that can reach across the whole collection.
+// min/max ranges are computed over every piece and each one normalizes through
+// them, so a missing field, a null, or a value typed as a string does not damage
+// this piece — it re-ranks every piece ALREADY ON CHAIN, permanently.
+//
+// decay_logic's computeMinMaxValues now ignores anything that is not a finite
+// number, so the live collection survives one either way. This gate is the other
+// half: catch it here, while it is still a file on disk and not an inscription.
+{
+  const ECG_REQUIRED = ['ventRate','prInterval','qrsInterval','qtInterval','qtcInterval','pAxis','rAxis','tAxis'];
+  const LAB_REQUIRED = ['glucose','nitrogen','creatinine','eGFR','sodium','potassium','chloride','carbonDioxide','calcium'];
+  const ds = healthDataSets[pieceIndex];
+  const bad = [];
+  if (!ds || typeof ds !== 'object') bad.push('the dataset itself is missing');
+  else {
+    if (typeof ds.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(ds.date)) {
+      bad.push(`date is ${JSON.stringify(ds.date)} — expected "YYYY-MM-DD"`);
+    }
+    for (const [group, keys] of [['ecg', ECG_REQUIRED], ['labs', LAB_REQUIRED]]) {
+      for (const k of keys) {
+        const v = ds?.[group]?.[k];
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+          bad.push(`${group}.${k} is ${JSON.stringify(v)} — expected a finite number`);
+        }
+      }
+    }
+  }
+  if (bad.length) {
+    console.error(`\nError: the reading for piece ${pieceIndex} is not fit to inscribe.\n`);
+    for (const b of bad) console.error(`  - ${b}`);
+    console.error('\nThis is blocking. These values go into CBOR metadata and every piece already');
+    console.error('on chain re-ranks against them the moment this one is inscribed. Fix the record');
+    console.error('in data/health_data_sets.js and run again.\n');
+    process.exit(1);
+  }
+}
+
 // ── Replicate computeHSBFromStats from main.js ────────────────────────────────
 
 function percentile(value, sortedArray) {

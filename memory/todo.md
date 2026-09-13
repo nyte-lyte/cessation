@@ -28,6 +28,17 @@ failures. Suites green after: 29 purity + 14,033 scale + 14 refresh-integrity.
 5. **A thrown frame killed the piece for ever** — the v1 failure mode the engine's
    own comment describes, previously unguarded.
 
+### The newcomer guard — added 2026-09-13
+A malformed future reading could corrupt every piece already on chain (a missing
+field gave NaN ranges; a null silently widened them and re-ranked everyone).
+`computeMinMaxValues` now only lets finite numbers widen a range, and `inscribe.js`
+blocks a reading that is not fit to inscribe. `test/newcomer.test.mjs`, 6,346 checks.
+See [[testing]] "The newcomer problem".
+
+**Still open:** an actual 31st inscription cannot be tested until a new real reading
+exists — `inscribe.js` stops at index 30 (loudly, pre-broadcast). When the next
+reading arrives, mint it on REGTEST first before mainnet.
+
 ### Open decisions from this audit
 - ~~`reanimationTriggerMs` is never cleared.~~ **FIXED 2026-09-13.** lcTick now runs
   a symmetric arc — bloom 0->1, settle 1->0 — then clears the trigger, so the piece

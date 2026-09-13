@@ -17,14 +17,36 @@ function computeMinMaxValues(allDatasets) {
   const result = {};
   for (const k of ECG_KEYS) result[k] = { min: Infinity, max: -Infinity };
   for (const k of LAB_KEYS) result[k] = { min: Infinity, max: -Infinity };
+  // ONLY real numbers widen a range. This is the collection's immune system.
+  //
+  // These ranges are computed across the WHOLE collection and every piece
+  // normalizes through them, so a single bad field in a single future reading
+  // does not corrupt one piece — it corrupts every piece already on chain, for
+  // ever, with no way to patch the engine. Measured on the real thirty:
+  //   a newcomer missing `glucose`  -> range {NaN, NaN} -> every piece's
+  //                                    normalized glucose is NaN
+  //   a newcomer with glucose: null -> null coerces to 0, range silently becomes
+  //                                    0..160, and piece 0 moves 0.5352 -> 0.7937
+  // Neither raises an error. The second does not even look wrong.
+  //
+  // So skip anything that is not a finite number: a missing key, null, undefined,
+  // NaN, or a string that happens to look numeric. A malformed piece is then
+  // simply absent from the ranking rather than able to redefine it.
+  const consider = (slot, v) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return;
+    slot.min = Math.min(slot.min, v);
+    slot.max = Math.max(slot.max, v);
+  };
   for (const d of allDatasets) {
-    for (const k of ECG_KEYS) {
-      result[k].min = Math.min(result[k].min, d.ecg[k]);
-      result[k].max = Math.max(result[k].max, d.ecg[k]);
-    }
-    for (const k of LAB_KEYS) {
-      result[k].min = Math.min(result[k].min, d.labs[k]);
-      result[k].max = Math.max(result[k].max, d.labs[k]);
+    for (const k of ECG_KEYS) consider(result[k], d?.ecg?.[k]);
+    for (const k of LAB_KEYS) consider(result[k], d?.labs?.[k]);
+  }
+  // A key no dataset supplied would leave {Infinity, -Infinity}, which normalizes
+  // to NaN. Collapse it instead: min === max makes normalize() return 0.5.
+  for (const k of Object.keys(result)) {
+    if (!Number.isFinite(result[k].min) || !Number.isFinite(result[k].max)) {
+      result[k].min = 0;
+      result[k].max = 0;
     }
   }
   return result;
