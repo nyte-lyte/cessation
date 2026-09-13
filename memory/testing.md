@@ -179,41 +179,58 @@ becomes `liberated: true` — correct, piece 0 is genesis with no partner. Piece
 `cycle 1` at +60y, `cycle 4` at +200y, and at +600y `[lc] VOID — both partners liberated`,
 `cycle 9`. The whole arc runs without error.
 
-### THE BUG: `lifeFraction` never resets on reanimation
+### THE BUG: a reanimated piece renders a FLAT COLOUR — it stops being the artwork
 
-```js
-const baseYears    = Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
-const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
-```
-
-Age is measured from the **original inscription** and clamped to 1. Piece 1's lifespan is
-30.7 years, so at 60 years `lifeFraction` is `1.95 → clamped to 1.0`, and it stays exactly
-1.0 for ever.
-
-Measured consequence — the rendered frame is **byte-identical** across cycles:
+Found 2026-09-12 by simulating age. Once a piece passes its first cessation and reanimates,
+every frame is a **solid magenta rectangle** — `rgb(211, 32, 143)`, standard deviation
+**0.00** across the canvas interior. Not frozen art: no art at all.
 
 ```
-cycle 0, alive              a151a762383f1fc1
-cycle 1                     5a3b0b265d133229
-cycle 4                     5a3b0b265d133229   <- same image
-cycle 9, liberated + void   346c671d5b4b247f
+cycle 0, alive   mean RGB [209, 78, 73]   stddev 53.70   real image
+cycle 1          mean RGB [211, 32, 143]  stddev  0.00   FLAT
+cycle 4          mean RGB [211, 32, 143]  stddev  0.00   FLAT
+cycle 14         mean RGB [211, 32, 143]  stddev  0.00   FLAT
 ```
 
-And it does not animate: 151 draws in 2.5 s — the render loop is running at 60fps — while
-the pixels do not change at all. A reanimated piece is frozen on its terminal frame.
+Identical bytes at every cycle, and identical whether the collection has 2 pieces or 30 —
+so the output does not depend on the data at all.
 
-**Ruled out before concluding:** the blended dataset is clean (no non-finite fields, beam
-tempos 7.4–26.4 s, hue anchor finite), and it is not the test rig — the freeze persists with
-the proxy advancing the chain at 2 blocks/sec.
+**What has been ruled out:**
+- **Not NaN in the uniforms.** All 48 uniforms are finite. Sampled at cycle 1:
+  `u_time` 391.55, `u_totalYears` 60.04, `u_lifespanYears` 29.73,
+  `u_reanimationProgress` 0, `u_isLiberated` 0, `u_voidProgress` 0, beam strengths 0.22–0.41.
+- **Not a stalled render loop.** 151 draws in 2.5 s, and `u_time` advances (233 → 235).
+  Uniforms change every frame; the pixels do not.
+- **Not the blended dataset.** Replayed outside the browser: no non-finite fields, beam
+  tempos 7.4–26.4 s, hue anchor finite.
+- **Not the test rig.** The freeze persists with the proxy mining at 2 blocks/sec, and with
+  four screenshots taken 2 s apart.
+- **Not `lifeFraction`.** See below.
 
-`totalYears` also drives `getAgedDataset`'s chronological drift, so the whole age system
-pins once a piece outlives its first lifespan.
+**So the fault is almost certainly inside the fragment shader**, in a path only reached
+after reanimation — the live uniforms reaching it are sane, and the output is a constant.
+`src/shaders/fragment.glsl` has not been examined yet. **Unresolved.**
 
-**Not fixed.** Reanimation means a *new life*, so age should almost certainly be measured
-from the current cycle's start rather than from inscription — but that is a design decision
-about what a cycle means, not a mechanical fix, and it is the creator's call.
+### `lifeFraction` did reset — fixed, and verified, but it was not the cause
 
-## What regtest structurally cannot prove — the three axes
+The first hypothesis was that `lifeFraction` never reset on reanimation: it was computed
+from the ORIGINAL inscription and clamped to 1, so a piece past its first lifespan pinned
+at exactly 1.0 for ever. That was real and is fixed — reanimation is **reincarnation**
+(creator, 2026-09-12): each cycle begins a new life and ages from zero.
+
+`lc.cycleStartBlock` and `lc.cycleLifespanYears` now track the current life, set at
+inscription and reset at every reanimation in both the live and fast-forward paths.
+`lcCycleLifeFraction()` measures age in **blocks** within the current cycle — block-native
+like every other lifecycle event — falling back to wall clock before the chain is known.
+
+Verified through the uniforms: `u_inheritedStrength` = `(1-lifeFraction)^0.7` reads 0.4575
+at +20y and 0.2612 at +60y, i.e. lifeFraction 0.67 → 0.85 rather than pinning at 1.0. Cycle
+counts also deepened correctly (cycle 9 → 14 at +600y) as each cycle now takes its own span.
+
+**But the flat-colour bug is unchanged by it** — byte-identical before and after the fix.
+Two separate faults; only one is fixed.
+
+## What regtest structurally cannot prove — the three axes## What regtest structurally cannot prove — the three axes
 
 1. **Age.** A regtest piece is minutes old. Anything that only manifests with age is
    invisible. The `u_time` float32 bug passed regtest because at 60 seconds old the

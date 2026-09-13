@@ -124,13 +124,21 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
-- **`lifeFraction` never resets on reanimation — a reanimated piece is frozen.** Found
-  2026-09-12 by simulating age. `lifeFraction = clamp(totalYears / lifespanYears, 0, 1)`
-  with `totalYears` measured from the ORIGINAL inscription, so once a piece outlives its
-  first lifespan it pins at exactly 1.0 for ever. Cycles 1 and 4 render a **byte-identical**
-  static frame while the loop runs at 60fps. Ruled out: NaN in the blended dataset, and the
-  test rig. **Design decision, not a mechanical fix:** should age restart each cycle? See
-  [testing.md](testing.md) → "AGE".
+- **A REANIMATED PIECE RENDERS A FLAT COLOUR — BLOCKING.** Found 2026-09-12 by simulating
+  age. Past its first cessation, every frame is solid `rgb(211,32,143)`, stddev **0.00** —
+  the artwork is gone, at every cycle, regardless of collection size. Ruled out: NaN
+  uniforms (all 48 finite), a stalled loop (151 draws/2.5s, `u_time` advancing), the
+  blended dataset, the test rig, and `lifeFraction`. **The fault is almost certainly in
+  `src/shaders/fragment.glsl`, in a path only reached after reanimation — not yet
+  examined.** Median lifespan is ~42 years, so roughly half the collection would reach
+  this within a normal lifetime. See [testing.md](testing.md) → "AGE".
+- **~~`lifeFraction` never resets on reanimation~~ FIXED 2026-09-12.** Age was measured
+  from the original inscription and clamped to 1, pinning a piece at 1.0 for ever once it
+  outlived its first lifespan. Reanimation is **reincarnation** — each cycle now begins a
+  new life and ages from zero, block-native via `lc.cycleStartBlock` /
+  `lc.cycleLifespanYears`. Verified through `u_inheritedStrength` (lifeFraction 0.67 at
+  +20y, 0.85 at +60y, no longer pinned). **Did not fix the flat-colour bug above** — two
+  separate faults.
 
 - **NOT INSCRIBING YET — more regtest first (creator, 2026-09-12).** The rare sats are
   peeled and ready (153 carriers, 150 consecutive, `PIECE_CARRIERS` filled), but the

@@ -1089,6 +1089,13 @@ async function init() {
     return _lcMergedEntries().findIndex(e => e.pieceIndex === currentDataSetIndex);
   }
 
+  function lcCycleLifeFraction() {
+    if (!lc.ready || lc.cycleStartBlock === null) return null;
+    const span = lc.cessationBlock - lc.cycleStartBlock;
+    if (!(span > 0)) return null;
+    return clamp((lc.currentBlockHeight - lc.cycleStartBlock) / span, 0, 1);
+  }
+
   function getDrawCollection() {
     const base = lcEffectiveCollection();
     if (!lc.cycleDataset) return base;
@@ -1274,13 +1281,16 @@ async function init() {
         lc.reanimationTriggerMs = Date.now();
         lc.cycleCount++;
         lc.cycleDataset = blended;
+
+        lc.cycleStartBlock = lc.cessationBlock;
         try {
           const bi = await fetch(`/r/blockinfo/${lc.cessationBlock}`).then(r => r.json());
           const ht = Math.round(parseInt(bi.hash.slice(-2), 16) * 99 / 255);
-          lc.cessationBlock += Math.round(lifespanYearsFromHashDigits(ht) * BLOCKS_PER_YEAR);
+          lc.cycleLifespanYears = lifespanYearsFromHashDigits(ht);
         } catch (e) {
-          lc.cessationBlock += Math.round(lifespanYears * BLOCKS_PER_YEAR);
+          lc.cycleLifespanYears = lifespanYears;
         }
+        lc.cessationBlock += Math.round(lc.cycleLifespanYears * BLOCKS_PER_YEAR);
         console.log(`[lc] REANIMATION cycle ${lc.cycleCount} — next cessation block ${lc.cessationBlock}`);
       }
     }
@@ -1306,11 +1316,15 @@ async function init() {
       if (karma < threshold) { lc.isLiberated = true; lc.cycleDataset = blended; break; }
       lc.cycleCount++;
       lc.cycleDataset = blended;
+      lc.cycleStartBlock = lc.cessationBlock;
+      let _stop = false;
       try {
         const bi = await fetch(`/r/blockinfo/${lc.cessationBlock}`).then(r => r.json());
         const ht = Math.round(parseInt(bi.hash.slice(-2), 16) * 99 / 255);
-        lc.cessationBlock += Math.round(lifespanYearsFromHashDigits(ht) * BLOCKS_PER_YEAR);
-      } catch (e) { lc.cessationBlock += Math.round(lifespanYears * BLOCKS_PER_YEAR); break; }
+        lc.cycleLifespanYears = lifespanYearsFromHashDigits(ht);
+      } catch (e) { lc.cycleLifespanYears = lifespanYears; _stop = true; }
+      lc.cessationBlock += Math.round(lc.cycleLifespanYears * BLOCKS_PER_YEAR);
+      if (_stop) break;
     }
   }
 
@@ -1329,6 +1343,8 @@ async function init() {
         lc.ownBlockHeight = selfInfo.height;
       }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
+      lc.cycleStartBlock    = lc.ownBlockHeight;
+      lc.cycleLifespanYears = lifespanYears;
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
 
       if (_ownId) {
@@ -1603,7 +1619,8 @@ async function init() {
       (params.overrideYears !== null ? params.overrideYears : baseYears) *
       (params.timeWarp || 1);
 
-    const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
+    const _cycLF = lcCycleLifeFraction();
+    const lifeFraction = _cycLF !== null ? _cycLF : clamp(totalYears / lifespanYears, 0, 1);
     const drawCollection = getDrawCollection();
 
     if (!drawCollection.length) {
