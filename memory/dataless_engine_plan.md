@@ -182,8 +182,48 @@ output must depend on what is passed in, not on what the engine was built with.
      sorted arrays actually sorted, and a collection of one does not throw.
    - `scale.test.mjs` caught the signature change at its init-beam section and was
      updated — it does cover beam tempo, which the earlier note understated.
-3. Groups 2 and 3 — delete fallbacks, handle null.
-4. Group 4 — move the import behind `DEV_START`, seed dev from the file.
+3. ~~Group 2 — partner / inheritance fallbacks.~~ **DONE 2026-09-12.** Live references
+   to the baked array: **22 → 13**. Tests green, render pixel-identical.
+   - `allInheritedHues` (a baked precompute that could not extend past the bundled
+     pieces) replaced by `lcInheritedHueFor(pieceIdx)`, computed from the live
+     collection. Returns **null** for "not discoverable yet" so callers decide,
+     rather than being handed a baked guess.
+   - New `lcDatasetForPiece(idx)` — one piece's dataset from the merged live view.
+   - `recomputePartnerInheritedHue` lost its "partner is in the bundle, use the baked
+     value" shortcut — that shortcut *was* the bug in miniature, preferring baked
+     over live whenever both existed.
+   - `lcGetPartnerDataset` and the two reanimation call sites no longer fall back to
+     baked data. A partner that is not on chain is genuinely unknown; reanimation
+     defers to the next poll instead of reanimating against invented data.
+   - Own inherited hue at draw now uses the piece's own `hue` attribute first
+     (`inscribe.js` always emits it, so on chain it is authoritative) with the live
+     computation as fallback.
+
+   **The render check caught a real regression here, and it is worth recording.**
+   Initialising `partnerInheritedHueDeg = getPartnerInheritedHue(...)` at line ~485
+   now reaches `lc`, which is not declared until ~547:
+
+   ```
+   ReferenceError: Cannot access 'lc' before initialization
+   draws: 0 — the piece never drew at all
+   ```
+
+   Exactly the failure mode under "Risks": removing a fallback introduced a path that
+   throws, and a piece that throws never renders. **Both test suites stayed green
+   through this** — only the browser render caught it. It is now initialised to 0 and
+   set by `recomputePartnerInheritedHue()` once the partner is discoverable.
+
+4. Group 3 — `_lcMergedEntries` fallbacks. **Coupled to group 4:** removing the baked
+   seed leaves dev with no collection at all, so dev seeding must land in the same
+   change.
+5. Group 4 — move the import behind `DEV_START`, seed dev from the file.
+   **Bigger than it looks:** `minMaxValues` is imported on the same line and is used
+   throughout the live render path. It is already refreshed in place from the live
+   collection (`refreshMinMaxValues`), so it only needs an initial value — but that
+   means `const minMaxValues = {}` plus a guarantee it is populated before the first
+   draw. Boot order changes too: without a baked array *every* piece must await
+   `lc.ownDataReady`, not just those past the bundled length. `lcReleaseOwnData()` is
+   in a `finally`, so that promise always resolves, including in dev.
 5. `node build.js`, confirm the bundle no longer contains the array and shrinks ~12.6%.
 6. Full regtest: inscribe engine + pieces, confirm rendering and re-ranking, **and
    inscribe a piece past the old baked length** — the case that broke v1 and that no

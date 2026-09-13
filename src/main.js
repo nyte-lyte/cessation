@@ -459,10 +459,16 @@ async function init() {
   }
   // DEV_END
 
-  // Precompute inherited hues for all pieces (piece N inherits piece N-1's glucose hue)
-  const allInheritedHues = healthDataSets.map((_, i) =>
-    computeHSBFromStats(healthDataSets[Math.max(0, i - 1)], healthDataSets).hue * 360
-  );
+  // Piece N inherits piece N-1's glucose hue, ranked against the LIVE collection.
+  // This used to be a baked precompute across healthDataSets, which meant it could
+  // not extend past the bundled pieces and never re-ranked as the chain grew.
+  // Returns null when the predecessor is not yet discoverable — callers decide
+  // what to do with "not known yet" rather than being handed a baked guess.
+  function lcInheritedHueFor(pieceIdx) {
+    const prev = lcDatasetForPiece(Math.max(0, pieceIdx - 1));
+    if (!prev) return null;
+    return computeHSBFromStats(prev, lcEffectiveCollection()).hue * 360;
+  }
   // Pairs: (0,1),(2,3),(4,5)... piece 0 is genesis — no reanimation
   // Even piece N (N>0): partner = N+1. Odd piece N: partner = N-1.
   function getPartnerIndex(idx) {
@@ -471,12 +477,16 @@ async function init() {
   }
   function getPartnerInheritedHue(idx) {
     const p = getPartnerIndex(idx);
-    if (p < 0 || p >= healthDataSets.length) return 0;
-    return allInheritedHues[p];
+    if (p < 0) return 0;                       // genesis has no partner
+    return lcInheritedHueFor(p) ?? 0;          // 0 until the partner is discoverable
   }
 
   // Entropy pool / reanimation state — baked at mint time, reanimationProgress computed live
-  let partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
+  // 0 until the collection resolves — recomputePartnerInheritedHue() sets it once
+  // the partner is discoverable. NOT computed here: this runs before `lc` exists,
+  // and the live lookup reads it. (Calling it here threw "Cannot access 'lc'
+  // before initialization" and the piece never drew at all.)
+  let partnerInheritedHueDeg = 0;
   let isLiberated = BAKED_IS_LIBERATED;
   let voidProgress = BAKED_VOID_PROGRESS;
   let __reanimationOverride = null; // declared outside DEV block so bundle can reference it safely
@@ -623,6 +633,12 @@ async function init() {
     }
     return [...byIndex.values()].sort((a, b) => a.pieceIndex - b.pieceIndex);
   }
+  // One piece's dataset by pieceIndex, from the merged live view. Null when that
+  // piece is not discoverable yet.
+  function lcDatasetForPiece(pieceIdx) {
+    const hit = _lcMergedEntries().find(e => e.pieceIndex === pieceIdx);
+    return hit ? hit.dataset : null;
+  }
   function lcEffectiveCollection() {
     return _lcMergedEntries().map(e => e.dataset);
   }
@@ -648,12 +664,11 @@ async function init() {
     return arr;
   }
 
-  // Partner's dataset from living collection, fallback to local healthDataSets
+  // Partner's dataset, strictly from what this piece can see. Null means "not
+  // discoverable yet" — callers defer rather than substituting baked data, which
+  // would invent an answer for a partner that may not even be inscribed.
   function lcGetPartnerDataset(partnerIdx) {
-    const found = lc.collectionDatasets.find(d => d.pieceIndex === partnerIdx);
-    if (found) return found.dataset;
-    if (partnerIdx >= 0 && partnerIdx < healthDataSets.length) return healthDataSets[partnerIdx];
-    return null;
+    return lcDatasetForPiece(partnerIdx);
   }
 
   // engineId = the inscription ID of the engine bundle currently running (from script src).
@@ -767,20 +782,9 @@ async function init() {
   // baked at module load and doesn't extend beyond the bundle).
   function recomputePartnerInheritedHue() {
     const p = getPartnerIndex(currentDataSetIndex);
-    if (p < 0) return;
-    if (p < healthDataSets.length) {
-      // Partner is in the bundle — baked value is correct, no recompute needed.
-      partnerInheritedHueDeg = allInheritedHues[p];
-      return;
-    }
-    const prevIdx = Math.max(0, p - 1);
-    const collection = lcEffectiveCollection();
-    const prevFromCollection = lc.collectionDatasets.find(d => d.pieceIndex === prevIdx);
-    const prevDs = prevFromCollection?.dataset
-      ?? (prevIdx < healthDataSets.length ? healthDataSets[prevIdx] : null);
-    if (prevDs) {
-      partnerInheritedHueDeg = computeHSBFromStats(prevDs, collection).hue * 360;
-    }
+    if (p < 0) return;                 // genesis has no partner
+    const hue = lcInheritedHueFor(p);  // null while the partner is undiscovered
+    if (hue !== null) partnerInheritedHueDeg = hue;
   }
 
   // Check if partner has also reached final cessation — trigger void if so
@@ -857,12 +861,10 @@ async function init() {
         await lcCheckVoid();
         return;
       }
-      // Partner dataset — guard against out-of-bounds baked array (for piece indices
-      // beyond the bundled count, the baked fallback is undefined and would crash
-      // blendDatasets). If neither living-collection nor in-bounds fallback yields
-      // a partner, defer reanimation to the next poll (sibling fetch may have lagged).
-      const partnerDs = lcGetPartnerDataset(partnerIdx)
-        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      // Partner dataset from the chain only. If the partner is not discoverable
+      // yet — sibling fetch lagged, or it is not inscribed — defer reanimation to
+      // the next poll rather than reanimating against invented data.
+      const partnerDs = lcGetPartnerDataset(partnerIdx);
       if (!partnerDs) {
         console.warn(`[lc] partner ${partnerIdx} not yet discoverable — deferring reanimation`);
         return;
@@ -905,8 +907,7 @@ async function init() {
     while (lc.currentBlockHeight >= lc.cessationBlock && !lc.isLiberated) {
       const partnerIdx = getPartnerIndex(currentDataSetIndex);
       if (partnerIdx < 0) { lc.isLiberated = true; break; }
-      const partnerDs = lcGetPartnerDataset(partnerIdx)
-        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      const partnerDs = lcGetPartnerDataset(partnerIdx);
       if (!partnerDs) {
         console.warn(`[lc] fast-forward: partner ${partnerIdx} not discoverable — stopping replay`);
         break;
@@ -1429,9 +1430,11 @@ async function init() {
 
     // Inherited color field — fades from full presence at birth toward 0 at end of life
     const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
+    // On chain the piece's own `hue` attribute is authoritative — inscribe.js
+    // always emits it. The live computation is the fallback, not a baked lookup.
     const inheritedHueDeg = inheritedHueDegOverride !== null
       ? inheritedHueDegOverride
-      : allInheritedHues[currentDataSetIndex];
+      : (lcInheritedHueFor(currentDataSetIndex) ?? 0);
     if (uInheritedHueDegLoc) gl.uniform1f(uInheritedHueDegLoc, inheritedHueDeg);
     if (uInheritedStrengthLoc) gl.uniform1f(uInheritedStrengthLoc, inheritedStrength);
     if (uReanimationProgressLoc) gl.uniform1f(uReanimationProgressLoc, reanimationProgress);

@@ -1889,9 +1889,11 @@ async function init() {
     }
   }
 
-  const allInheritedHues = healthDataSets.map((_, i) =>
-    computeHSBFromStats(healthDataSets[Math.max(0, i - 1)], healthDataSets).hue * 360
-  );
+  function lcInheritedHueFor(pieceIdx) {
+    const prev = lcDatasetForPiece(Math.max(0, pieceIdx - 1));
+    if (!prev) return null;
+    return computeHSBFromStats(prev, lcEffectiveCollection()).hue * 360;
+  }
 
   function getPartnerIndex(idx) {
     if (idx === 0) return -1;
@@ -1899,11 +1901,11 @@ async function init() {
   }
   function getPartnerInheritedHue(idx) {
     const p = getPartnerIndex(idx);
-    if (p < 0 || p >= healthDataSets.length) return 0;
-    return allInheritedHues[p];
+    if (p < 0) return 0;
+    return lcInheritedHueFor(p) ?? 0;
   }
 
-  let partnerInheritedHueDeg = getPartnerInheritedHue(currentDataSetIndex);
+  let partnerInheritedHueDeg = 0;
   let isLiberated = BAKED_IS_LIBERATED;
   let voidProgress = BAKED_VOID_PROGRESS;
   let __reanimationOverride = null;
@@ -1984,6 +1986,11 @@ async function init() {
     }
     return [...byIndex.values()].sort((a, b) => a.pieceIndex - b.pieceIndex);
   }
+
+  function lcDatasetForPiece(pieceIdx) {
+    const hit = _lcMergedEntries().find(e => e.pieceIndex === pieceIdx);
+    return hit ? hit.dataset : null;
+  }
   function lcEffectiveCollection() {
     return _lcMergedEntries().map(e => e.dataset);
   }
@@ -2003,10 +2010,7 @@ async function init() {
   }
 
   function lcGetPartnerDataset(partnerIdx) {
-    const found = lc.collectionDatasets.find(d => d.pieceIndex === partnerIdx);
-    if (found) return found.dataset;
-    if (partnerIdx >= 0 && partnerIdx < healthDataSets.length) return healthDataSets[partnerIdx];
-    return null;
+    return lcDatasetForPiece(partnerIdx);
   }
 
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
@@ -2091,19 +2095,8 @@ async function init() {
   function recomputePartnerInheritedHue() {
     const p = getPartnerIndex(currentDataSetIndex);
     if (p < 0) return;
-    if (p < healthDataSets.length) {
-
-      partnerInheritedHueDeg = allInheritedHues[p];
-      return;
-    }
-    const prevIdx = Math.max(0, p - 1);
-    const collection = lcEffectiveCollection();
-    const prevFromCollection = lc.collectionDatasets.find(d => d.pieceIndex === prevIdx);
-    const prevDs = prevFromCollection?.dataset
-      ?? (prevIdx < healthDataSets.length ? healthDataSets[prevIdx] : null);
-    if (prevDs) {
-      partnerInheritedHueDeg = computeHSBFromStats(prevDs, collection).hue * 360;
-    }
+    const hue = lcInheritedHueFor(p);
+    if (hue !== null) partnerInheritedHueDeg = hue;
   }
 
   async function lcIsPartnerLiberated(pd, pInscriptionHeight) {
@@ -2171,8 +2164,7 @@ async function init() {
         return;
       }
 
-      const partnerDs = lcGetPartnerDataset(partnerIdx)
-        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      const partnerDs = lcGetPartnerDataset(partnerIdx);
       if (!partnerDs) {
         console.warn(`[lc] partner ${partnerIdx} not yet discoverable — deferring reanimation`);
         return;
@@ -2212,8 +2204,7 @@ async function init() {
     while (lc.currentBlockHeight >= lc.cessationBlock && !lc.isLiberated) {
       const partnerIdx = getPartnerIndex(currentDataSetIndex);
       if (partnerIdx < 0) { lc.isLiberated = true; break; }
-      const partnerDs = lcGetPartnerDataset(partnerIdx)
-        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      const partnerDs = lcGetPartnerDataset(partnerIdx);
       if (!partnerDs) {
         console.warn(`[lc] fast-forward: partner ${partnerIdx} not discoverable — stopping replay`);
         break;
@@ -2604,9 +2595,10 @@ async function init() {
     if (uQrsTAnglePctLoc) gl.uniform1f(uQrsTAnglePctLoc, qrsTAnglePct);
 
     const inheritedStrength = Math.pow(Math.max(0, 1 - lifeFraction), 0.7);
+
     const inheritedHueDeg = inheritedHueDegOverride !== null
       ? inheritedHueDegOverride
-      : allInheritedHues[currentDataSetIndex];
+      : (lcInheritedHueFor(currentDataSetIndex) ?? 0);
     if (uInheritedHueDegLoc) gl.uniform1f(uInheritedHueDegLoc, inheritedHueDeg);
     if (uInheritedStrengthLoc) gl.uniform1f(uInheritedStrengthLoc, inheritedStrength);
     if (uReanimationProgressLoc) gl.uniform1f(uReanimationProgressLoc, reanimationProgress);
