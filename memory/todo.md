@@ -93,6 +93,25 @@ the moment it is typed in. It found that `ecgRanks` had the same hole as
 exists — `inscribe.js` stops at index 30 (loudly, pre-broadcast). When the next
 reading arrives, inscribe it on REGTEST first before mainnet.
 
+### NEXT SESSION — security review (raised 2026-09-13)
+Deliberately deferred, not forgotten. What was established while looking at something
+else:
+- Both `ord` and `ord-cold` are descriptor wallets with `private_keys_enabled: true`
+  and **no passphrase** — `ord-cold`'s 8 descriptors all carry an xprv. Files are
+  `-rw-------` on `/Volumes/Bitcoin/`, so they are readable by anything running as
+  this user, and spendable without a secret.
+- `ord-cold` is "cold" by convention: a separate wallet in the same Core instance on
+  the same machine, keys loaded. The separation is that carriers are locked and it is
+  not used for funding — not air-gapping.
+- **`ord2.sh` publishes `--bitcoin-rpc-username bitcoin --bitcoin-rpc-password bitcoin`
+  to a PUBLIC repo** (github.com/nyte-lyte/cessation, confirmed HTTP 200
+  unauthenticated). RPC binds to loopback only, so it is not remotely reachable — but
+  deleting the line will not purge git history; rotating the credential is the fix.
+  Cookie auth is already item §244 in this file.
+- Consequence worth stating plainly: any process running as this user — including this
+  assistant — can currently read those keys and spend. The constraint today is policy,
+  not architecture.
+
 ### Open decisions from this audit
 - ~~`reanimationTriggerMs` is never cleared.~~ **FIXED 2026-09-13.** lcTick now runs
   a symmetric arc — bloom 0->1, settle 1->0 — then clears the trigger, so the piece

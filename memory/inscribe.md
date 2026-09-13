@@ -484,6 +484,28 @@ child of the engine, so `/r/children/<engineId>` returns exactly the collection 
 nothing else. That is the durable identity, and it is already working — verified at
 31 pieces on regtest.
 
+## 7c. Where v3 goes — decided 2026-09-13
+
+**Pieces go to a fresh `ord` wallet, created for v3.** An external address was
+considered and dropped. The fresh wallet is reached with
+`ord wallet inscribe --destination <addr from the fresh wallet>`, so each piece lands
+there in its own reveal transaction, carrier and rare sat included — no separate
+transfer, nothing extra in flight.
+
+**The engine does NOT go with them, and this is not optional.** ord spends the engine
+as a parent input and re-creates it on every child inscription — verified on regtest,
+where the engine's satpoint is now piece 30's reveal tx (`7c8043bd…:0:0`). It has to
+stay in the wallet doing the inscribing, permanently, because every future piece needs
+it as `--parent`. Send the engine away and the collection can never grow again.
+
+So the run is: inscribe FROM the wallet holding the carriers and the engine, with
+`--destination` pointing at the fresh wallet. Engine stays behind.
+
+Not yet done: the fresh wallet does not exist. Create it at inscription time, not
+before — and note that a new Core wallet on this machine has the same key-exposure
+properties as the existing ones (see §7d, next session's work). What it buys is
+separation of the finished collection from the inscribing machinery, not isolation.
+
 ## 8. Pre-flight
 
 - [ ] External volume mounted; node synced; `pruned=false`
