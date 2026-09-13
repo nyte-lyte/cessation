@@ -1,36 +1,47 @@
 # Cessation — Project Memory
 
-## READ FIRST (session ending 2026-09-06)
-**Decision: re-inscribing the whole project on fresh sats, v3 engine only.** No fourth
-layer on the existing sats. The bar is "make sure everything works this time."
-- **Regtest rehearsal is DONE and passed** (2026-09-06) — engine + pieces 0–29, one
-  block each, all 30 verified in a real browser. Living collection confirmed working on
-  chain. Results: [testing.md](testing.md) → "Measured on chain".
-- **Two real bugs found and fixed the same day, neither inscribed yet:** the canvas
-  never scaled (300×200 at every viewport — 25% of the frame; live on mainnet right
-  now), and `build.js` was inscribing CSS comments. See [todo.md](todo.md) →
-  "Done this session (2026-09-06)".
-- **Mainnet measured at 27s to first paint**, largely because the ancestor walk pulls
-  all three stacked layers — 90 metadata fetches to render 30 pieces. Fresh sats plus
-  the HEAD fixes take this to ~64ms even under latency.
-- **Bitcoin Core upgraded to 31.1 (DONE 2026-09-06).** Core 30.0–30.3 broke ord's
-  recovery-key backup, which is why regtest needed `--no-backup`. **That flag is now
-  retired — never pass it.** Both wallets verified unchanged after the upgrade.
-- **Rare sats are destroyed by default settings.** ord cannot see that Omega or
-  Nakamoto-era sats are special and will spend them as fees or funding. Measured on
-  regtest: 577 of 907 burned in one inscription. **[inscribe.md](inscribe.md) is
-  mandatory reading before any mainnet inscription.**
-- Live on chain right now: **v2** (`4fe0114`). Repo HEAD is ahead and NOT inscribed.
-- `node test/scale.test.mjs` — 14,064 checks, must pass before anything is inscribed.
-- `node test/liberation_model.mjs` — design instrument for the liberation distribution.
-- **How to inscribe — the operational reference: [inscribe.md](inscribe.md).** Read it
-  before any mainnet inscription; it consolidates the rules that protect the rare sats.
-- Full state, what's done, and what's still undecided: [todo.md](todo.md).
-- What is and isn't verifiable, plus the blocking metadata gate: [testing.md](testing.md).
-- **Two decisions still open:** tail convergence, and whether `KARMA_CLEARANCE_K = 0.05`
-  should be data-derived rather than chosen. Both are cheap now, permanent later.
-- Terminology: **inscribing** is writing to chain (what the creator does); **minting**
-  is a collector claiming. `inscribe.js` builds the per-piece files and prints the ord command; it does not broadcast. Renamed from `mint.js` 2026-08-16.
+## READ FIRST (session ending 2026-09-12)
+**Decision: re-inscribing the whole project on fresh sats, v3 engine only.** Nothing is
+inscribed on mainnet yet — the creator's call is more verification first, and it keeps
+paying: four bugs found this session that no test suite caught.
+
+**THE ENGINE NOW CARRIES NO DATA.** Each piece holds its own dataset in CBOR metadata and
+discovers siblings on chain; the engine is pure code. Bundle 100,173 → 80,972 bytes.
+Plan and verification: [dataless_engine_plan.md](dataless_engine_plan.md).
+
+**Rare sats are ready.** 153 carriers peeled from the 907-sat Nakamoto range, **150
+consecutive** from `12425429610010`, all locked in `ord-cold`; `PIECE_CARRIERS` in
+`inscribe.js` is filled oldest-first. ~87,000 sats spent, nothing lost across ~310 mainnet
+transactions. [inscribe.md](inscribe.md) §8b is the operational state.
+
+**Bugs found and fixed this session** — every one caught by rendering or reading the chain,
+none by the 14,000-check harness:
+- **Canvas never scaled** — 300×200 at every viewport, 25% of the frame. Live on mainnet.
+- **ECG rankings frozen to a baked snapshot** — colour re-ranked with the chain, geometry
+  did not. Would have diverged at piece 31.
+- **Three "never draws"** — `lc` used before initialisation, `draw()` on an empty
+  collection, and a DEV helper reading an empty `minMaxValues`.
+- **A reanimated piece rendered a FLAT COLOUR** — the artwork vanished past first
+  cessation. Live in v1 and v2 too; it just needed 30 years to show. The shader keeps its
+  **own copy** of the lifecycle maths, so fixing timing in JS alone did nothing.
+  [testing.md](testing.md) → "AGE".
+- **Reanimation is reincarnation** (creator): each cycle is a new life and ages from zero,
+  block-native. Was pinned at `lifeFraction` 1.0 for ever.
+
+**Verified on regtest:** all 30 pieces minted one at a time on the dataless engine, every
+one reporting `collection resolved — 30 piece(s) on chain`; a piece at a sparse high index
+(the v1 failure case); the living collection moving existing pieces as siblings arrive; and
+the full lifecycle simulated to +600 years through 12 reanimation cycles to liberation and
+void.
+
+- Bitcoin Core is on **31.1** — `--no-backup` is retired, never pass it.
+- `node test/scale.test.mjs` — 14,033 checks. `node test/engine_purity.test.mjs` — 29.
+  Both must pass before anything is inscribed.
+- **How to inscribe, and the rules that protect the rare sats: [inscribe.md](inscribe.md).**
+- Full state and open decisions: [todo.md](todo.md). Evidence: [testing.md](testing.md).
+- Terminology: **inscribing** is writing to chain (what the creator does); **minting** is a
+  collector claiming. `inscribe.js` builds the per-piece files and prints the ord command;
+  it does not broadcast.
 
 ## What It Is
 Generative art project inscribed on the Bitcoin blockchain. Each piece is derived from a specific health data snapshot (one ECG/lab reading; 30 of them so far, 2018 onward). The subject has a rare cardiomyopathy. The art visualizes the lifecycle and disease progression of a human life.
