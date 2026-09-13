@@ -247,6 +247,34 @@ output must depend on what is passed in, not on what the engine was built with.
    - `computeHSBFromStats(dataSet, healthDataSets)`'s parameter renamed to `datasets`;
      it shadowed the import and read as if it used baked data.
 
+## Verified on chain — the v1 failure case and the living collection
+
+Regtest, dataless engine `0fd5b922…`, pieces inscribed as children of it.
+
+**A piece at a sparse high index — the case that broke v1.** Piece **45** inscribed when
+only 0, 1 and 2 existed, so the collection is `{0,1,2,45}` and own pieceIndex 45 sits at
+dense **position 3**. That mismatch between pieceIndex and position is precisely what v1
+got wrong.
+
+```
+piece 45: 345 draws, 0 errors, "[lc] collection resolved — 4 piece(s) on chain"  RENDERED
+```
+
+*(Regtest only: the metadata reuses a real existing reading rather than inventing health
+data. What is under test is the index path, not the numbers.)*
+
+**The living collection, proven visually.** Piece 0 rendered before and after piece 45 was
+inscribed — same piece, same engine, same everything except one sibling arriving:
+
+```
+piece 0 with 3 siblings  5e52558040939eb6
+piece 0 with 4 siblings  b975e9063ef8b198
+CHANGED — 380,919 of 810,000 pixels (47.0%), mean diff 19.64
+```
+
+A new inscription visibly moves every piece already on chain, with **no baked array
+anywhere in the engine**. That is the idea the project exists for, working end to end.
+
 ## Two more "never draws" caught by rendering, not by tests
 
 Both suites stayed green through both of these. Only the browser caught them — the same
