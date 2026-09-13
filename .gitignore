@@ -3,3 +3,4 @@ ord-env/regtest/
 node_modules/
 dist/
 peel_state.json
+data/rehearsal_datasets.js

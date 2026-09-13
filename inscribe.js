@@ -351,7 +351,49 @@ const setupFn = new Function(
   'scope_.blendDatasets = blendDatasets;\n'
 );
 setupFn(scope);
-const { healthDataSets, minMaxValues, computeKarma, computeLiberationThreshold, blendDatasets } = scope;
+const { minMaxValues, computeKarma, computeLiberationThreshold, blendDatasets } = scope;
+let { healthDataSets } = scope;
+
+// ── Rehearsal mode — REGTEST ONLY, and deliberately awkward to switch on ─────
+//
+// "How does the collection handle a new piece arriving on chain?" is a question
+// about the MECHANISM, not about the contents of a reading. Waiting for the next
+// real reading does not answer it either — after that piece you would be asking
+// the same thing about the one after. So the rehearsal has to be runnable now,
+// with a stand-in reading, on regtest.
+//
+// The hazard is obvious and this project has already been burned by its cousin:
+// a stand-in reading reaching mainnet would put invented health data on chain
+// permanently. Hence all of the following at once:
+//   - the readings live in data/rehearsal_datasets.js, which is gitignored
+//   - the env var must be the exact long string below, not a truthy value
+//   - every generated file is stamped, and the banner is impossible to miss
+//   - the appended readings carry `rehearsal: true` inside the dataset itself,
+//     so even the CBOR on a regtest chain says what it is
+const REHEARSAL_KEY = 'regtest-only-not-for-mainnet';
+const REHEARSAL = process.env.CESSATION_REHEARSAL === REHEARSAL_KEY;
+if (process.env.CESSATION_REHEARSAL && !REHEARSAL) {
+  console.error(`Error: CESSATION_REHEARSAL is set but not to the exact required value.`);
+  console.error(`  Expected: CESSATION_REHEARSAL=${REHEARSAL_KEY}`);
+  process.exit(1);
+}
+if (REHEARSAL) {
+  let extra = [];
+  try {
+    const extraSrc = loadStripped('./data/rehearsal_datasets.js');
+    const fn = new Function('s_', extraSrc + '\ns_.rehearsalDatasets = rehearsalDatasets;');
+    const s_ = {}; fn(s_); extra = s_.rehearsalDatasets || [];
+  } catch (e) {
+    console.error('Error: rehearsal mode needs data/rehearsal_datasets.js — ' + e.message);
+    process.exit(1);
+  }
+  healthDataSets = [...healthDataSets, ...extra.map(d => ({ ...d, rehearsal: true }))];
+  console.log('\n' + '!'.repeat(74));
+  console.log('!!  REHEARSAL MODE — REGTEST ONLY. NOT REAL HEALTH DATA.');
+  console.log(`!!  ${extra.length} stand-in reading(s) appended; collection is now ${healthDataSets.length}.`);
+  console.log('!!  These exist to exercise a new piece ARRIVING on chain. Never mainnet.');
+  console.log('!'.repeat(74));
+}
 
 if (pieceIndex >= healthDataSets.length) {
   console.error(`Error: pieceIndex ${pieceIndex} out of range — only ${healthDataSets.length} datasets in health_data_sets.js`);

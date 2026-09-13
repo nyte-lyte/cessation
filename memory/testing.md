@@ -1068,3 +1068,74 @@ silently skipped — the suite caught it, failing 5 of 14. If that symbol ever g
 missing from the bundle's scope, a collection renders as one piece with no error at
 all. Verified against the real regtest chain after the change: 30 pieces still
 resolve, 405 draws.
+
+
+## Growth past the collection — PROVEN ON CHAIN 2026-09-13, no new reading needed
+
+The correction that got here: *"waiting for the next dataset is still not the answer
+— if we add the next dataset to the existing ones we will be where we are now in
+terms of wondering how the collection handles new data coming on chain — we can
+figure that out without waiting."*
+
+Right on both counts. Rehearsing piece 31 would only raise the same question about
+32. And "how does the collection handle a new piece arriving on chain" is a question
+about the MECHANISM, not about the contents of a reading — so it never needed a real
+reading at all. Two sessions were spent treating "we don't fabricate data" as a
+blocker on a test that does not require data to be real.
+
+### Rehearsal mode
+
+`inscribe.js` gained a REGTEST-ONLY mode that appends stand-in readings from
+`data/rehearsal_datasets.js`. Deliberately awkward to switch on, because a stand-in
+reading reaching mainnet would put invented health data on chain permanently:
+
+- the file is **gitignored**
+- `CESSATION_REHEARSAL` must equal the exact string
+  `regtest-only-not-for-mainnet` — any other value is a hard error, not a fallthrough
+- a banner of `!` characters prints on every run
+- every appended dataset is stamped `rehearsal: true`, so even the CBOR on a regtest
+  chain says what it is
+
+The stand-in sits a quarter-spread past the current maximum on every field, so the
+ranges are guaranteed to widen and the shift is visible rather than marginal.
+
+### The measurement
+
+Piece 30 was inscribed onto the regtest chain that already held pieces 0–29
+(`7c8043bd…62f9i0`, anchor block 1014, confirmed 1015). Piece 0 was rendered against
+the real chain immediately before and after:
+
+    piece 0, collection-derived uniforms : 43
+    CHANGED when piece 30 arrived        : 36
+    unchanged                            : 7
+
+    u_prNorm      30 siblings: 0.9375   ->  31 siblings: 0.7500
+    u_qtcNorm     30 siblings: 0.7436   ->  31 siblings: 0.5949
+    u_co2Norm     30 siblings: 0.5714   ->  31 siblings: 0.4572
+    u_qrsNorm     30 siblings: 0.4546   ->  31 siblings: 0.3637
+    u_nitrogenRGB [0.780,0.293,0.078]   ->  [0.780,0.092,0.078]
+    u_sodiumRGB   [0.729,0.048,0.800]   ->  [0.591,0.048,0.800]
+
+Both render clean afterwards: piece 0 at 404 draws, the new piece 30 at 403, and
+every piece reports `collection resolved — 31 piece(s) on chain`.
+
+**This is the link that was missing.** Everything before it was either unit-tested
+maths (scale.test to 300 pieces) or discovery up to the collection's own size. This
+is a genuinely new piece, inscribed after the fact, moving the pieces already there —
+observed on a chain rather than argued from code.
+
+### Checked, not assumed
+
+Piece 30's baked `hue` came out `0.0000` where 27/28/29 were non-zero. That is
+correct, not a growth bug: inherited hue is the PREVIOUS piece's glucose percentile,
+piece 29's glucose is 89, and 89 is the collection minimum — percentile 0, hue 0°,
+piece 30 inherits red.
+
+### What this does and does not settle
+
+Settled: the mechanism. A new piece arrives, every existing piece discovers it and
+re-ranks, nothing throws, nothing goes non-finite.
+
+Not settled by this: that a specific FUTURE reading is well-formed. That is what the
+`inscribe.js` validity gate and `any_reading.test.mjs` cover instead — and they are
+generic, so they do not need re-running per reading.
