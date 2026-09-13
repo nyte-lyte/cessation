@@ -75,7 +75,7 @@ New rare sats are being purchased specifically for this fresh re-inscription and
 ## Cold wallet — `ord-cold`  ⭐ holds the new rare sats
 - Bitcoin Core wallet `ord-cold` at `/Volumes/Bitcoin/Bitcoin/ord-cold/wallet.dat`.
 - **Purpose: cold storage for the newly-bought rare sats for the re-inscription.** Each of its
-  UTXOs is a rare sat. Keep sats here until inscription time, then transfer the needed one to `ord`.
+  UTXOs is a rare sat. Keep sats here until inscription time, then transfer the needed one to the **fresh v3 wallet** — NOT `ord`, which holds v1/v2 (inscribe.md §7c).
 - As of 2026-08-13: 8 UTXOs / 4,081 sats. **Contents confirmed via `ord list` + `ord traits`
   (2026-08-13):** 7 Omega black uncommons + 1 Nakamoto-era range. In each carrier UTXO the
   **rare sat sits at offset 0** (first sat of the UTXO); the rest is common padding.

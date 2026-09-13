@@ -19,7 +19,7 @@ experiments behind these rules, [todo.md](todo.md) for what is still undecided.
 | ord | 0.27.1, data dir `/Volumes/Bitcoin/Ord` (`index.redb` ~164 GiB + three 2024 `.old` copies) |
 | ord wrapper | `ord2.sh` — mainnet RPC + that data dir + `--index-sats` |
 | Hot wallet | `ord` — the inscribing wallet, fee sats + carriers |
-| Cold wallet | `ord-cold` — the rare sats, moved to `ord` one at a time |
+| Cold wallet | `ord-cold` — the rare sats, moved to the **fresh v3 wallet** one at a time (§7c) |
 
 ```
 bitcoind -datadir=/Volumes/Bitcoin/Bitcoin -daemon
@@ -163,7 +163,8 @@ non-persistent lock evaporates on the first one and silently returns the rare sa
 the spendable pool.
 
 **A lock is the second line of defence, not the first.** Keep carriers in `ord-cold`,
-a wallet never used to fund anything, and move exactly one to `ord` at inscription time.
+a wallet never used to fund anything, and move exactly one to the inscribing wallet at
+inscription time — for v3 that is the fresh wallet, not `ord` (§7c).
 The lock protects against a mistake inside the hot wallet; the wallet separation protects
 against the lock being lost.
 
@@ -210,7 +211,7 @@ curl -s -H 'Accept: application/json' http://<ord>/output/<txid>:<vout>
 
 | shape | which | behaviour |
 |---|---|---|
-| **1 rare sat at offset 0 + common padding** | the 7 Omega carriers (546/546/546/546/330/330/330) | fees come off the end of the stream and eat padding. The rare sat survives. **This is the shape the v1/v2 inscription run used throughout, and the one-at-a-time cold→hot workflow is correct for it.** |
+| **1 rare sat at offset 0 + common padding** | the 7 Omega carriers (546/546/546/546/330/330/330) | fees come off the end of the stream and eat padding. The rare sat survives. **This is the shape the v1/v2 inscription run used throughout, and the one-at-a-time cold→inscribing-wallet workflow is correct for it.** |
 | **entirely rare, no padding** | the Nakamoto 907-sat range | nothing but rare sats exists for a fee to come from, so **every fee burns Nakamoto sats**. Measured: `ord wallet send` on it cost 111 rare sats in transfer fees alone. |
 
 The all-rare range is the genuinely new case — v1/v2 never had one; its Nakamoto sat sat
@@ -385,16 +386,23 @@ For each piece, in order, one block apart:
 
 1. **Read the block** you are anchoring to — height, hash, timestamp.
 2. **Unlock only this carrier**; everything else stays locked.
-3. **Move it** from `ord-cold` to `ord` if it is not already there.
+3. **Move it** from `ord-cold` to the **fresh v3 wallet** (NOT `ord` — that holds v1/v2;
+   see §7c). `ord wallet send --fee-rate <R> --postage 330sat <fresh-addr> <txid>:<vout>:0`
+   — `--postage` matching the carrier is mandatory (330 peeled / 546 Omega). Measured:
+   omitting it inflates the carrier to 10,000 sats. Never have two carriers in the
+   fresh wallet at once; that is the safety property, not a habit (§7c).
 4. `node inscribe.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>` — from the
    repo root, so paths stay relative (`/Users/<name>/…` leaks identity onto chain).
 5. **Read the metadata before broadcasting** — see §7. Blocking.
-6. Run the printed `ord wallet inscribe` command. It carries `--sat` and `--postage`
+6. Run the printed `ord wallet inscribe` command **from the fresh v3 wallet**
+   (`ord wallet --name <v3wallet> inscribe …`). It carries `--sat` and `--postage`
    already; do not drop either. No `--no-backup`.
 7. **Wait for confirmation**, then account for every rare sat (§3.6).
 8. Re-lock, and read the *new* block before starting the next piece.
 
-The engine is inscribed by hand, once, before any piece:
+The engine is inscribed by hand, once, before any piece — **into the fresh v3 wallet,
+where it must then stay for the life of the collection**, because ord spends and
+re-creates it as the parent of every child (§7c):
 
 ```
 ord wallet inscribe --fee-rate <R> --sat 1459982499999999 \
@@ -623,7 +631,7 @@ and only then continue.** One piece at risk instead of thirty-one.
 ### Operational gotchas found 2026-09-12
 
 - **ord cannot use the `ord-cold` wallet** — *"contains unexpected output descriptors, and
-  does not appear to be an `ord` wallet"*. Carriers must be moved to `ord` before
+  does not appear to be an `ord` wallet"*. Carriers must be moved to the inscribing wallet before
   inscribing. This matches [wallets.md](wallets.md)'s one-at-a-time workflow, but it is a
   hard refusal, not a preference.
 - **`ord2.sh` lacks `--server-url`**, so `ord wallet` commands hunt for a server on port

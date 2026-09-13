@@ -292,7 +292,7 @@ Consequences accepted deliberately:
   traces in [testing.md](testing.md).
   - **The distinction that matters: two UTXO shapes.** The 7 Omega carriers are
     *1 rare sat at offset 0 + common padding*, so fees eat padding and the rare sat
-    survives — the existing one-at-a-time cold→hot workflow is correct for those. The
+    survives — the existing one-at-a-time cold→inscribing-wallet workflow is correct for those. The
     Nakamoto UTXO is *entirely rare, no padding*, so every fee burns Nakamoto sats.
     Measured: `ord wallet send` on it cost **111 rare sats in transfer fees alone**,
     before any inscription. Do not assume the established procedure covers it.
@@ -329,7 +329,7 @@ Consequences accepted deliberately:
   - Verified: each Omega sat number equals the last sat of its block computed from the
     subsidy schedule, and the range lies inside block 2485.
   - **The real backstop is ord itself** — the printed command carries `--sat`, and ord
-    fails if that sat is not in the wallet. Move the sat from `ord-cold` to `ord` first;
+    fails if that sat is not in the wallet. Move the sat from `ord-cold` to the fresh v3 wallet first (§7c, NOT `ord`);
     if ord cannot find it, stop rather than dropping the flag.
 
 - **~~Only 8 rare sats held; 31 needed~~ — WRONG, retracted 2026-09-06.** That counted

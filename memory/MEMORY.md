@@ -217,7 +217,7 @@ Full details in `memory/nirvana.md`.
 Full details in `memory/wallets.md`. Verified live 2026-08-13.
 - Mainnet node data dir: `/Volumes/Bitcoin/Bitcoin` (external volume). RPC bitcoin/bitcoin.
 - **Hot wallet `ord`** (`/Volumes/Bitcoin/Bitcoin/ord/`) — the inscribing wallet: fees + carriers.
-- **Cold wallet `ord-cold`** (`/Volumes/Bitcoin/Bitcoin/ord-cold/`) — holds the newly-bought rare sats for the re-inscription. Move a sat to `ord` only at inscription time.
+- **Cold wallet `ord-cold`** (`/Volumes/Bitcoin/Bitcoin/ord-cold/`) — holds the newly-bought rare sats for the re-inscription. Move a sat to the **fresh v3 wallet** only at inscription time — NOT to `ord`, which holds v1/v2. See inscribe.md §7c.
 - **UniSat wallet is deprecated — not used going forward.**
 
 ## Inscription Architecture

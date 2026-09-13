@@ -281,7 +281,7 @@ Every bug that has shipped so far lived in one of these three gaps. See
    passed a re-inscription straight onto already-stacked sats). Now `satForPiece(index)` returns
    `12425429610010 + index` from the 907-sat Nakamoto range, bounded at `…610916`, and
    refuses the engine's sat. Confirm the range still matches what `ord-cold` holds
-   ([wallets.md](wallets.md)) and that the sat has been moved to `ord` before inscribing —
+   ([wallets.md](wallets.md)) and that the sat has been moved to the inscribing wallet before inscribing —
    **ord fails if `--sat` is not in the wallet, which is the real backstop.**
 
 5b. **There are two Bitcoin datadirs on this machine. Use the right one.**
@@ -380,7 +380,7 @@ holding. `ord-cold` actually holds two different shapes, and they behave differe
 
 | shape | UTXOs | fee behaviour |
 |---|---|---|
-| **1 rare sat at offset 0 + common padding** | the 7 Omega carriers (546/546/546/546/330/330/330) | fees come from the **end** of the stream, so they eat padding. The rare sat at offset 0 is untouched. **Safe** — this is why the one-at-a-time cold→hot workflow has worked. |
+| **1 rare sat at offset 0 + common padding** | the 7 Omega carriers (546/546/546/546/330/330/330) | fees come from the **end** of the stream, so they eat padding. The rare sat at offset 0 is untouched. **Safe** — this is why the one-at-a-time cold→inscribing-wallet workflow has worked. |
 | **entirely rare, no padding** | the Nakamoto 907-sat range | there is nothing but rare sats for a fee to come from, so **every fee burns Nakamoto sats** |
 
 Measured: moving the all-rare 907-sat UTXO with `ord wallet send` cost **111 rare sats**
