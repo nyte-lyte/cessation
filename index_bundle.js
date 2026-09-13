@@ -872,10 +872,28 @@ function resizeCanvasToDisplaySize(canvas) {
 
 async function init() {
 
+  var _rafPending = false;
+  function scheduleDraw() {
+    if (_rafPending) return;
+    _rafPending = true;
+    requestAnimationFrame(() => {
+      _rafPending = false;
+      try {
+        draw();
+      } catch (e) {
+        if (!scheduleDraw._logged) {
+          scheduleDraw._logged = true;
+          console.error('[draw] threw — recovering, loop continues', e);
+        }
+        scheduleDraw();
+      }
+    });
+  }
+
   resizeCanvasToDisplaySize(canvas);
   window.addEventListener("resize", () => {
     resizeCanvasToDisplaySize(canvas);
-    draw();
+    scheduleDraw();
   });
 
   const vertexSrc   = _vertSrc;
@@ -1145,24 +1163,32 @@ async function init() {
   async function lcRefreshSiblings() {
     if (!lc.collectionAncestors || lc.collectionAncestors.length === 0) return;
     const fetched = [];
+
+    let incomplete = false;
+
+    const MAX_PAGES = 100;
     for (const ancestor of [...lc.collectionAncestors].reverse()) {
       let page = 0, more = true;
-      while (more) {
+      while (more && page < MAX_PAGES) {
         let resp;
         try { resp = await fetch(`/r/children/${ancestor}/inscriptions/${page}`).then(r => r.json()); }
-        catch (e) { break; }
+        catch (e) { incomplete = true; break; }
         const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
 
         for (let i = 0; i < childIds.length; i += SIBLING_FETCH_BATCH) {
           const batch = childIds.slice(i, i + SIBLING_FETCH_BATCH);
+
           const results = await Promise.all(batch.map(id =>
             fetch(`/r/metadata/${id}`)
-              .then(r => r.json())
-              .then(hex => ({ id, hex }))
+              .then(r => {
+                if (r.status === 404) return { id, hex: null };
+                if (!r.ok) return null;
+                return r.json().then(hex => ({ id, hex }));
+              })
               .catch(() => null)
           ));
           for (const res of results) {
-            if (!res) continue;
+            if (!res) { incomplete = true; continue; }
             const { id, hex } = res;
             if (!hex || typeof hex !== 'string' || !hex.trim()) continue;
             try {
@@ -1183,13 +1209,17 @@ async function init() {
         page++;
       }
     }
-    if (fetched.length > 0) {
+
+    const have = lc.collectionDatasets.length;
+    if (fetched.length > 0 && (!incomplete || fetched.length > have)) {
       lc.collectionDatasets = fetched;
 
-      lc.collectionResolved = true;
+      if (!incomplete) lc.collectionResolved = true;
       refreshMinMaxValues(lcEffectiveCollection());
       recomputePartnerInheritedHue();
-      console.log(`[lc] collection resolved — ${fetched.length} piece(s) on chain`);
+      console.log(`[lc] collection resolved — ${fetched.length} piece(s) on chain${incomplete ? ' (partial — some children unreadable, will retry)' : ''}`);
+    } else if (incomplete) {
+      console.warn(`[lc] refresh incomplete — read ${fetched.length} of at least ${have}; keeping the collection already resolved`);
     }
   }
 
@@ -1301,7 +1331,10 @@ async function init() {
 
     if (lc.isLiberated && lc.voidTriggerMs === null) await lcCheckVoid();
 
-    if (++lc._siblingPollCount % 10 === 0) lcRefreshSiblings().catch(() => {});
+    lc._siblingPollCount++;
+    if (!lc.collectionResolved || lc._siblingPollCount % 10 === 0) {
+      lcRefreshSiblings().catch(() => {});
+    }
   }
 
   async function lcFastForward() {
@@ -1629,6 +1662,7 @@ async function init() {
 
     if (!drawCollection.length) {
       gl.clear(gl.COLOR_BUFFER_BIT);
+      scheduleDraw();
       return;
     }
 
@@ -1769,7 +1803,7 @@ async function init() {
     if (uBunCreatRatioNormLoc) gl.uniform1f(uBunCreatRatioNormLoc, bunCreatRatioNorm);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-    requestAnimationFrame(draw);
+    scheduleDraw();
   }
 
   gl.clearColor(0, 0, 0, 1);
@@ -1778,7 +1812,8 @@ async function init() {
     const lifecycle = initLifecycle().catch(() => {});
     await Promise.race([lc.ownDataReady, lifecycle]);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    draw();
+
+    scheduleDraw();
   })();
 
 }

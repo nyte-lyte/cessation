@@ -317,11 +317,49 @@ function resizeCanvasToDisplaySize(canvas) {
 
 // once everything is ready, initialize WebGL
 async function init() {
+  // EXACTLY ONE render loop, however many times draw() is asked for.
+  //
+  // draw() ends by scheduling the next frame, so every direct call to draw()
+  // used to start ANOTHER self-sustaining loop alongside the one already
+  // running. The resize handler called draw() on every event — and a browser
+  // fires resize continuously while a window is dragged — so a single drag
+  // permanently multiplied the piece's frame rate. Measured on the pre-fix
+  // engine: 60 draws/sec at rest, 441/sec after 20 synthetic resize events,
+  // 497/sec after 70, never recovering. In a gallery of live iframes that is
+  // the difference between idling and pegging the GPU.
+  //
+  // scheduleDraw() collapses any number of requests into one pending frame, so
+  // the loop cannot fork no matter who calls it.
+  //
+  // It is also the one place a thrown frame can be caught. draw() schedules the
+  // next frame as its LAST statement, so anything that throws part-way through
+  // skips it and the piece is black for ever — the engine's own note calls that
+  // "how v1 failed". Catching here and re-scheduling means a transient fault
+  // (a lost WebGL context, a half-written dataset) costs one frame instead of
+  // the piece. The engine is immutable once inscribed; it has to survive its own
+  // bad frames.
+  var _rafPending = false;
+  function scheduleDraw() {
+    if (_rafPending) return;
+    _rafPending = true;
+    requestAnimationFrame(() => {
+      _rafPending = false;
+      try {
+        draw();          // re-arms the loop itself on success
+      } catch (e) {
+        if (!scheduleDraw._logged) {
+          scheduleDraw._logged = true;
+          console.error('[draw] threw — recovering, loop continues', e);
+        }
+        scheduleDraw();  // the tail call was skipped, so re-arm here
+      }
+    });
+  }
   // resize canvas right away, then whenever the window changes:
   resizeCanvasToDisplaySize(canvas);
   window.addEventListener("resize", () => {
     resizeCanvasToDisplaySize(canvas);
-    draw();
+    scheduleDraw();
   });
 
   // load and compile shaders:
@@ -757,12 +795,23 @@ async function init() {
   async function lcRefreshSiblings() {
     if (!lc.collectionAncestors || lc.collectionAncestors.length === 0) return;
     const fetched = [];
+    // A refresh is only trustworthy if EVERY discovered child answered definitively.
+    // See the commit guard at the end of this function for why a partial answer
+    // must be thrown away rather than rendered.
+    let incomplete = false;
+    // MAX_PAGES bounds the walk. ord pages children 100 at a time and sets `more`
+    // itself, so a healthy chain ends this loop long before the cap — 100 pages is
+    // 10,000 pieces, which this collection will not reach in the artist's lifetime.
+    // The cap exists because the engine is immutable: a gateway that answered
+    // `more: true` for ever would otherwise spin requests for ever, with no way to
+    // ship a fix to a piece already on chain.
+    const MAX_PAGES = 100;
     for (const ancestor of [...lc.collectionAncestors].reverse()) {
       let page = 0, more = true;
-      while (more) {
+      while (more && page < MAX_PAGES) {
         let resp;
         try { resp = await fetch(`/r/children/${ancestor}/inscriptions/${page}`).then(r => r.json()); }
-        catch (e) { break; }
+        catch (e) { incomplete = true; break; }
         const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
         // Fetched in batches rather than one at a time: serially, a collection of
         // N pieces cost N round trips before anything else could proceed, which
@@ -773,14 +822,24 @@ async function init() {
         // hundreds of sockets at once.
         for (let i = 0; i < childIds.length; i += SIBLING_FETCH_BATCH) {
           const batch = childIds.slice(i, i + SIBLING_FETCH_BATCH);
+          // 200 → this child has metadata. 404 → it definitively has none, which
+          // is the normal answer for the engine inscription and any other non-piece
+          // child; that is a complete answer, not a failure. Anything else, or a
+          // thrown request, is a transport failure: the child may well be a piece
+          // we simply could not read. Those two cases used to be collapsed into
+          // the same `null` by a bare .catch(), which is what let a flaky gateway
+          // silently shrink the collection.
           const results = await Promise.all(batch.map(id =>
             fetch(`/r/metadata/${id}`)
-              .then(r => r.json())
-              .then(hex => ({ id, hex }))
+              .then(r => {
+                if (r.status === 404) return { id, hex: null };
+                if (!r.ok) return null;
+                return r.json().then(hex => ({ id, hex }));
+              })
               .catch(() => null)
           ));
           for (const res of results) {
-            if (!res) continue;
+            if (!res) { incomplete = true; continue; }
             const { id, hex } = res;
             if (!hex || typeof hex !== 'string' || !hex.trim()) continue;
             try {
@@ -801,15 +860,28 @@ async function init() {
         page++;
       }
     }
-    if (fetched.length > 0) {
+    // Every ranking the piece renders — percentiles, min/max ranges, karma, hue —
+    // is computed across the WHOLE collection. So a refresh that silently dropped
+    // pieces does not render "slightly stale": it re-ranks everything against a
+    // collection that never existed, and the piece looks wrong until the next
+    // refresh ten minutes later. A gateway hiccup must never be able to do that.
+    //
+    // A complete refresh is authoritative and always commits — the collection is
+    // allowed to shrink for real reasons. An incomplete one commits only if it is
+    // still an improvement on what we hold, which matters at boot: 25 of 30 pieces
+    // beats rendering as a collection of one while the fetch is retried.
+    const have = lc.collectionDatasets.length;
+    if (fetched.length > 0 && (!incomplete || fetched.length > have)) {
       lc.collectionDatasets = fetched;
       // Discovery succeeded: from here the collection is strictly what is on chain.
       // Set before refreshing min/max so those are computed from the live set, not
       // the baked one.
-      lc.collectionResolved = true;
+      if (!incomplete) lc.collectionResolved = true;
       refreshMinMaxValues(lcEffectiveCollection());
       recomputePartnerInheritedHue();
-      console.log(`[lc] collection resolved — ${fetched.length} piece(s) on chain`);
+      console.log(`[lc] collection resolved — ${fetched.length} piece(s) on chain${incomplete ? ' (partial — some children unreadable, will retry)' : ''}`);
+    } else if (incomplete) {
+      console.warn(`[lc] refresh incomplete — read ${fetched.length} of at least ${have}; keeping the collection already resolved`);
     }
   }
 
@@ -938,7 +1010,16 @@ async function init() {
 
     if (lc.isLiberated && lc.voidTriggerMs === null) await lcCheckVoid();
 
-    if (++lc._siblingPollCount % 10 === 0) lcRefreshSiblings().catch(() => {});
+    // Once resolved, a ten-minute cadence is plenty — new siblings arrive every
+    // few months. But while the collection is still UNRESOLVED the piece may be
+    // rendering on partial data, or on nothing at all if its own metadata fetch
+    // was the request that failed. Ten minutes of black waiting on the next
+    // scheduled refresh is not acceptable when a retry costs one request, so
+    // retry every poll until the chain answers completely.
+    lc._siblingPollCount++;
+    if (!lc.collectionResolved || lc._siblingPollCount % 10 === 0) {
+      lcRefreshSiblings().catch(() => {});
+    }
   }
 
   // Fast-forward through past cycles on first load (handles pieces loaded years after mint)
@@ -1413,10 +1494,19 @@ async function init() {
     // NOTHING TO DRAW YET. With no baked array the collection is empty until this
     // piece's own CBOR metadata lands, and every step below dereferences a dataset.
     // Bail on a clear frame rather than throwing: a piece that throws in draw()
-    // never renders again, which is how v1 failed. lcPoll/initLifecycle call
-    // draw() again once data arrives.
+    // never renders again, which is how v1 failed.
+    //
+    // KEEP THE LOOP ALIVE. This used to `return` outright, on the assumption that
+    // something would call draw() again once data arrived. Nothing does — the only
+    // other callers are the boot one-shot, a resize handler, and dev helpers. So a
+    // single failed /r/metadata/<ownId> at boot released ownDataReady early, this
+    // frame found an empty collection, the loop was never re-armed, and the piece
+    // stayed black FOR EVER even though its siblings resolved a second later. Only
+    // resizing the window brought it back. Re-arming costs one idle frame and makes
+    // the piece recover by itself from any transient gateway failure.
     if (!drawCollection.length) {
       gl.clear(gl.COLOR_BUFFER_BIT);
+      scheduleDraw();
       return;
     }
     // minMaxValues is derived, not imported — populate it before anything reads it.
@@ -1584,7 +1674,7 @@ async function init() {
     if (uBunCreatRatioNormLoc) gl.uniform1f(uBunCreatRatioNormLoc, bunCreatRatioNorm);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-    requestAnimationFrame(draw);
+    scheduleDraw();
   }
 
   gl.clearColor(0, 0, 0, 1);
@@ -1606,7 +1696,9 @@ async function init() {
     const lifecycle = initLifecycle().catch(() => {});
     await Promise.race([lc.ownDataReady, lifecycle]);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    draw();
+    // Through scheduleDraw, not draw(), so the very first frame is inside the
+    // guard too — a throw on frame one must not be the one that kills the loop.
+    scheduleDraw();
   })();
 
   // DEV_START

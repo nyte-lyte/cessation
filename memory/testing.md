@@ -715,3 +715,133 @@ Aesthetics — a harness proves `u_glucose` is stable, deterministic, and in ran
 and says nothing about whether the piece looks right. And intent bugs: the wrong
 inherited hue was a valid number produced by working code, and needed a human who
 knew piece N should inherit N-1.
+
+---
+
+# Fine-tooth-comb engine audit (2026-09-12)
+
+Run against the dataless engine before re-inscription, on the premise that the
+bugs worth finding are the ones green test suites had already missed. Four of the
+five real findings were invisible to 14,000+ passing checks and only appeared when
+something was made to FAIL.
+
+## Method
+
+Two things did the work, and neither was line-by-line reading:
+
+1. **Hunt the pattern, not the line.** Today's known bugs all had the same shape —
+   one quantity computed in two places with only one copy fixed. So: enumerate
+   every quantity named in both `main.js` and `fragment.glsl`, every `u_time`
+   coefficient, every early `return`, every division.
+2. **Break it on purpose.** A proxy in front of ord that injects HTTP failures.
+   Everything rendered fine until a single request was made to fail — then two
+   serious bugs fell out immediately.
+
+## Findings
+
+### 1. One failed `/r/metadata/<ownId>` at boot → permanently black piece  (FIXED)
+The highest-severity finding. `draw()` schedules the next frame as its LAST
+statement. The empty-collection guard `return`ed before it, on a comment's
+assumption that "lcPoll/initLifecycle call draw() again once data arrives" —
+nothing does. The only other callers are the boot one-shot, a resize handler and
+dev helpers.
+
+Boot releases `ownDataReady` in a `finally`, so a failed own-metadata fetch
+releases the first frame EARLY, before siblings resolve. That frame found an empty
+collection, returned, and the loop was never re-armed. The collection resolved a
+second later to no effect. Only resizing the window brought the piece back.
+
+Measured: 406 draws in 7s healthy; **0 draws with one injected 503**. After the
+fix, 403. Present in the pre-fix engine too — not introduced by this work.
+
+### 2. Every window resize forked another render loop  (FIXED)
+`draw()` re-arms itself, and the resize handler called `draw()` directly, so each
+resize event started a second self-sustaining loop. Browsers fire resize
+continuously during a drag.
+
+Measured on the pre-fix engine: 60 draws/sec at rest → **441/sec after 20 resize
+events → 497/sec after 70**, never recovering. This is live on v1 and v2 on
+mainnet right now. Fixed by `scheduleDraw()`, which collapses any number of
+requests into one pending frame. After: a flat 60/sec however many resizes.
+
+### 3. A flaky gateway could silently re-rank the whole collection  (FIXED)
+`fetch(...).then(r => r.json()).catch(() => null)` collapsed two different answers
+into one: a 404 ("this child genuinely has no metadata" — the normal answer for
+the engine inscription) and a transport failure ("this child may be a piece we
+could not read"). Unreadable children were dropped and `lc.collectionDatasets`
+was overwritten with the short list.
+
+Every percentile, min/max range, karma value and hue is computed across the WHOLE
+collection, so this does not render "slightly stale" — it re-ranks everything
+against a collection that never existed, until the next refresh ten minutes later.
+Now 404 and failure are distinguished, and an incomplete refresh commits only if
+it is an improvement. Covered by `test/refresh_integrity.test.mjs` (14 checks),
+which fails 7/14 against the pre-fix engine.
+
+### 4. Only retry was ten minutes away  (FIXED)
+Sibling refresh ran every 10th poll unconditionally. Now every poll while the
+collection is unresolved, backing off to every 10th once it is.
+
+### 5. A thrown frame killed the piece for ever  (FIXED — hardening)
+The engine's own comment says "a piece that throws in draw() never renders again,
+which is how v1 failed", and nothing guarded it. `scheduleDraw()` now catches and
+re-arms, so a transient fault costs one frame instead of the piece. The engine is
+immutable once inscribed; it has to survive its own bad frames.
+
+Also bounded the child-pagination `while (more)` loop at 100 pages, for the same
+immutability reason.
+
+## Checked and CLEAN — do not re-audit without a reason
+
+- **`u_time` wrap.** `U_TIME_WRAP = 200π`. All 53 uses are `u_time * <2-decimal
+  literal>`, and 200π × k/100 is always an exact multiple of 2π, so the 628.3s wrap
+  produces no phase jump. A 3-decimal coefficient would break this — keep them at
+  two decimals.
+- **CBOR decoder.** All 30 real datasets round-tripped through the engine's exact
+  `cborDecode`, under both float64 and smallest-float (f16/f32) encodings: 60/60
+  byte-exact. Also verified against real on-chain metadata via regtest ord.
+- **Metadata identity gate.** All 30 files: exactly four top-level keys
+  (`pieceIndex`, `hashTail`, `inscriptionUnix`, `dataset`), no identity-bearing key
+  or string value anywhere in the tree.
+- **Bundle.** Rebuild is byte-identical to the committed one; no `healthDataSets`,
+  no baked readings, no identity strings.
+- **Divide-by-zero / NaN.** `normalize()` returns 0.5 when max===min, `percentile()`
+  returns 0.5 below 2 elements. The boot-with-one-piece path (where min===max for
+  every field) is therefore safe.
+- **`lcPoll` re-entrancy.** Every guard flag (`isLiberated`, `reanimationTriggerMs`)
+  is set synchronously before the first `await`, so overlapping polls cannot
+  double-trigger reanimation. Careful code; leave it alone.
+- **`ownDataReady`.** Released on the normal path AND in a `finally`, so boot can
+  never hang.
+- **Block-driven age sweep, 0→600 years** (`agesweep.mjs` through `timeproxy.mjs`):
+  14/14 ages clean through 12 reincarnation cycles — every uniform finite and in
+  declared range, never a flat frame, always moving.
+
+## Known and deliberately NOT fixed
+
+- **`lc.reanimationTriggerMs` is set once and never cleared.** After a live
+  reanimation, `u_reanimationProgress` latches at 1.0, so `lifeRestores` pins
+  `finalColor = rgbColor` and the piece stops aging for the rest of that cycle;
+  the `=== null` guard also blocks any SECOND live reanimation. Real, but it needs
+  a tab left open across two full lifespans — minimum lifespan is 3 years, median
+  ~42. Every page load replays history through `lcFastForward` with the trigger
+  null, so a fresh viewer is always correct. Measured visual difference mid-cycle:
+  mean 5.4/255, max 58. Fixing it means deciding what happens at the moment the
+  flourish ends, which changes rendering — not worth the risk unprompted.
+- **7 dead uniforms** — `u_nitrogenHueDeg`, `u_creatinineHueDeg`, `u_sodiumHueDeg`,
+  `u_chlorideHueDeg`, `u_co2HueDeg`, `u_calciumHueDeg`, `u_partnerInheritedHueDeg`.
+  Declared in GLSL, computed and uploaded every frame by JS, never read by the
+  shader — the RGB uniforms superseded them. ~228 bytes. Harmless, removable.
+- **`ensureMinMax._for` / `ecgRanks._for` caches never hit**, because
+  `lcEffectiveCollection()` returns a fresh array each call. Measured cost at
+  N=300: 0.05 ms/frame, 0.3% of a 60fps budget. Dead code, not a defect.
+
+## New rig, kept in the scratchpad
+
+- `enginproxy.mjs` — serves the freshly built LOCAL bundle in place of the
+  on-chain engine (`ENGINE_ID` + `LOCAL_ENGINE`), so an engine change can be
+  rendered against the real chain WITHOUT re-inscribing. Also injects metadata
+  failures (`FAIL_META=n` fails the first n `/r/metadata` requests — note the
+  counter is per proxy process, so restart it between runs).
+- The lesson worth keeping: **the suites were green through all five findings.**
+  Rendering in a browser caught the first two; injecting failures caught the rest.

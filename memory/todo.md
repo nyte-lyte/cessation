@@ -10,6 +10,33 @@ the existing sats. One inscription per sat, clean parent chain, no legacy ancest
 The bar is "make sure everything works this time" — two previous attempts failed and
 one of them put a real name on chain permanently.
 
+## Engine audit 2026-09-12 — five bugs found and fixed
+
+Full detail in [[testing]] under "Fine-tooth-comb engine audit". All five were
+invisible to 14,000+ passing checks; two needed a browser, three needed injected
+failures. Suites green after: 29 purity + 14,033 scale + 14 refresh-integrity.
+
+1. **One failed `/r/metadata/<ownId>` at boot left the piece permanently black.**
+   The empty-collection guard returned without re-arming the render loop. Measured
+   0 draws vs 406 healthy. Pre-existing.
+2. **Every window resize forked another render loop** — 60 draws/sec → 497/sec
+   after 70 resize events, never recovering. **This is live on v1 and v2 right now.**
+3. **A flaky gateway could silently re-rank the whole collection** — a 404 and a
+   transport failure were collapsed into the same `null`, so unreadable children
+   were dropped and the short list committed.
+4. **Only retry was ten minutes away** — now retries every poll while unresolved.
+5. **A thrown frame killed the piece for ever** — the v1 failure mode the engine's
+   own comment describes, previously unguarded.
+
+### Open decisions from this audit
+- **`reanimationTriggerMs` is never cleared.** After a live reanimation the piece
+  stops aging for the rest of that cycle and cannot reanimate a second time. Needs a
+  tab open across two full lifespans (min 3 years, median ~42) so effectively
+  unreachable, and every page load replays correctly. Fixing it changes rendering at
+  the moment the flourish ends — a deliberate design call, not a silent patch.
+- **Remove the 7 dead `*HueDeg` uniforms?** Declared, uploaded every frame, never
+  read by the shader. ~228 bytes. Harmless either way.
+
 ## Current state
 
 **v2 is live.** The same sats have been inscribed on three times, and all three layers
