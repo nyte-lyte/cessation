@@ -1,7 +1,7 @@
 # Inscribing — the operational reference
 
 Written 2026-09-06. **This is the single source of truth for how a Cessation piece gets
-onto Bitcoin.** Everything here is either read off the chain from the previous mint or
+onto Bitcoin.** Everything here is either read off the chain from the previous inscription or
 measured on regtest; where something is only reasoned, it says so.
 
 Related: [wallets.md](wallets.md) for what is held where, [testing.md](testing.md) for the
@@ -74,7 +74,7 @@ after it in that UTXO is padding.
 
 **`output[0]` the same size as `input[0]`, with the fee coming from a separate input.**
 
-This is how the v1/v2 mint did it, read off the chain. The 28-piece batch reveal
+This is how the v1/v2 inscription run did it, read off the chain. The 28-piece batch reveal
 `5d643a3e…`:
 
 ```
@@ -162,7 +162,7 @@ Confirm the backup actually happened: the commit output should come back `ismine
 
 Lifespan derives from the block hash, so two pieces sharing a block share a lifespan.
 `inscribe.js` keeps `inscribed_blocks.json` as the ledger and refuses a reused block or
-height. **Reset that file before a fresh mint** — it currently holds regtest heights.
+height. **Reset that file before a fresh inscription run** — it currently holds regtest heights.
 
 ### 3.6 Account for every rare sat after every step
 
@@ -182,7 +182,7 @@ curl -s -H 'Accept: application/json' http://<ord>/output/<txid>:<vout>
 
 | shape | which | behaviour |
 |---|---|---|
-| **1 rare sat at offset 0 + common padding** | the 7 Omega carriers (546/546/546/546/330/330/330) | fees come off the end of the stream and eat padding. The rare sat survives. **This is the shape the v1/v2 mint used throughout, and the one-at-a-time cold→hot workflow is correct for it.** |
+| **1 rare sat at offset 0 + common padding** | the 7 Omega carriers (546/546/546/546/330/330/330) | fees come off the end of the stream and eat padding. The rare sat survives. **This is the shape the v1/v2 inscription run used throughout, and the one-at-a-time cold→hot workflow is correct for it.** |
 | **entirely rare, no padding** | the Nakamoto 907-sat range | nothing but rare sats exists for a fee to come from, so **every fee burns Nakamoto sats**. Measured: `ord wallet send` on it cost 111 rare sats in transfer fees alone. |
 
 The all-rare range is the genuinely new case — v1/v2 never had one; its Nakamoto sat sat
@@ -392,10 +392,10 @@ scale linearly with whatever fee rate is current.
 
 Engine breakdown: commit 154 vB, reveal 25,324 vB. Piece: commit 212 vB, reveal 396 vB.
 
-**The engine is 58% of a 30-piece re-mint on its own** — one engine costs as much as 41
+**The engine is 58% of a 30-piece re-inscription on its own** — one engine costs as much as 41
 pieces. It is the single item worth checking the fee rate for.
 
-| rate | engine | 30 pieces | re-mint total |
+| rate | engine | 30 pieces | re-inscription total |
 |---|---|---|---|
 | 1/vB | 25,478 | 18,240 | **43,718 sats** |
 | 5/vB | 127,390 | 91,200 | 218,590 |
@@ -426,7 +426,7 @@ expensive mistake this project has made and it cannot be undone.
 - [ ] `bitcoind -version` reports **31.x** (not 30.x)
 - [ ] Both wallets load; UTXOs match [wallets.md](wallets.md)
 - [ ] All carriers locked except the one in hand
-- [ ] `inscribed_blocks.json` reset for a fresh mint
+- [ ] `inscribed_blocks.json` reset for a fresh inscription run
 - [ ] `PIECE_CARRIERS` filled from the real split tx — it ships empty on purpose
 - [ ] Engine bundle rebuilds byte-identical; `node test/scale.test.mjs` passes
 - [ ] Metadata gate passed (§7)
@@ -453,7 +453,7 @@ chunk A   423 sats, 303 Nakamoto still inside (needs another top-up to extract)
 reserve   451 Nakamoto in chunk B, never touched
 accounting  153 + 303 + 451 = 907 / 907 — nothing lost across ~310 mainnet txs
 cost        ~87,000 sats total, about 570 per carrier
-ord-cold    ~111,000 sats left    ord (hot) ~101,000 for the re-mint
+ord-cold    ~111,000 sats left    ord (hot) ~101,000 for the re-inscription
 ```
 
 `PIECE_CARRIERS` in `inscribe.js` is **filled** with the 150 consecutive sats, oldest
@@ -530,7 +530,7 @@ At ~840 sats per carrier (2 × 255 fees + 329 padding), measured:
 | 246 (everything, needs top-ups) | 216 | ~181,000 |
 
 ~180,900 available. **246 at K=1 is roughly break-even and leaves nothing for the
-re-mint** (43,718). Fund more, or stop around 123 and leave chunk B for later.
+re-inscription** (43,718). Fund more, or stop around 123 and leave chunk B for later.
 
 ### Do not use `estimatesmartfee` to decide the bid — measure the backlog instead
 

@@ -122,7 +122,7 @@ for (const n of [1, 2, 3, BAKED, BAKED + 1, 40, 100]) {
     const beyondBaked = own >= BAKED;
     const beyondCollection = own > n - 1;
     const tag = beyondCollection ? ' (index past collection — sibling fetch incomplete)'
-              : beyondBaked ? ' (index past baked array — new mint)' : '';
+              : beyondBaked ? ' (index past baked array — newly inscribed)' : '';
     drawPipeline(r, `${ctxBase} own=${own}${tag}`, own, collection, mm);
   }
 
@@ -147,7 +147,7 @@ for (const n of [1, 2, 3, BAKED, BAKED + 1, 40, 100]) {
   const baked = makeCollection(BAKED);
   drawPipeline(r, 'boot: baked array only, own in range', 7, baked, computeMinMaxValues(baked));
 
-  // A piece minted after the engine: its index exceeds the baked array and its
+  // A piece inscribed after the engine: its index exceeds the baked array and its
   // own dataset has arrived, but no siblings have.
   const ownOnly = [...baked, makeCollection(BAKED + 1)[BAKED]];
   drawPipeline(r, 'boot: baked + own only, own past baked', BAKED, ownOnly, computeMinMaxValues(ownOnly));
@@ -192,7 +192,7 @@ for (const n of [1, 2, 3, BAKED, BAKED + 1, 40, 100]) {
 // Not part of the collection pipeline above — this runs inside init(), before
 // any frame. Every tempoFn dereferences the dataset, so if the piece's index is
 // past the baked array and the lookup yields undefined, init() throws and the
-// piece never renders at all. That is every piece minted after the engine.
+// piece never renders at all. That is every piece inscribed after the engine.
 {
   assertInitDatasetGuardUnchanged(r);
 
@@ -207,11 +207,11 @@ for (const n of [1, 2, 3, BAKED, BAKED + 1, 40, 100]) {
     }
   );
 
-  // 0 and 15 are ordinary. 29 is the last baked piece. 30 is the first mint
+  // 0 and 15 are ordinary. 29 is the last baked piece. 30 is the first piece inscribed
   // after the engine — the case that throws without the fallback. 45 is later
   // growth.
   for (const own of [0, 15, BAKED - 1, BAKED, 45]) {
-    const ctx = `init beams own=${own}${own >= BAKED ? ' (past baked array — new mint)' : ''}`;
+    const ctx = `init beams own=${own}${own >= BAKED ? ' (past baked array — newly inscribed)' : ''}`;
     const ds = initDatasetForPiece(baked, own);
 
     // A null dataset is now a LEGITIMATE state, not a failure: the engine carries

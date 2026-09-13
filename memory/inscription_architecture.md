@@ -37,9 +37,9 @@ const _selfScript = document.currentScript;
 - Engine extracts engineId from `document.currentScript.src` — same for every piece
 - For each sibling, fetches `/r/metadata/{sibling_id}` to get their health dataset (CBOR)
 - Builds `lc.collectionDatasets` — drives `getAgedDataset`, `applyCollectionInfluence`, percentile calculations
-- New mints automatically propagate via `lcRefreshSiblings()` on every block poll — no reload needed
+- New inscriptions automatically propagate via `lcRefreshSiblings()` on every block poll — no reload needed
 
-## Mint Sequence
+## Inscription Sequence
 
 ```bash
 # 1. Inscribe engine on the Nakamoto sat (once, text/javascript, no parent)
@@ -55,14 +55,14 @@ node inscribe.js <N> <blockHash> <blockTimestamp> <engineId> <blockHeight>
 ord wallet inscribe --fee-rate <FEE> --sat <satNumber> --parent <engineId> --file dist/cessation_piece_0N.html --json-metadata dist/cessation_piece_0N_metadata.json
 ```
 
-**CRITICAL: `--parent` must be declared at mint time — cannot be added retroactively.**
+**CRITICAL: `--parent` must be declared at inscription time — cannot be added retroactively.**
 **CRITICAL: Fill in `PIECE_SATS` in inscribe.js before running — wrong sat = permanently wrong sat.**
 
 ## Sat Inventory (in ord wallet as of 2026-06-06)
 
 > ⚠️ **STALE (2026-08-13):** this inventory and the two addresses below belong to an
-> abandoned earlier mint attempt — those sats have moved. Current wallets are documented
-> in `memory/wallets.md` (hot `ord` + cold `ord-cold`). New rare sats for the re-mint live
+> abandoned earlier inscription attempt — those sats have moved. Current wallets are documented
+> in `memory/wallets.md` (hot `ord` + cold `ord-cold`). New rare sats for the re-inscription live
 > in the `ord-cold` cold wallet. Kept here only for historical reference.
 
 All sats held at receive address `bc1p36tnmumxf9qz0z9umufgra27qs4ee9spav9qarwu7m7cqjzhewys6v30sm`.
@@ -136,7 +136,7 @@ Use `ord wallet inscribe --sat <sat_number>` — ord splits the host UTXO around
 ## Living Collection — Dynamic Sibling Discovery
 - Each piece at runtime discovers all siblings by querying `/r/children/{piece0Id}`
 - Fetches `/r/metadata/{sibling_id}` for each to get health datasets
-- New pieces minted post-collection shift percentiles for ALL existing pieces automatically
+- New pieces inscribed post-collection shift percentiles for ALL existing pieces automatically
 - Piece 0 is permanently in the sibling list (genesis influences everything)
 - Pagination: `/r/children/{id}/inscriptions/{page}` — 100 per page, check `more` boolean
 
@@ -146,10 +146,10 @@ Use `ord wallet inscribe --sat <sat_number>` — ord splits the host UTXO around
 
 ## Blockhash On-Chain
 - `/r/blockinfo/{height_or_hash}` returns full block data including `hash`
-- Lifespan derived from block hash at mint — the `block` attribute in the script tag gives height
+- Lifespan derived from block hash at inscription — the `block` attribute in the script tag gives height
 
 ## Min/Max — Living Collection (Intentional)
-- Min/max is NOT frozen at mint time
+- Min/max is NOT frozen at inscription time
 - Each piece computes it dynamically from all sibling datasets
 - New pieces shift the color/percentile relationships of all existing pieces
 - By design — a new lifespan entering affects all the others
@@ -162,4 +162,4 @@ Use `ord wallet inscribe --sat <sat_number>` — ord splits the host UTXO around
 ## Collection Growth
 - New piece every ~3 months as new ECG/lab data is taken
 - Partner pairing: (0,1), (2,3)... — piece 0 liberates directly (no karma check)
-- Inherited hue computed at mint time from piece N-1's glucose hue, baked into `hue` attribute
+- Inherited hue computed at inscription time from piece N-1's glucose hue, baked into `hue` attribute

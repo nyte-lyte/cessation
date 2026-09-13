@@ -91,7 +91,7 @@ Reference (do NOT link from the tracker — these are historical layers undernea
 - Canvas wrapper: 48px padding, flex-centered, black background
 - About page: src/app/about/page.tsx — 3 prose paragraphs + THE SYSTEM section (health index, visual output, decay, on-chain). 13px, lineHeight 2, var(--muted), maxWidth 680px
 - About page content vertically centered: outer wrapper div has minHeight calc(100vh - 50px) + display flex + alignItems center. Self-contained, no effect on other pages.
-- About page decay text: "The lifespan of each cycle is determined by the Bitcoin block hash — the mint block for the first lifespan, the cessation block for each rebirth."
+- About page decay text: "The lifespan of each cycle is determined by the Bitcoin block hash — the inscription block for the first lifespan, the cessation block for each rebirth."
 - No page scrollbar on desktop — overflow hidden on layout and body
 - Fullscreen: hover icon (expand/compress SVG) appears top-right of canvas on mouse hover. Targets canvas wrap only — sidebar disappears in fullscreen. Handled in PieceInteractions.tsx
 - Arrow key navigation: left/right arrow keys cycle through pieces. Handled in PieceInteractions.tsx
@@ -100,10 +100,10 @@ Reference (do NOT link from the tracker — these are historical layers undernea
 ## Piece Sidebar Layout
 - Piece header: color dot + "PIECE XX" + date
 - Health index: labeled "HEALTH INDEX" with a 3px bar (filled to healthIndex proportion, tinted with piece.hex) + numeric value on the right
-- Mint status: compact DataRow ("MINT STATUS" / "not yet minted") — no bordered box
+- Inscription status: compact DataRow ("INSCRIPTION STATUS" / "not yet inscribed") — no bordered box
 - ECG section: 8 DataRows (vent rate, PR, QRS, QT, QTc, P/R/T axis)
 - Metabolic Panel: 9 DataRows (glucose, BUN, creatinine, eGFR, sodium, potassium, chloride, CO₂, calcium)
-- Lifecycle section: decay rate + lifespan row (shows "—" until minted)
+- Lifecycle section: decay rate + lifespan row (shows "—" until inscribed)
 
 ## Purpose — Historical Record
 The tracker is a permanent snapshot of the collection at birth. Original datasets, original visuals, what each piece looked like before any reanimation. As pieces cycle and drift from their originals over time, the tracker becomes the only place to see what they once were. No blockchain integration needed — this is by design.
@@ -123,5 +123,5 @@ The tracker is a permanent snapshot of the collection at birth. Original dataset
 - Text: `clamp(24px, 5vw, 64px)` h1, 14px paragraph, "View collection →" link to cessation-tracker.vercel.app
 
 ## Deferred
-- Hiro API, Postgres, mint status badges, block explorer links
+- Hiro API, Postgres, inscription status badges, block explorer links
 - No custom Bitcoin indexer needed — use Hiro Ordinals API (hiro.so/ordinals-api)

@@ -62,7 +62,7 @@ export function liftFromMainJs(names, { inject = '', consts = [] } = {}) {
 }
 
 // Mirrors the _initDs fallback in the beam phase pre-advance (src/main.js:1152).
-// A piece minted after the engine has no baked entry, and every tempoFn
+// A piece inscribed after the engine has no baked entry, and every tempoFn
 // dereferences the dataset, so an undefined here throws inside init() and the
 // piece never draws.
 //

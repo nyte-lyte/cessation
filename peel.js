@@ -2,7 +2,7 @@
 //
 // A carrier is a UTXO whose FIRST sat is rare and whose remainder is common
 // padding, so transaction fees (taken from the end of the sat stream) eat the
-// padding and never the rare sat. That is the shape the v1/v2 mint used and the
+// padding and never the rare sat. That is the shape the v1/v2 inscription run used and the
 // only shape safe to inscribe on. See memory/inscribe.md.
 //
 // Common padding cannot be interleaved between contiguous rare sats inside one

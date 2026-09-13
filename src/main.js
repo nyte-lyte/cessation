@@ -534,7 +534,7 @@ async function init() {
     return lcInheritedHueFor(p) ?? 0;          // 0 until the partner is discoverable
   }
 
-  // Entropy pool / reanimation state — baked at mint time, reanimationProgress computed live
+  // Entropy pool / reanimation state — baked at inscription time, reanimationProgress computed live
   // 0 until the collection resolves — recomputePartnerInheritedHue() sets it once
   // the partner is discoverable. NOT computed here: this runs before `lc` exists,
   // and the live lookup reads it. (Calling it here threw "Cannot access 'lc'
@@ -833,7 +833,7 @@ async function init() {
         const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
         // Fetched in batches rather than one at a time: serially, a collection of
         // N pieces cost N round trips before anything else could proceed, which
-        // is what made boot take tens of seconds and grew with every new mint.
+        // is what made boot take tens of seconds and grew with every new inscription.
         // Batches keep order (chunks run in sequence, Promise.all preserves order
         // within a chunk), so the pieceIndex dedup in _lcMergedEntries resolves
         // exactly as it did before. Capped so a large collection doesn't open
@@ -1040,7 +1040,7 @@ async function init() {
     }
   }
 
-  // Fast-forward through past cycles on first load (handles pieces loaded years after mint)
+  // Fast-forward through past cycles on first load (handles pieces loaded years after inscription)
   async function lcFastForward() {
     while (lc.currentBlockHeight >= lc.cessationBlock && !lc.isLiberated) {
       const partnerIdx = getPartnerIndex(currentDataSetIndex);
@@ -1072,7 +1072,7 @@ async function init() {
   // Main lifecycle init — non-blocking, piece renders immediately with local fallback
   async function initLifecycle() {
     try {
-      // Every minted piece carries its block height as a <script> attribute, so
+      // Every inscribed piece carries its block height as a <script> attribute, so
       // this is the normal path. The fallback exists for a piece loaded without
       // one (engine viewed directly, hand-built wrapper, dev).
       //
@@ -1249,7 +1249,7 @@ async function init() {
     caPulse = 0;
 
   // DEV_START
-  // Console triggers (later hook these to real mint events)
+  // Console triggers (later hook these to real inscription events)
   window.ripple = () => {
     // single ripple: CO2 stronger, Ca smaller
     co2Pulse = Math.min(1, co2Pulse + 0.55);
@@ -1439,7 +1439,7 @@ async function init() {
   // slightly with chronological drift but the error is negligible vs. the
   // alternative of always starting at the beginning.
   {
-    // A piece minted after the engine has no baked entry — its dataset arrives
+    // A piece inscribed after the engine has no baked entry — its dataset arrives
     // later via its own CBOR metadata. Every tempoFn dereferences the dataset,
     // so an undefined here throws inside init() and the piece never draws at all.
     // Fall back to the last baked dataset: tempo is already documented above as
@@ -1701,10 +1701,10 @@ async function init() {
   // This used to await the whole of initLifecycle, which includes the sibling
   // scan — one /r/metadata round trip per piece in the collection. That is why
   // pieces sat on black for tens of seconds before the first frame, and it got
-  // worse with every piece minted.
+  // worse with every piece inscribed.
   //
   // The engine carries no datasets, so EVERY piece waits for its own metadata —
-  // not just those minted after the engine, as when a baked array existed. It
+  // not just those inscribed after the engine, as when a baked array existed. It
   // waits on lc.ownDataReady (its own CBOR only, not the whole collection), and
   // lcReleaseOwnData() sits in a `finally`, so the promise always resolves and a
   // failure still yields a frame rather than a black screen.

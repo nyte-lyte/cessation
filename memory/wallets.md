@@ -34,7 +34,7 @@ node on 2026-08-13. Supersedes all older wallet notes (see "Deprecated" below).
 >   (block 2485, 2009-01-31). Piece 0 = `…610010`, piece 29 = `…610039`.
 > - The old `PIECE_SATS` table listed the **v1/v2 sats** — already carrying three stacked
 >   inscriptions — and every entry was non-null, so the old "is it filled in?" check would
->   have waved a re-mint straight onto them. Replaced by a derived
+>   have waved a re-inscription straight onto them. Replaced by a derived
 >   `satForPiece(index)` with a hard range bound; nothing is hand-typed per piece.
 > - The six remaining Omegas (cjcytrkpena, adrejuehvqo, adkoglpialm, abigrncmehu,
 >   aaexuaaadws, ytgwcbgmcw) stay unassigned in `ord-cold`.
@@ -49,8 +49,8 @@ node on 2026-08-13. Supersedes all older wallet notes (see "Deprecated" below).
 **Procedure for actually inscribing: [inscribe.md](inscribe.md).**
 The **entire collection is being re-inscribed** because the engine code has multiple
 bugs (see `inscription_architecture.md` → "Code Bugs" + "Inscription Failure History").
-New rare sats are being purchased specifically for this fresh re-mint and parked in the
-**cold wallet** until mint time.
+New rare sats are being purchased specifically for this fresh re-inscription and parked in the
+**cold wallet** until inscription time.
 
 ## The node
 - Full mainnet Bitcoin Core node. **Data dir: `/Volumes/Bitcoin/Bitcoin`** (807 GB blocks,
@@ -74,8 +74,8 @@ New rare sats are being purchased specifically for this fresh re-mint and parked
 
 ## Cold wallet — `ord-cold`  ⭐ holds the new rare sats
 - Bitcoin Core wallet `ord-cold` at `/Volumes/Bitcoin/Bitcoin/ord-cold/wallet.dat`.
-- **Purpose: cold storage for the newly-bought rare sats for the re-mint.** Each of its
-  UTXOs is a rare sat. Keep sats here until mint time, then transfer the needed one to `ord`.
+- **Purpose: cold storage for the newly-bought rare sats for the re-inscription.** Each of its
+  UTXOs is a rare sat. Keep sats here until inscription time, then transfer the needed one to `ord`.
 - As of 2026-08-13: 8 UTXOs / 4,081 sats. **Contents confirmed via `ord list` + `ord traits`
   (2026-08-13):** 7 Omega black uncommons + 1 Nakamoto-era range. In each carrier UTXO the
   **rare sat sits at offset 0** (first sat of the UTXO); the rest is common padding.
@@ -115,9 +115,9 @@ Four of the black uncommons (adrejuehvqo, adkoglpialm, abigrncmehu, aaexuaaadws)
 
 ## Deprecated / stale
 - **UniSat wallet — NO LONGER USED going forward.** It was the original off-node source for
-  the first mint's sats. Ignore all UniSat references in `MEMORY.md` / older notes.
+  the first inscription run's sats. Ignore all UniSat references in `MEMORY.md` / older notes.
 - Old addresses in `inscription_architecture.md` ("Sat Inventory as of 2026-06-06",
   `bc1p36tnmumxf9q…` holding, `bc1purcsf4pxtz…` fees) are **stale** — those sats have moved
-  and belong to the abandoned earlier mint attempts. Not the current wallet set.
+  and belong to the abandoned earlier inscription attempts. Not the current wallet set.
 - Two failed inscription collections (v1, v2) were moved to a "trash wallet" — separate, not
   for reuse.

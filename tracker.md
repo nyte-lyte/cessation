@@ -15,7 +15,7 @@
 
 ## 🔗 Milestone 2 — Chain Ingest
 - [ ] Choose indexer/API (Ordinals/Bitcoin) for inscriptions & blocks
-- [ ] Ingest job: on new mint → store inscription, block time/height, last-two hash digits
+- [ ] Ingest job: on new inscription → store inscription, block time/height, last-two hash digits
 - [ ] Webhook/cron to poll blocks (fallback schedule)
 - [ ] Unit tests: determinism of parsed fields
 
@@ -23,7 +23,7 @@
 - [ ] Port core model (lifespanYearsFromHashDigits, decay, phaseYears)
 - [ ] Deterministic recompute: given (health dataset, hash tail, block time)
 - [ ] Compute per-piece **state_current** (yearsElapsed, decayProgress, beams: strength & hue)
-- [ ] Scheduler: hourly recompute + on event (new block/mint)
+- [ ] Scheduler: hourly recompute + on event (new block/inscription)
 - [ ] API endpoints
   - [ ] `GET /pieces` (list, paging, summary fields)
   - [ ] `GET /pieces/:id` (full state_current)
@@ -44,7 +44,7 @@
   - [ ] Sidebar: on-chain facts (inscription, block, hash tail)
   - [ ] Life model panel: lifespanYears, yearsElapsed, decayProgress
   - [ ] Beams panel: strength, hue°, tempo label, active/inactive (why)
-  - [ ] Timeline of events: Mint, 20% arrival, 60% arrival, ripples
+  - [ ] Timeline of events: Inscription, 20% arrival, 60% arrival, ripples
   - [ ] Snapshots strip (if available)
 - [ ] About/Method page (determinism, data sources)
 

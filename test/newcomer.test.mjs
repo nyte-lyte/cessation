@@ -1,7 +1,7 @@
 // newcomer.test.mjs — when a NEW reading arrives, does it break the pieces already on chain?
 //
-// This is the risk that matters after mint. The collection is inscribed and live.
-// Months later a new ECG/lab reading arrives and piece 30 is minted. Every existing
+// This is the risk that matters after inscription. The collection is inscribed and live.
+// Months later a new ECG/lab reading arrives and piece 30 is inscribed. Every existing
 // piece discovers it, recomputes min/max and percentiles across the WHOLE collection,
 // and re-renders. If the newcomer can push any uniform out of range, produce a NaN,
 // or collapse a ranking, it does not break one piece — it breaks all of them, on

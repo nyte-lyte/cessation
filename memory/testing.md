@@ -278,7 +278,7 @@ Every bug that has shipped so far lived in one of these three gaps. See
 5. **Sat assignment is derived, not typed — check the range, not a table.**
    `inscribe.js` has no `PIECE_SATS` table any more (rewritten 2026-09-06; the old one
    listed the v1/v2 sats and every entry was non-null, so "is it filled in?" would have
-   passed a re-mint straight onto already-stacked sats). Now `satForPiece(index)` returns
+   passed a re-inscription straight onto already-stacked sats). Now `satForPiece(index)` returns
    `12425429610010 + index` from the 907-sat Nakamoto range, bounded at `…610916`, and
    refuses the engine's sat. Confirm the range still matches what `ord-cold` holds
    ([wallets.md](wallets.md)) and that the sat has been moved to `ord` before inscribing —
@@ -390,9 +390,9 @@ carrier costs only padding.
 So the established procedure is correct for the Omegas and must not be assumed correct
 for the Nakamoto range. Treat that UTXO as a special case in its own right.
 
-### The v1/v2 mint already did this correctly — read it before redesigning
+### The v1/v2 inscription run already did this correctly — read it before redesigning
 
-Checked against the live chain 2026-09-06. The previous mint's own transactions state the
+Checked against the live chain 2026-09-06. The previous inscription's own transactions state the
 rule more cleanly than the derivation above, and confirm it.
 
 **The 28-piece batch reveal `5d643a3e…`:**
@@ -427,7 +427,7 @@ took the reveal fee out of the slack, and the slack was rare sats.
 
 **So the established practice was already right**, for the padded carriers. What is new
 is the 907-sat all-rare Nakamoto range, which has no padding and did not exist in this
-shape for the previous mint — there the Nakamoto sat sat in a padded carrier like any
+shape for the previous inscription — there the Nakamoto sat sat in a padded carrier like any
 other. That range is the genuinely new case.
 
 ### THE RULE
@@ -633,7 +633,7 @@ What it drives, at collection sizes 30 / 31 / 40 / 100:
   `applyCollectionInfluence` -> `computeHSBFromStats` -> `winsorizedPercentileForLab`
   -> `calculateHealthIndex` / `computeKarma` — across seven life fractions.
 - Own-piece indices at the start, middle, end, **past the baked array** (a piece
-  minted after the engine, which must load its dataset from its own metadata), and
+  inscribed after the engine, which must load its dataset from its own metadata), and
   **past the collection** (sibling fetch incomplete).
 - Boot-order states that become reachable the moment `draw()` stops waiting on
   `initLifecycle`: baked array alone, and baked + own metadata with no siblings.
@@ -952,7 +952,7 @@ piece just quietly re-ranks against a reading that never happened.
    therefore absent from the ranking rather than able to redefine it, and the
    degradation is per-FIELD, not per-piece: the piece still contributes every field
    it got right.
-2. **Mint side (`inscribe.js`), the preventable one.** A blocking gate refuses to
+2. **Inscription side (`inscribe.js`), the preventable one.** A blocking gate refuses to
    build metadata unless `date` matches `YYYY-MM-DD` and all 8 ECG + 9 lab values
    are finite numbers. Verified both directions: passes the real reading, blocks a
    nulled one before anything is written.
@@ -979,8 +979,8 @@ and never inscribed. No invented reading goes on chain.
 
 **An actual 31st inscription.** `inscribe.js` hard-stops at `pieceIndex >=
 healthDataSets.length`, and there are exactly 30 real readings, so piece 30 cannot
-be minted until a new reading exists. That guard fails LOUDLY before any broadcast,
-so it is safe-fail, not a silent break. When the next reading arrives, mint it on
+be inscribed until a new reading exists. That guard fails LOUDLY before any broadcast,
+so it is safe-fail, not a silent break. When the next reading arrives, inscribe it on
 regtest first — that closes the last link.
 
 ### On-chain growth, measured

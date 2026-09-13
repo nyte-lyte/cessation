@@ -10,9 +10,9 @@ const ECG_KEYS = ['ventRate', 'prInterval', 'qrsInterval', 'qtInterval', 'qtcInt
 const LAB_KEYS = ['glucose', 'nitrogen', 'creatinine', 'eGFR', 'sodium', 'potassium', 'chloride', 'carbonDioxide', 'calcium'];
 
 // Derive min/max ranges fresh from any dataset collection.
-// The collection is a living organism — only the starting datasets are fixed at mint.
+// The collection is a living organism — only the starting datasets are fixed at inscription.
 // Everything derived from them (minMaxValues, percentiles, healthIndex, karma) should
-// be recomputed from the live collection as it grows with new mints.
+// be recomputed from the live collection as it grows with new inscriptions.
 function computeMinMaxValues(allDatasets) {
   const result = {};
   for (const k of ECG_KEYS) result[k] = { min: Infinity, max: -Infinity };

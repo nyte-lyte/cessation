@@ -37,7 +37,7 @@ See [[testing]] "The newcomer problem".
 
 **Still open:** an actual 31st inscription cannot be tested until a new real reading
 exists — `inscribe.js` stops at index 30 (loudly, pre-broadcast). When the next
-reading arrives, mint it on REGTEST first before mainnet.
+reading arrives, inscribe it on REGTEST first before mainnet.
 
 ### Open decisions from this audit
 - ~~`reanimationTriggerMs` is never cleared.~~ **FIXED 2026-09-13.** lcTick now runs
@@ -245,7 +245,7 @@ Consequences accepted deliberately:
 
 - **~~`PIECE_SATS` points at the OLD sats~~ FIXED 2026-09-06.** The table listed the
   v1/v2 sats — the ones already carrying three stacked inscriptions — and every entry
-  was non-null, so the "is it filled in?" check would have waved a re-mint onto them.
+  was non-null, so the "is it filled in?" check would have waved a re-inscription onto them.
   Replaced in `inscribe.js` by a derived `satForPiece(index)`:
   - **Engine → `1459982499999999`** (dmvuhsnspyo, oldest Omega held, block 373992).
     Inscribed by hand; the script never emits it, and refuses if a piece resolves to it.
@@ -367,7 +367,7 @@ The failure mode was not fabricated checkmarks — it was checkmarks that were t
 written, against code that was then rewritten underneath them, with nobody returning to
 update the entry. Confirmed cases:
 
-- **"Autonomous new-mint propagation — incremental, called every block poll."** The
+- **"Autonomous new-inscription propagation — incremental, called every block poll."** The
   incremental machinery (`datasetByIdx`, `siblingIdMap`, `knownSiblingCount`) exists in
   exactly two commits in all of history: one adding it, one removing it. It was gone
   well before inscription. The real code refetches every child's metadata from every

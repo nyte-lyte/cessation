@@ -2,7 +2,7 @@
 
 ## Bitcoin Blocktime — Core Architectural Principle
 The Bitcoin block clock (~10 min average) is the heartbeat of the entire lifecycle. It is not just a timing mechanism — it is the fundamental unit of existence in this project:
-- **Lifespan:** derived from the blockhash at mint — the block determines how long each piece lives
+- **Lifespan:** derived from the blockhash at inscription — the block determines how long each piece lives
 - **Cessation:** determined by block height — the piece dies at a specific block, not a wall-clock time
 - **Reanimation:** triggered by block detection — the engine reads cessation block, computes karma, begins transition
 - **Void:** triggered when both partners' final cessation blocks are detected
@@ -20,7 +20,7 @@ Buddhist rebirth (not reincarnation). Not a permanent soul transmigrating — a 
 - Sequential pairs: (0,1), (2,3), (4,5)... — piece 0 is genesis, no reanimation
 - Even piece N (>0): partner = N+1. Odd piece N: partner = N-1.
 - Odd final piece (if collection ends odd): eternal vigil — immediate liberation, most fortunate outcome
-- Fully autonomous — no human required, no new transactions after original mint
+- Fully autonomous — no human required, no new transactions after original inscription
 - Each piece always has its own blockhash-determined lifespan, including reanimated cycles
 - Cycle N lifespan derived from the hash of the cessation block of cycle N-1 — deterministic, fully on-chain
 

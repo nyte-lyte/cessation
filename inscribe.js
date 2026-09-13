@@ -12,7 +12,7 @@
 // blockHeight   : block height at inscription time
 //
 // Every piece uses --parent engineId. Sats are derived, not typed — see below.
-// The collection grows: a new piece is minted whenever new ECG/lab data arrives.
+// The collection grows: a new piece is inscribed whenever new ECG/lab data arrives.
 // Never hardcode a piece count here — index the collection, don't count it.
 //
 // The printed `ord wallet inscribe` command carries --sat, and ord fails outright
@@ -24,7 +24,7 @@
 // ── Sat assignment ────────────────────────────────────────────────────────────
 // Rewritten 2026-09-06, twice. First to drop the stale v1/v2 table (every entry
 // non-null and every entry wrong, so the old "is it filled in?" check would have
-// waved a re-mint onto sats already carrying three inscriptions). Then again once
+// waved a re-inscription onto sats already carrying three inscriptions). Then again once
 // regtest showed how rare sats are actually consumed. See memory/testing.md.
 //
 // THE ENGINE goes on an Omega black uncommon, inscribed by hand, not by this script:
@@ -309,7 +309,7 @@ const lastTwoHashDigits = Math.round(lastTwoByte * 99 / 255); // 0..99
 // The ledger below is written on every successful run and checked on the next
 // one, so a reused block is refused rather than discovered later on chain.
 // Kept outside dist/ deliberately: dist/ is gitignored and regenerated every run,
-// and losing this file would silently disable the guard mid-mint. It is also the
+// and losing this file would silently disable the guard mid-run. It is also the
 // provenance record — which block each piece claimed, and the lifespan that block
 // gave it — which nothing else in the repo captures.
 const LEDGER = path.join(__dirname, 'inscribed_blocks.json');
@@ -322,7 +322,7 @@ for (const [usedBy, rec] of Object.entries(ledger)) {
   if (rec.hash.toLowerCase() === rawHash.toLowerCase()) {
     console.error(`Error: block hash ...${rawHash.slice(-8)} was already used by piece ${usedBy}.`);
     console.error(`  Both pieces would derive hashTail ${lastTwoHashDigits} and share an identical lifespan.`);
-    console.error(`  Wait for a new block and re-read the height and hash before minting piece ${pieceIndex}.`);
+    console.error(`  Wait for a new block and re-read the height and hash before inscribing piece ${pieceIndex}.`);
     process.exit(1);
   }
 }
@@ -450,7 +450,7 @@ if (partnerIdx >= 0 && partnerIdx < healthDataSets.length) {
 
 // ── Print summary ─────────────────────────────────────────────────────────────
 
-console.log('\n=== Cessation Mint Bake ===');
+console.log('\n=== Cessation Inscription Bake ===');
 console.log(`  Piece index              : ${pieceIndex}`);
 console.log(`  Dataset date             : ${healthDataSets[pieceIndex].date}`);
 console.log(`  Block hash (last 2 hex)  : ...${rawHash.slice(-2)} → lastTwoHashDigits = ${lastTwoHashDigits}`);
@@ -538,4 +538,4 @@ const lifespans = Object.entries(ledger)
   .join('  ');
 console.log(`\nBlocks claimed so far (piece:hashTail) — every one must be a distinct block:`);
 console.log(`  ${lifespans}`);
-console.log(`\nWait for this inscription to confirm and read its real block before minting the next piece.`);
+console.log(`\nWait for this inscription to confirm and read its real block before inscribing the next piece.`);
