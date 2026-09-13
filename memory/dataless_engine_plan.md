@@ -190,6 +190,35 @@ output must depend on what is passed in, not on what the engine was built with.
    chain has ever seen.
 7. Re-run `scale.test.mjs` and the browser sweep.
 
+## Verified in a browser — 2026-09-12
+
+After groups 1 and 1b, the refactored bundle was rendered against the pre-refactor one
+in headless Brave, same piece, **frozen clock** (`performance.now`, `Date.now` and
+`requestAnimationFrame` stubbed, then 30 identical frames stepped by hand — otherwise the
+two runs differ for reasons unrelated to the refactor).
+
+```
+before  draws 31  errors 0   sha256 19b17a09222765c0
+after   draws 31  errors 0   sha256 19b17a09222765c0
+PIXEL-IDENTICAL: true
+```
+
+**Identical across all 810,000 pixels.** On a 30-piece collection — where the baked array
+and the live collection agree — the refactored engine produces exactly the frame it did
+before. Behaviour is preserved precisely where it should be.
+
+And it moves precisely where it should. The same piece, ranked against two different live
+collections:
+
+| | 30-piece | 100-piece |
+|---|---|---|
+| beam tempo | 8.9655 s | 9.6970 s |
+| hue anchor | 148.97° | 100.20° |
+| QTc percentile | 0.3448 | 0.1010 |
+
+Before the refactor every one of those was frozen to the baked 30 regardless of what was
+on chain. That gap is what would have opened at piece 31.
+
 ## Risks
 
 - **This is the engine, and it has been inscribed wrong twice.** The change touches ~40
