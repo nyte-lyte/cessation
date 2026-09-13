@@ -162,7 +162,26 @@ output must depend on what is passed in, not on what the engine was built with.
 
 1. ~~Write the failing test first.~~ **DONE** — `test/engine_purity.test.mjs`, 13 of 14
    failing against today's code, with the control passing.
-2. Refactor group 1 and 1b to take the collection as an argument. Test goes green.
+2. ~~Refactor group 1 and 1b to take the collection as an argument.~~ **DONE 2026-09-12.**
+   `28 checks, 2 failed` — only the two engine-purity checks remain (groups 2/3/4).
+   - **1b:** `getBeamTempoSeconds(dataSet, beamId, datasets)` and
+     `getBeamHueAnchorDeg(dataSet, beamId, datasets)` now take the collection.
+     Threaded through `beamConfigs`: `tempoFn(ds, coll)` and `update({…, coll})`,
+     fed `drawCollection` at draw time and `lcEffectiveCollection()` at the init
+     pre-advance.
+   - **1:** the nine init-time `const`s are gone, replaced by top-level
+     `ecgRanks(datasets)` returning all twelve rankings, cached on collection
+     identity (sibling discovery replaces the array, so identity is the right key).
+     The cache hangs off the function so it stays self-contained and liftable.
+     `draw()` computes `const _ecg = ecgRanks(drawCollection)` once per frame.
+   - `winsorizedPercentileForLab`'s `datasets = healthDataSets` default removed, so a
+     missing argument now fails loudly instead of silently using baked data.
+   - The test's section 2 changed from a source guard to real behavioural checks now
+     that `ecgRanks` is reachable: pure in its collection, ranks actually *move*
+     between a 30- and 100-piece collection, all twelve fields finite, the eight
+     sorted arrays actually sorted, and a collection of one does not throw.
+   - `scale.test.mjs` caught the signature change at its init-beam section and was
+     updated — it does cover beam tempo, which the earlier note understated.
 3. Groups 2 and 3 — delete fallbacks, handle null.
 4. Group 4 — move the import behind `DEV_START`, seed dev from the file.
 5. `node build.js`, confirm the bundle no longer contains the array and shrinks ~12.6%.

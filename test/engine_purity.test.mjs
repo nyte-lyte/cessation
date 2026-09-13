@@ -55,9 +55,11 @@ function comparePure(fnName, call) {
   const small = liftWith(SMALL, [fnName, 'percentile', 'computeHSBFromStats']);
   const large = liftWith(LARGE, [fnName, 'percentile', 'computeHSBFromStats']);
   // Same input dataset, same beam — only the engine's baked array differs.
+  // Same dataset AND same collection handed to both — only the engine's own
+  // baked array differs. A pure function cannot tell the difference.
   const probe = SMALL[10];
-  const a = call(small, probe);
-  const b = call(large, probe);
+  const a = call(small, probe, SMALL);
+  const b = call(large, probe, SMALL);
   r.checks++;
   if (!Number.isFinite(a) || !Number.isFinite(b)) {
     r.fail('purity', `${fnName} returned a non-finite value (${a}, ${b})`);
@@ -73,9 +75,9 @@ function comparePure(fnName, call) {
 
 // Both are called from draw() on every frame.
 comparePure('getBeamTempoSeconds',
-  (m, ds) => m.getBeamTempoSeconds(ds, BEAM.NITROGEN));
+  (m, ds, coll) => m.getBeamTempoSeconds(ds, BEAM.NITROGEN, coll));
 comparePure('getBeamHueAnchorDeg',
-  (m, ds) => m.getBeamHueAnchorDeg(ds, BEAM.NITROGEN));
+  (m, ds, coll) => m.getBeamHueAnchorDeg(ds, BEAM.NITROGEN, coll));
 
 // winsorizedPercentileForLab is the control: its callers pass drawCollection
 // explicitly, so it should already be pure when given one. If this fails the
@@ -94,28 +96,68 @@ comparePure('getBeamHueAnchorDeg',
   }
 }
 
-// ── 2. The init-time ECG rankings ──────────────────────────────────────────
+// ── 2. The ECG / BUN rankings ──────────────────────────────────────────────
 //
-// These are closure variables inside init(), so no test can call them: the same
-// architecture that stops them updating stops them being driven. Until they are
-// hoisted to take a collection argument, a source guard is the only check
-// available — and their unreachability is itself the finding.
+// These were nine `const`s inside init(), computed once from the baked array —
+// unreachable by any test, which is why 14,064 passing checks never saw them.
+// They are now `ecgRanks(datasets)` at top level, so they can be driven directly.
 
-const INIT_RANKINGS = [
-  'allBunCreatRatios', 'sortedQtcValues', 'sortedPAxisValues', 'sortedRAxisValues',
-  'sortedTAxisValues', 'sortedVentRateValues', 'sortedPRValues', 'sortedQRSValues',
-  'allQrsTAngles',
-];
+{
+  const small = liftWith(SMALL, ['ecgRanks']);
+  const large = liftWith(LARGE, ['ecgRanks']);
 
-for (const name of INIT_RANKINGS) {
-  const m = src.match(new RegExp(`const ${name}\\s*=\\s*([\\s\\S]{0,120})`));
+  // Pure: same collection in, same ranks out, whatever the engine was built with.
+  const a = small.ecgRanks(SMALL);
+  const b = large.ecgRanks(SMALL);
   r.checks++;
-  if (!m) {
-    r.fail('init-rankings', `${name} no longer exists in src/main.js — update this test`);
-  } else if (/healthDataSets/.test(m[1])) {
-    r.fail('init-rankings',
-      `${name} is computed from the baked healthDataSets at init and never recomputed — ` +
-      `it cannot re-rank when the live collection grows`);
+  if (JSON.stringify(a) !== JSON.stringify(b)) {
+    r.fail('ecg-ranks',
+      'ecgRanks() differs between two engines handed the same collection — ' +
+      'it is still reading module-scope baked data');
+  }
+
+  // Live: the ranks must actually MOVE when the collection grows. A function
+  // that ignores its argument would pass the purity check above and still be
+  // frozen, so this is the half that proves it re-ranks.
+  const grown = small.ecgRanks(LARGE);
+  r.checks++;
+  if (JSON.stringify(a) === JSON.stringify(grown)) {
+    r.fail('ecg-ranks',
+      'ecgRanks() returned identical ranks for a 30-piece and a 100-piece ' +
+      'collection — it is not following the live collection at all');
+  }
+
+  // Every field must be present and sane, or a consumer silently gets undefined.
+  const EXPECT = ['qtc', 'pAxis', 'rAxis', 'tAxis', 'ventRate', 'pr', 'qrs',
+                  'qrsTAngle', 'qrsTAngleMin', 'qrsTAngleMax',
+                  'bunCreatP05', 'bunCreatP95'];
+  for (const k of EXPECT) {
+    r.checks++;
+    const v = a[k];
+    const ok = Array.isArray(v)
+      ? v.length === SMALL.length && v.every(Number.isFinite)
+      : Number.isFinite(v);
+    if (!ok) r.fail('ecg-ranks', `ecgRanks().${k} is missing or not finite (${JSON.stringify(v)?.slice(0, 40)})`);
+  }
+
+  // Sorted arrays must actually be sorted — percentile() assumes it.
+  for (const k of ['qtc', 'pAxis', 'rAxis', 'tAxis', 'ventRate', 'pr', 'qrs', 'qrsTAngle']) {
+    r.checks++;
+    const v = a[k];
+    if (!Array.isArray(v) || v.some((x, i) => i > 0 && x < v[i - 1])) {
+      r.fail('ecg-ranks', `ecgRanks().${k} is not sorted ascending — percentile() requires it`);
+    }
+  }
+
+  // A collection of one is the real state of piece 0 before any sibling lands.
+  r.checks++;
+  try {
+    const solo = small.ecgRanks([SMALL[0]]);
+    if (!Number.isFinite(solo.bunCreatP05) || !Number.isFinite(solo.qrsTAngleMin)) {
+      r.fail('ecg-ranks', 'ecgRanks() on a collection of one produced non-finite values');
+    }
+  } catch (e) {
+    r.fail('ecg-ranks', `ecgRanks() threw on a collection of one: ${e.message}`);
   }
 }
 

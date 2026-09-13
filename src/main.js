@@ -397,25 +397,9 @@ async function init() {
   const uNirvanaRGBLoc   = gl.getUniformLocation(program, "u_nirvanaRGB");
   const uPartnerRGBLoc   = gl.getUniformLocation(program, "u_partnerRGB");
 
-  // Pre-compute BUN/Creatinine ratio winsorized range across all datasets (once)
-  const allBunCreatRatios = healthDataSets
-    .map((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine))
-    .slice()
-    .sort((a, b) => a - b);
-  const bunCreatP05 = allBunCreatRatios[Math.floor(0.05 * (allBunCreatRatios.length - 1))];
-  const bunCreatP95 = allBunCreatRatios[Math.ceil(0.95 * (allBunCreatRatios.length - 1))];
-  const sortedQtcValues = healthDataSets.map((d) => d.ecg.qtcInterval).sort((a, b) => a - b);
-  const sortedPAxisValues     = healthDataSets.map((d) => d.ecg.pAxis).sort((a, b) => a - b);
-  const sortedRAxisValues     = healthDataSets.map((d) => d.ecg.rAxis).sort((a, b) => a - b);
-  const sortedTAxisValues     = healthDataSets.map((d) => d.ecg.tAxis).sort((a, b) => a - b);
-  const sortedVentRateValues  = healthDataSets.map((d) => d.ecg.ventRate).sort((a, b) => a - b);
-  const sortedPRValues        = healthDataSets.map((d) => d.ecg.prInterval).sort((a, b) => a - b);
-  const sortedQRSValues       = healthDataSets.map((d) => d.ecg.qrsInterval).sort((a, b) => a - b);
-  // QRS-T angle: |rAxis - tAxis|, normalized over dataset range
-  const allQrsTAngles = healthDataSets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
-  const qrsTAngleMin = Math.min(...allQrsTAngles);
-  const qrsTAngleMax = Math.max(...allQrsTAngles);
-  const sortedQRSTAngleValues = [...allQrsTAngles].sort((a, b) => a - b);
+  // ECG and BUN/creatinine rankings come from ecgRanks(drawCollection) at draw
+  // time — see the note on that function. They used to be computed here, once,
+  // from the baked array, and so could never re-rank as the collection grew.
 
   let currentDataSetIndex      = /*BAKE:DATASET_INDEX*/5;
   let lastTwoHashDigits        = /*BAKE:HASH_DIGITS*/88;
@@ -1202,26 +1186,26 @@ async function init() {
     {
       label: 'N (BUN)', labKey: 'nitrogen', phaseKey: 'N',
       phaseSeed: (h) => (h / 99) * 2 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.NITROGEN),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.NITROGEN, coll),
       strengthLoc: uNitrogenStrengthLoc, hueLoc: uNitrogenHueDegLoc, radiusLoc: uNitrogenRadiusLoc,
-      update({ ph, p, ds }) {
+      update({ ph, p, ds, coll }) {
         const amp = getBreathingAmplitude(ds);
         let str = clamp(0.58 * (0.5 + 0.5 * Math.sin(ph) * amp), 0, 1);
         str = 0.35 + 0.20 * str;
-        const hue = getBeamHueAnchorDeg(ds, BEAM.NITROGEN) + (10 + 8 * p) * Math.sin(ph * 0.93 + 0.14);
+        const hue = getBeamHueAnchorDeg(ds, BEAM.NITROGEN, coll) + (10 + 8 * p) * Math.sin(ph * 0.93 + 0.14);
         return { str, hue };
       },
     },
     {
       label: 'C (Cr)', labKey: 'creatinine', phaseKey: 'C',
       phaseSeed: (h) => (h / 99) * 1.3 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CREATININE),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CREATININE, coll),
       strengthLoc: uCreatinineStrengthLoc, hueLoc: uCreatinineHueDegLoc, radiusLoc: uCreatinineRadiusLoc,
-      update({ ph, p, ds }) {
+      update({ ph, p, ds, coll }) {
         const amp = getBreathingAmplitude(ds);
         let str = clamp((0.4 + 0.3 * p) * (0.5 + 0.5 * Math.sin(ph) * amp), 0, 1);
         str = 0.3 + 0.20 * str;
-        const hue = getBeamHueAnchorDeg(ds, BEAM.CREATININE) + (8 + 5 * p) * Math.sin(ph * 1.07 + 0.08);
+        const hue = getBeamHueAnchorDeg(ds, BEAM.CREATININE, coll) + (8 + 5 * p) * Math.sin(ph * 1.07 + 0.08);
         return { str, hue };
       },
     },
@@ -1262,7 +1246,7 @@ async function init() {
     {
       label: 'CO2', labKey: 'carbonDioxide', phaseKey: 'CO2',
       phaseSeed: (h) => (h / 99) * 1.1 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CO2),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CO2, coll),
       strengthLoc: uCo2StrengthLoc, hueLoc: uCo2HueDegLoc, radiusLoc: null,
       update({ ph, p, baseHueDeg, co2Pulse }) {
         const str = clamp(0.26 + 0.18 * (1 - p) + 0.22 * co2Pulse, 0, 0.62);
@@ -1275,7 +1259,7 @@ async function init() {
     {
       label: 'Ca', labKey: 'calcium', phaseKey: 'Ca',
       phaseSeed: (h) => (h / 99) * 0.7 * Math.PI, tickTwoPi: true,
-      tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CALCIUM),
+      tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CALCIUM, coll),
       strengthLoc: uCalciumStrengthLoc, hueLoc: uCalciumHueDegLoc, radiusLoc: uCalciumRadiusLoc,
       update({ ph, p, baseHueDeg, caPulse, pCO2, pPR }) {
         const str = clamp(0.06 + 0.08 * (1 - pCO2) + 0.16 * caPulse, 0, 0.30);
@@ -1304,7 +1288,7 @@ async function init() {
     const _initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
     for (const cfg of beamConfigs) {
       const seed  = cfg.phaseSeed(lastTwoHashDigits);
-      const tempo = Math.max(1e-3, cfg.tempoFn(_initDs));
+      const tempo = Math.max(1e-3, cfg.tempoFn(_initDs, lcEffectiveCollection()));
       if (cfg.tickTwoPi) {
         // Accumulates radians — no need to mod, JS Math.sin handles large args.
         beamPhases[cfg.phaseKey] = seed + (_initSecs * 2 * Math.PI) / tempo;
@@ -1359,6 +1343,7 @@ async function init() {
     // post-reanimation blend) — falls back to local healthDataSets in dev/early boot.
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const drawCollection = getDrawCollection();
+    const _ecg = ecgRanks(drawCollection);
     // getAgedDataset expects a POSITION into the dense drawCollection, not a
     // pieceIndex. They coincide when pieces are contiguous (0..N-1), but for
     // non-contiguous collections (e.g., baked 0..29 + piece 100), own pieceIndex
@@ -1398,11 +1383,11 @@ async function init() {
       0, 1
     );
     if (uQtcNormLoc) gl.uniform1f(uQtcNormLoc, qtcNorm);
-    const qtcPercentile = percentile(activeDataSet.ecg.qtcInterval, sortedQtcValues);
+    const qtcPercentile = percentile(activeDataSet.ecg.qtcInterval, _ecg.qtc);
     if (uQtcPercentileLoc) gl.uniform1f(uQtcPercentileLoc, qtcPercentile);
-    const pAxisPct = percentile(activeDataSet.ecg.pAxis, sortedPAxisValues);
-    const rAxisPct = percentile(activeDataSet.ecg.rAxis, sortedRAxisValues);
-    const tAxisPct = percentile(activeDataSet.ecg.tAxis, sortedTAxisValues);
+    const pAxisPct = percentile(activeDataSet.ecg.pAxis, _ecg.pAxis);
+    const rAxisPct = percentile(activeDataSet.ecg.rAxis, _ecg.rAxis);
+    const tAxisPct = percentile(activeDataSet.ecg.tAxis, _ecg.tAxis);
     if (uPAxisPctLoc) gl.uniform1f(uPAxisPctLoc, pAxisPct);
     if (uRAxisPctLoc) gl.uniform1f(uRAxisPctLoc, rAxisPct);
     if (uTAxisPctLoc) gl.uniform1f(uTAxisPctLoc, tAxisPct);
@@ -1429,14 +1414,14 @@ async function init() {
     if (uCo2NormLoc) gl.uniform1f(uCo2NormLoc, co2Norm);
     const qrsTAngle = Math.abs(activeDataSet.ecg.rAxis - activeDataSet.ecg.tAxis);
     const qrsTAngleNorm = clamp(
-      (qrsTAngle - qrsTAngleMin) / Math.max(1e-6, qrsTAngleMax - qrsTAngleMin),
+      (qrsTAngle - _ecg.qrsTAngleMin) / Math.max(1e-6, _ecg.qrsTAngleMax - _ecg.qrsTAngleMin),
       0, 1
     );
     if (uQrsTAngleLoc) gl.uniform1f(uQrsTAngleLoc, qrsTAngleNorm);
-    const ventRatePct   = percentile(activeDataSet.ecg.ventRate,    sortedVentRateValues);
-    const prPct         = percentile(activeDataSet.ecg.prInterval,  sortedPRValues);
-    const qrsPct        = percentile(activeDataSet.ecg.qrsInterval, sortedQRSValues);
-    const qrsTAnglePct  = percentile(qrsTAngle,                     sortedQRSTAngleValues);
+    const ventRatePct   = percentile(activeDataSet.ecg.ventRate,    _ecg.ventRate);
+    const prPct         = percentile(activeDataSet.ecg.prInterval,  _ecg.pr);
+    const qrsPct        = percentile(activeDataSet.ecg.qrsInterval, _ecg.qrs);
+    const qrsTAnglePct  = percentile(qrsTAngle,                     _ecg.qrsTAngle);
     if (uVentRatePctLoc)  gl.uniform1f(uVentRatePctLoc,  ventRatePct);
     if (uPrPctLoc)        gl.uniform1f(uPrPctLoc,        prPct);
     if (uQrsPctLoc)       gl.uniform1f(uQrsPctLoc,       qrsPct);
@@ -1480,13 +1465,13 @@ async function init() {
       const cfg = beamConfigs[i];
       beamPhases[cfg.phaseKey] = beamPhases[cfg.phaseKey] ?? cfg.phaseSeed(lastTwoHashDigits);
       if (cfg.tickTwoPi) {
-        beamPhases[cfg.phaseKey] += (dt * 2 * Math.PI) / Math.max(1e-3, cfg.tempoFn(activeDataSet));
+        beamPhases[cfg.phaseKey] += (dt * 2 * Math.PI) / Math.max(1e-3, cfg.tempoFn(activeDataSet, drawCollection));
       } else {
-        beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet))) % 1;
+        beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet, drawCollection))) % 1;
       }
       const ph = beamPhases[cfg.phaseKey];
       const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, drawCollection);
-      const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
+      const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, coll: drawCollection, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
       if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);
       if (cfg.radiusLoc)   gl.uniform1f(cfg.radiusLoc, p);
@@ -1500,7 +1485,7 @@ async function init() {
     // BUN/Creatinine ratio: spatial coupling between nitrogen and creatinine forms
     const bunCreatRatio = activeDataSet.labs.nitrogen / Math.max(0.1, activeDataSet.labs.creatinine);
     const bunCreatRatioNorm = clamp(
-      (bunCreatRatio - bunCreatP05) / Math.max(1e-9, bunCreatP95 - bunCreatP05),
+      (bunCreatRatio - _ecg.bunCreatP05) / Math.max(1e-9, _ecg.bunCreatP95 - _ecg.bunCreatP05),
       0, 1
     );
     if (uBunCreatRatioNormLoc) gl.uniform1f(uBunCreatRatioNormLoc, bunCreatRatioNorm);
@@ -1623,7 +1608,7 @@ const BEAM = Object.freeze({
 function winsorizedPercentileForLab(
   dataSet,
   labKey,
-  datasets = healthDataSets
+  datasets
 ) {
   const values = datasets
     .map((d) => d.labs[labKey])
@@ -1659,11 +1644,48 @@ function getBreathingAmplitude(dataSet) {
 }
 
 // Tempo: data-driven per beam
-function getBeamTempoSeconds(dataSet, beamId) {
+// ECG + BUN/creatinine rankings, derived from whatever collection is passed.
+//
+// These were nine `const`s inside init(), computed once from the baked array and
+// never recomputed — so every ECG-derived percentile (form angles, beam
+// amplitudes, the kidney coupling) stayed frozen against the first 30 datasets
+// while colour correctly re-ranked against the chain. They agreed only because
+// the baked array happened to equal the 30 inscribed pieces; they diverge at
+// piece 31. Top-level so the test harness can drive them.
+//
+// Cached on collection identity: sibling discovery replaces the array rather
+// than mutating it, so identity changing is exactly when a recompute is due.
+// The cache hangs off the function so it stays self-contained and liftable.
+function ecgRanks(datasets) {
+  if (ecgRanks._for === datasets && ecgRanks._cache) return ecgRanks._cache;
+  const sortedBy = (f) => datasets.map(f).sort((a, b) => a - b);
+  const angles = datasets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
+  const ratios = datasets
+    .map((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine))
+    .sort((a, b) => a - b);
+  ecgRanks._for = datasets;
+  ecgRanks._cache = {
+    qtc:          sortedBy((d) => d.ecg.qtcInterval),
+    pAxis:        sortedBy((d) => d.ecg.pAxis),
+    rAxis:        sortedBy((d) => d.ecg.rAxis),
+    tAxis:        sortedBy((d) => d.ecg.tAxis),
+    ventRate:     sortedBy((d) => d.ecg.ventRate),
+    pr:           sortedBy((d) => d.ecg.prInterval),
+    qrs:          sortedBy((d) => d.ecg.qrsInterval),
+    qrsTAngle:    [...angles].sort((a, b) => a - b),
+    qrsTAngleMin: Math.min(...angles),
+    qrsTAngleMax: Math.max(...angles),
+    bunCreatP05:  ratios[Math.floor(0.05 * (ratios.length - 1))],
+    bunCreatP95:  ratios[Math.ceil(0.95 * (ratios.length - 1))],
+  };
+  return ecgRanks._cache;
+}
+
+function getBeamTempoSeconds(dataSet, beamId, datasets) {
   switch (beamId) {
     case BEAM.NITROGEN: {
       // High BUN (waste accumulating) → more urgent breathing cycle
-      const vals = healthDataSets.map(d => d.labs.nitrogen).sort((a, b) => a - b);
+      const vals = datasets.map(d => d.labs.nitrogen).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.nitrogen, vals);
       return 10 - 3 * p; // 10s (low BUN) → 7s (high BUN)
     }
@@ -1678,7 +1700,7 @@ function getBeamTempoSeconds(dataSet, beamId) {
     }
     case BEAM.CO2: {
       // Low eGFR → more acidosis pressure → faster CO2 cycling
-      const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
+      const vals = datasets.map(d => d.labs.eGFR).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.eGFR, vals);
       return 12 + 8 * p; // 12s (low eGFR, stressed) → 20s (high eGFR, calm)
     }
@@ -1699,20 +1721,20 @@ function getBeamTempoSeconds(dataSet, beamId) {
 // Hue anchor: kidney beams offset from base by an independent lab variable.
 // Uses an offset from baseHueDeg (not a full remap) so pieces stay coherent
 // while the kidney markers can still diverge meaningfully under disease.
-function getBeamHueAnchorDeg(dataSet, beamId) {
-  const { hue } = computeHSBFromStats(dataSet, healthDataSets);
+function getBeamHueAnchorDeg(dataSet, beamId, datasets) {
+  const { hue } = computeHSBFromStats(dataSet, datasets);
   const baseDeg = hue * 360.0;
   switch (beamId) {
     case BEAM.NITROGEN: {
       // eGFR offsets nitrogen ±80° from base. Low eGFR (failing kidneys) pushes
       // the form away from the glucose background — disease creates color tension.
-      const vals = healthDataSets.map(d => d.labs.eGFR).sort((a, b) => a - b);
+      const vals = datasets.map(d => d.labs.eGFR).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.eGFR, vals);
       return baseDeg + (p - 0.5) * 160; // ±80° from base
     }
     case BEAM.CREATININE: {
       // Potassium offsets creatinine ±60° from base — K+ varies independently.
-      const vals = healthDataSets.map(d => d.labs.potassium).sort((a, b) => a - b);
+      const vals = datasets.map(d => d.labs.potassium).sort((a, b) => a - b);
       const p = percentile(dataSet.labs.potassium, vals);
       return baseDeg + (p - 0.5) * 120; // ±60° from base
     }

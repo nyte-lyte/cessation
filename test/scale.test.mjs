@@ -221,10 +221,12 @@ for (const n of [1, 2, 3, BAKED, BAKED + 1, 40, 100]) {
     }
 
     for (const [label, fn, args] of [
-      ['getBeamTempoSeconds(NITROGEN)',   beams.getBeamTempoSeconds, [ds, beams.BEAM?.NITROGEN ?? 0]],
-      ['getBeamTempoSeconds(CREATININE)', beams.getBeamTempoSeconds, [ds, 1]],
-      ['getBeamTempoSeconds(CO2)',        beams.getBeamTempoSeconds, [ds, 4]],
-      ['getBeamTempoSeconds(CALCIUM)',    beams.getBeamTempoSeconds, [ds, 5]],
+      // getBeamTempoSeconds now takes the collection — it used to read the baked
+      // array directly, so beam tempo could never re-rank as the chain grew.
+      ['getBeamTempoSeconds(NITROGEN)',   beams.getBeamTempoSeconds, [ds, beams.BEAM?.NITROGEN ?? 0, baked]],
+      ['getBeamTempoSeconds(CREATININE)', beams.getBeamTempoSeconds, [ds, 1, baked]],
+      ['getBeamTempoSeconds(CO2)',        beams.getBeamTempoSeconds, [ds, 4, baked]],
+      ['getBeamTempoSeconds(CALCIUM)',    beams.getBeamTempoSeconds, [ds, 5, baked]],
       ['sodiumTempoSeconds',              beams.sodiumTempoSeconds,  [ds]],
       ['chlorideTempoSeconds',            beams.chlorideTempoSeconds,[ds]],
     ]) {
