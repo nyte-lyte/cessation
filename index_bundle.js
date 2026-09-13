@@ -450,6 +450,16 @@ function normalize(val, min, max) {
 const ECG_KEYS = ['ventRate', 'prInterval', 'qrsInterval', 'qtInterval', 'qtcInterval', 'pAxis', 'rAxis', 'tAxis'];
 const LAB_KEYS = ['glucose', 'nitrogen', 'creatinine', 'eGFR', 'sodium', 'potassium', 'chloride', 'carbonDioxide', 'calcium'];
 
+function isUsableDataset(d) {
+  if (!d || typeof d !== 'object') return false;
+  if (!d.ecg || typeof d.ecg !== 'object') return false;
+  if (!d.labs || typeof d.labs !== 'object') return false;
+
+  for (const k of ECG_KEYS) if (typeof d.ecg[k] === 'number' && Number.isFinite(d.ecg[k])) return true;
+  for (const k of LAB_KEYS) if (typeof d.labs[k] === 'number' && Number.isFinite(d.labs[k])) return true;
+  return false;
+}
+
 function computeMinMaxValues(allDatasets) {
   const result = {};
   for (const k of ECG_KEYS) result[k] = { min: Infinity, max: -Infinity };
@@ -504,21 +514,25 @@ function blendDatasets(a, b, minMaxValues) {
   return blended;
 }
 
+function normOr(v, range) {
+  if (typeof v !== 'number' || !Number.isFinite(v) || !range) return 0.5;
+  const n = normalize(v, range.min, range.max);
+  return Number.isFinite(n) ? n : 0.5;
+}
+
 function computeKarma(dataset, minMaxValues) {
-  const nQTc       = normalize(dataset.ecg.qtcInterval, minMaxValues.qtcInterval.min, minMaxValues.qtcInterval.max);
-  const nCreat     = normalize(dataset.labs.creatinine, minMaxValues.creatinine.min,  minMaxValues.creatinine.max);
-  const nEGFR      = normalize(dataset.labs.eGFR,       minMaxValues.eGFR.min,        minMaxValues.eGFR.max);
-  const nGlucose   = normalize(dataset.labs.glucose,    minMaxValues.glucose.min,     minMaxValues.glucose.max);
-  const nVentRate  = normalize(dataset.ecg.ventRate,    minMaxValues.ventRate.min,    minMaxValues.ventRate.max);
+  const nQTc       = normOr(dataset?.ecg?.qtcInterval, minMaxValues?.qtcInterval);
+  const nCreat     = normOr(dataset?.labs?.creatinine, minMaxValues?.creatinine);
+  const nEGFR      = normOr(dataset?.labs?.eGFR,       minMaxValues?.eGFR);
+  const nGlucose   = normOr(dataset?.labs?.glucose,    minMaxValues?.glucose);
+  const nVentRate  = normOr(dataset?.ecg?.ventRate,    minMaxValues?.ventRate);
   return nQTc * 0.35 + nCreat * 0.25 + (1 - nEGFR) * 0.20 + nGlucose * 0.15 + nVentRate * 0.05;
 }
 
 const KARMA_CLEARANCE_K = 0.05;
 
 function karmaClearanceRate(dataset, minMaxValues) {
-  return KARMA_CLEARANCE_K * normalize(
-    dataset.labs.eGFR, minMaxValues.eGFR.min, minMaxValues.eGFR.max
-  );
+  return KARMA_CLEARANCE_K * normOr(dataset?.labs?.eGFR, minMaxValues?.eGFR);
 }
 
 function remainingKarma(dataset, uncleared, minMaxValues) {
@@ -1192,7 +1206,8 @@ async function init() {
             if (!hex || typeof hex !== 'string' || !hex.trim()) continue;
             try {
               const meta = cborDecode(hex.trim());
-              if (meta && meta.dataset) {
+
+              if (meta && meta.dataset && isUsableDataset(meta.dataset)) {
                 fetched.push({
                   id,
                   pieceIndex:      meta.pieceIndex      ?? null,
@@ -1901,25 +1916,30 @@ function getBreathingAmplitude(dataSet) {
 
 function ecgRanks(datasets) {
   if (ecgRanks._for === datasets && ecgRanks._cache) return ecgRanks._cache;
-  const sortedBy = (f) => datasets.map(f).sort((a, b) => a - b);
-  const angles = datasets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
-  const ratios = datasets
-    .map((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine))
-    .sort((a, b) => a - b);
+
+  const finiteSorted = (arr) => arr.filter((v) => typeof v === 'number' && Number.isFinite(v))
+                                   .sort((a, b) => a - b);
+  const sortedBy = (f) => finiteSorted(datasets.map((d) => { try { return f(d); } catch { return NaN; } }));
+  const angles = finiteSorted(datasets.map((d) => Math.abs(d?.ecg?.rAxis - d?.ecg?.tAxis)));
+  const ratios = finiteSorted(datasets.map((d) => d?.labs?.nitrogen / Math.max(0.1, d?.labs?.creatinine)));
+
+  const safeMin = (a) => (a.length ? Math.min(...a) : 0);
+  const safeMax = (a) => (a.length ? Math.max(...a) : 0);
+  const at = (a, i) => (a.length ? a[Math.min(a.length - 1, Math.max(0, i))] : 0);
   ecgRanks._for = datasets;
   ecgRanks._cache = {
-    qtc:          sortedBy((d) => d.ecg.qtcInterval),
-    pAxis:        sortedBy((d) => d.ecg.pAxis),
-    rAxis:        sortedBy((d) => d.ecg.rAxis),
-    tAxis:        sortedBy((d) => d.ecg.tAxis),
-    ventRate:     sortedBy((d) => d.ecg.ventRate),
-    pr:           sortedBy((d) => d.ecg.prInterval),
-    qrs:          sortedBy((d) => d.ecg.qrsInterval),
-    qrsTAngle:    [...angles].sort((a, b) => a - b),
-    qrsTAngleMin: Math.min(...angles),
-    qrsTAngleMax: Math.max(...angles),
-    bunCreatP05:  ratios[Math.floor(0.05 * (ratios.length - 1))],
-    bunCreatP95:  ratios[Math.ceil(0.95 * (ratios.length - 1))],
+    qtc:          sortedBy((d) => d?.ecg?.qtcInterval),
+    pAxis:        sortedBy((d) => d?.ecg?.pAxis),
+    rAxis:        sortedBy((d) => d?.ecg?.rAxis),
+    tAxis:        sortedBy((d) => d?.ecg?.tAxis),
+    ventRate:     sortedBy((d) => d?.ecg?.ventRate),
+    pr:           sortedBy((d) => d?.ecg?.prInterval),
+    qrs:          sortedBy((d) => d?.ecg?.qrsInterval),
+    qrsTAngle:    angles,
+    qrsTAngleMin: safeMin(angles),
+    qrsTAngleMax: safeMax(angles),
+    bunCreatP05:  at(ratios, Math.floor(0.05 * (ratios.length - 1))),
+    bunCreatP95:  at(ratios, Math.ceil(0.95 * (ratios.length - 1))),
   };
   return ecgRanks._cache;
 }

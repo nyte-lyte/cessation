@@ -1002,3 +1002,69 @@ lineage and fixed partner) and `u_resolution`.
 `truncproxy.mjs` in the scratchpad does this: serves the real chain but shows only
 the first N children. It is the cheapest way to ask "what did this piece look like
 when the collection was smaller" without touching the chain.
+
+
+## Safe for readings not yet taken (2026-09-13)
+
+The sharper version of the newcomer question: *"adding the new dataset to
+health_data_sets.js keeps the problem intact for the next data set."* Correct.
+Rehearsing piece 30 proves piece 30. Piece 31 is a different reading and untested
+again, and so is 32, for as long as the creator is alive. A one-off rehearsal is
+not protection against a recurring risk.
+
+So the protection had to become generic. `test/any_reading.test.mjs` tests the SPACE
+of readings, not a reading — 252,888 checks, **7 failures against the pre-fix engine**:
+
+1. **The data file itself.** Every reading in `health_data_sets.js` must have a
+   `YYYY-MM-DD` date, all 8 ECG + 9 lab values finite, nothing negative except the
+   axes, and no duplicate dates (a duplicate is almost always a copy-pasted record,
+   which fails silently rather than loudly). Nothing checked this before — a typo
+   added months from now would have stayed green until inscription.
+2. **A seeded fuzz** (400 newcomers, seed `0x5eed1234` so any failure reproduces):
+   plausible values, wild magnitudes (`1e±300`, `MAX_VALUE`), and the junk shapes a
+   data-entry mistake actually takes — `null`, `undefined`, `NaN`, `Infinity`,
+   strings, `{}`, `[]`, `true`, and randomly deleted fields.
+3. **Adversarial values** a generator will not reach by chance: zero everywhere,
+   negative zero, `MAX_VALUE`, `MIN_VALUE`, `MAX_SAFE_INTEGER`, ±`Infinity`, `NaN`,
+   and exactly the existing min/max.
+4. **And still living** — a real higher reading must still widen the range and move
+   the existing percentiles. Every check above is satisfied by an engine that
+   ignores newcomers entirely; this is what stops that being the fix.
+
+### What the fuzz found that handpicked cases had not
+
+`computeMinMaxValues` had been guarded, but **`ecgRanks` had exactly the same hole** —
+one instance fixed, not the class:
+
+- a newcomer with `NaN`/`Infinity` in an ECG field made `ecgRanks().qtc` non-finite.
+  Those sorted arrays are what `percentile()` ranks EVERY piece against, so the
+  ordering becomes meaningless for every piece already on chain.
+- a dataset with no `ecg` object **threw inside ecgRanks**, which does not break that
+  piece — it kills the render for every piece that discovered it.
+
+Fixed by filtering non-finite values before sorting, and `safeMin`/`safeMax`/`at`
+helpers so an empty set cannot emit ±Infinity into the shader.
+
+### The ingest contract
+
+`isUsableDataset(d)` in `decay_logic.js` is now the single boundary: a dataset needs
+an `ecg` object, a `labs` object, and at least one finite reading. `lcRefreshSiblings`
+applies it, so `dataset: {}` — truthy, and it used to sail through the old
+`meta.dataset` check — never joins the collection.
+
+Individual missing FIELDS are still admitted deliberately: `computeMinMaxValues` and
+`ecgRanks` ignore non-finite values, so an incomplete reading still contributes
+everything it got right. Degradation is per-field; rejection is only for a dataset
+with no usable shape at all.
+
+`computeKarma` and `karmaClearanceRate` also route through `normOr()`, which ranks a
+missing or junk field at the midpoint instead of poisoning the sum — karma decides
+whether a piece ever stops reanimating, so it has to be a number for every input.
+
+**A trap worth remembering:** the ingest call sits inside a `try/catch` that skips a
+child on error. When `refresh_integrity.test.mjs` lifted `lcRefreshSiblings` without
+`isUsableDataset` in scope, the `ReferenceError` was swallowed and every piece was
+silently skipped — the suite caught it, failing 5 of 14. If that symbol ever goes
+missing from the bundle's scope, a collection renders as one piece with no error at
+all. Verified against the real regtest chain after the change: 30 pieces still
+resolve, 405 draws.

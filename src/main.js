@@ -862,7 +862,12 @@ async function init() {
             if (!hex || typeof hex !== 'string' || !hex.trim()) continue;
             try {
               const meta = cborDecode(hex.trim());
-              if (meta && meta.dataset) {
+              // isUsableDataset is the contract: `dataset: {}` is truthy and used to
+              // pass this check, then throw inside ecgRanks or computeKarma — which
+              // does not break that piece, it kills the render for every piece that
+              // discovered it. Individual missing FIELDS are still fine; the ranking
+              // functions ignore non-finite values.
+              if (meta && meta.dataset && isUsableDataset(meta.dataset)) {
                 fetched.push({
                   id,
                   pieceIndex:      meta.pieceIndex      ?? null,
@@ -1858,25 +1863,37 @@ function getBreathingAmplitude(dataSet) {
 // The cache hangs off the function so it stays self-contained and liftable.
 function ecgRanks(datasets) {
   if (ecgRanks._for === datasets && ecgRanks._cache) return ecgRanks._cache;
-  const sortedBy = (f) => datasets.map(f).sort((a, b) => a - b);
-  const angles = datasets.map((d) => Math.abs(d.ecg.rAxis - d.ecg.tAxis));
-  const ratios = datasets
-    .map((d) => d.labs.nitrogen / Math.max(0.1, d.labs.creatinine))
-    .sort((a, b) => a - b);
+  // Same immune rule as computeMinMaxValues, for the same reason: these sorted
+  // arrays are what percentile() ranks EVERY piece against, so one NaN from one
+  // malformed reading does not spoil that reading — it makes the ordering
+  // meaningless for every piece already on chain. A dataset can also be missing
+  // `ecg` or `labs` altogether, which used to throw right here and take the whole
+  // frame down. Drop what is not a finite number and rank against the rest.
+  const finiteSorted = (arr) => arr.filter((v) => typeof v === 'number' && Number.isFinite(v))
+                                   .sort((a, b) => a - b);
+  const sortedBy = (f) => finiteSorted(datasets.map((d) => { try { return f(d); } catch { return NaN; } }));
+  const angles = finiteSorted(datasets.map((d) => Math.abs(d?.ecg?.rAxis - d?.ecg?.tAxis)));
+  const ratios = finiteSorted(datasets.map((d) => d?.labs?.nitrogen / Math.max(0.1, d?.labs?.creatinine)));
+  // Everything below indexes into these, and Math.min/max of an empty array is
+  // ±Infinity. An empty set means no usable reading at all — rank everything at
+  // the midpoint rather than emitting infinities into the shader.
+  const safeMin = (a) => (a.length ? Math.min(...a) : 0);
+  const safeMax = (a) => (a.length ? Math.max(...a) : 0);
+  const at = (a, i) => (a.length ? a[Math.min(a.length - 1, Math.max(0, i))] : 0);
   ecgRanks._for = datasets;
   ecgRanks._cache = {
-    qtc:          sortedBy((d) => d.ecg.qtcInterval),
-    pAxis:        sortedBy((d) => d.ecg.pAxis),
-    rAxis:        sortedBy((d) => d.ecg.rAxis),
-    tAxis:        sortedBy((d) => d.ecg.tAxis),
-    ventRate:     sortedBy((d) => d.ecg.ventRate),
-    pr:           sortedBy((d) => d.ecg.prInterval),
-    qrs:          sortedBy((d) => d.ecg.qrsInterval),
-    qrsTAngle:    [...angles].sort((a, b) => a - b),
-    qrsTAngleMin: Math.min(...angles),
-    qrsTAngleMax: Math.max(...angles),
-    bunCreatP05:  ratios[Math.floor(0.05 * (ratios.length - 1))],
-    bunCreatP95:  ratios[Math.ceil(0.95 * (ratios.length - 1))],
+    qtc:          sortedBy((d) => d?.ecg?.qtcInterval),
+    pAxis:        sortedBy((d) => d?.ecg?.pAxis),
+    rAxis:        sortedBy((d) => d?.ecg?.rAxis),
+    tAxis:        sortedBy((d) => d?.ecg?.tAxis),
+    ventRate:     sortedBy((d) => d?.ecg?.ventRate),
+    pr:           sortedBy((d) => d?.ecg?.prInterval),
+    qrs:          sortedBy((d) => d?.ecg?.qrsInterval),
+    qrsTAngle:    angles,
+    qrsTAngleMin: safeMin(angles),
+    qrsTAngleMax: safeMax(angles),
+    bunCreatP05:  at(ratios, Math.floor(0.05 * (ratios.length - 1))),
+    bunCreatP95:  at(ratios, Math.ceil(0.95 * (ratios.length - 1))),
   };
   return ecgRanks._cache;
 }

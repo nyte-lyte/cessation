@@ -88,8 +88,14 @@ async function runRefresh(failFor, startingCollection, failChildrenListing = fal
     throw new Error('unexpected url ' + url);
   };
 
+  // lcRefreshSiblings now applies the ingest contract from decay_logic. It has to
+  // be in scope here or the ReferenceError is swallowed by the surrounding catch
+  // and every piece is silently skipped — which is exactly what this test caught.
+  const isUsableDataset = (d) =>
+    !!d && typeof d === 'object' && !!d.ecg && !!d.labs &&
+    (Object.values(d.ecg).some(Number.isFinite) || Object.values(d.labs).some(Number.isFinite));
   const scope = {
-    lc, cborDecode, fetch: fakeFetch,
+    lc, cborDecode, fetch: fakeFetch, isUsableDataset,
     SIBLING_FETCH_BATCH: 8,
     refreshMinMaxValues: () => { minMaxCalls++; },
     recomputePartnerInheritedHue: () => {},

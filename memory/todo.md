@@ -83,6 +83,12 @@ field gave NaN ranges; a null silently widened them and re-ranked everyone).
 blocks a reading that is not fit to inscribe. `test/newcomer.test.mjs`, 6,346 checks.
 See [[testing]] "The newcomer problem".
 
+**Generic protection added 2026-09-13** so this is not a per-reading gamble:
+`test/any_reading.test.mjs` (252,888 checks) fuzzes the whole space of readings and
+validates `health_data_sets.js` itself on every run, so a bad reading fails the suite
+the moment it is typed in. It found that `ecgRanks` had the same hole as
+`computeMinMaxValues` — one instance had been fixed, not the class.
+
 **Still open:** an actual 31st inscription cannot be tested until a new real reading
 exists — `inscribe.js` stops at index 30 (loudly, pre-broadcast). When the next
 reading arrives, inscribe it on REGTEST first before mainnet.
