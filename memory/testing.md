@@ -1131,6 +1131,21 @@ correct, not a growth bug: inherited hue is the PREVIOUS piece's glucose percent
 piece 29's glucose is 89, and 89 is the collection minimum — percentile 0, hue 0°,
 piece 30 inherits red.
 
+### Confirmed by eye, not only by instrument (2026-09-13)
+
+The creator, who has spent years with these images, looked at the contact sheet and
+identified unprompted that piece 30 was influencing 0–29. That is a distinct and
+stronger form of evidence than the uniform diff: the measurement says 36 of 43
+uniforms moved, but it cannot say whether the change is PERCEPTIBLE, or whether the
+collection still reads correctly afterwards rather than merely differently. Someone
+who knows the pieces would notice influence that looked wrong.
+
+Calibration to carry forward: piece 30 is deliberately extreme — a quarter-spread
+past the maximum on every field — so the visible shift is the UPPER BOUND of what one
+arrival does. A real reading usually lands inside the existing spread and will move
+the collection more gently. If a future real reading produces a shift this dramatic,
+that is a signal to check the reading, not to celebrate.
+
 ### What this does and does not settle
 
 Settled: the mechanism. A new piece arrives, every existing piece discovers it and
