@@ -4,6 +4,54 @@ Rewritten 2026-08-16, updated end of session 2026-08-16. Every claim was re-veri
 against the code. The previous version of this file asserted a state the code did not
 match — see "Why this file was wrong" at the bottom before trusting any old checkmark.
 
+## DECIDED 2026-09-13 — inscribe AFTER the next reading, not before
+
+The next ECG/lab reading is expected late September 2026. Nothing goes on mainnet
+until it has arrived and been rehearsed on regtest as piece 30.
+
+**Why.** Every piece normalizes through min/max ranges computed across the WHOLE
+collection, so the first genuinely new reading is the first thing that can reach
+across and change pieces already on chain. The engine is immutable once inscribed.
+Testing that path after going live means finding out on mainnet. See [[testing]]
+"The newcomer problem" — a real bug was found exactly there on 2026-09-13.
+
+Waiting costs a few weeks. Being wrong costs the collection.
+
+### The rehearsal, when the reading arrives
+
+The regtest chain is ALREADY set up as the stage for this. **Do not reset
+`ord-env`** — it holds the full v3 collection and piece 30 is the next thing that
+would land on it:
+
+- engine `15f56fe4…b998i0` (82,121 bytes), block 984
+- pieces 0–29, blocks 984–1013, one block each, ids in `regtest_pieces.txt`
+- tip 1014; mine with `bitcoin-cli -datadir=ord-env generatetoaddress 1 <addr>`,
+  address from `ord --datadir ord-env wallet receive` (the `ord` wallet has no
+  bech32 address for `-generate`, and `locktest` returns none — this is the way)
+
+Steps:
+1. Add the new reading to `data/health_data_sets.js` as index 30.
+2. `node inscribe.js 30 <hash> <time> 15f56fe4…b998i0 <height>` on regtest.
+   The validity gate added 2026-09-13 blocks a malformed reading here, before
+   anything is broadcast — it checks `date` is `YYYY-MM-DD` and all 8 ECG + 9 lab
+   values are finite numbers.
+3. Inscribe it (regtest omits `--sat`; mainnet must NOT).
+4. Verify: all 31 resolve (`collection resolved — 31 piece(s) on chain`), and the
+   EXISTING 30 re-rank. `truncproxy.mjs` shows any piece against N siblings, so
+   piece 0 at 30 vs 31 siblings is a direct before/after.
+5. Only then inscribe on mainnet.
+
+This closes the last untested link. `inscribe.js` currently hard-stops at index 30
+because there are exactly 30 real readings — loudly, pre-broadcast, so it fails safe.
+
+### While waiting — nothing expires, but re-verify before inscribing
+- 160 carriers locked in `ord-cold`, 0.00111052 BTC, verified 2026-09-13. Locks are
+  persistent, but **re-check `listlockunspent` before any mainnet run** — a wallet
+  reload or a Core restart is the thing that would quietly drop them.
+- Mainnet ord is synced and idle. It holds ~5.3 GB resident; it is the reason this
+  machine runs out of RAM during long regtest runs. Safe to stop when synced, but
+  never mid-catch-up.
+
 ## THE DECISION THAT FRAMES EVERYTHING
 **Re-inscribing the whole project on fresh sats, v3 engine only.** No fourth layer on
 the existing sats. One inscription per sat, clean parent chain, no legacy ancestors.
