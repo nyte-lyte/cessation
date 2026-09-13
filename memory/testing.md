@@ -159,6 +159,60 @@ discovery works, MIME types are right. Verified 2026-04-05 and 2026-04-11 for th
 architecture current at those dates; re-verified end-to-end 2026-09-06 for v3
 (see "Measured on chain" above).
 
+## AGE — tested 2026-09-12, and it found a real bug
+
+The age axis is listed below as one regtest cannot reach. It can, with two fakes, because
+the engine has **two independent clocks**:
+
+- **wall clock** → `totalYears` → `lifeFraction`, from `Date.now() - inscriptionUnixSeconds`
+- **block height** → cessation / reanimation / liberation / void, from `/r/blockheight`
+
+Faking both: override `Date.now()` in the page, and put a proxy in front of ord that
+offsets `/r/blockheight` (and synthesises `/r/blockinfo/<h>` for heights the regtest chain
+has not reached, since reanimation derives each new lifespan from the cessation block's
+hash). Scripts: `timeproxy.mjs`, `agecheck.mjs` in the session scratchpad — worth rebuilding,
+they are ~60 lines each.
+
+**What passed.** Piece 0 (73.4-year lifespan) at +1, +5, +30, +73, +80, +150 years: renders,
+moves, and visibly ages (47% of pixels differ between +1y and +5y). Past cessation it
+becomes `liberated: true` — correct, piece 0 is genesis with no partner. Piece 1 reanimates:
+`cycle 1` at +60y, `cycle 4` at +200y, and at +600y `[lc] VOID — both partners liberated`,
+`cycle 9`. The whole arc runs without error.
+
+### THE BUG: `lifeFraction` never resets on reanimation
+
+```js
+const baseYears    = Math.max(0, nowUnix - inscriptionUnixSeconds) * YEARS_PER_SECOND;
+const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
+```
+
+Age is measured from the **original inscription** and clamped to 1. Piece 1's lifespan is
+30.7 years, so at 60 years `lifeFraction` is `1.95 → clamped to 1.0`, and it stays exactly
+1.0 for ever.
+
+Measured consequence — the rendered frame is **byte-identical** across cycles:
+
+```
+cycle 0, alive              a151a762383f1fc1
+cycle 1                     5a3b0b265d133229
+cycle 4                     5a3b0b265d133229   <- same image
+cycle 9, liberated + void   346c671d5b4b247f
+```
+
+And it does not animate: 151 draws in 2.5 s — the render loop is running at 60fps — while
+the pixels do not change at all. A reanimated piece is frozen on its terminal frame.
+
+**Ruled out before concluding:** the blended dataset is clean (no non-finite fields, beam
+tempos 7.4–26.4 s, hue anchor finite), and it is not the test rig — the freeze persists with
+the proxy advancing the chain at 2 blocks/sec.
+
+`totalYears` also drives `getAgedDataset`'s chronological drift, so the whole age system
+pins once a piece outlives its first lifespan.
+
+**Not fixed.** Reanimation means a *new life*, so age should almost certainly be measured
+from the current cycle's start rather than from inscription — but that is a design decision
+about what a cycle means, not a mechanical fix, and it is the creator's call.
+
 ## What regtest structurally cannot prove — the three axes
 
 1. **Age.** A regtest piece is minutes old. Anything that only manifests with age is

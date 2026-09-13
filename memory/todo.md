@@ -124,6 +124,14 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
+- **`lifeFraction` never resets on reanimation — a reanimated piece is frozen.** Found
+  2026-09-12 by simulating age. `lifeFraction = clamp(totalYears / lifespanYears, 0, 1)`
+  with `totalYears` measured from the ORIGINAL inscription, so once a piece outlives its
+  first lifespan it pins at exactly 1.0 for ever. Cycles 1 and 4 render a **byte-identical**
+  static frame while the loop runs at 60fps. Ruled out: NaN in the blended dataset, and the
+  test rig. **Design decision, not a mechanical fix:** should age restart each cycle? See
+  [testing.md](testing.md) → "AGE".
+
 - **NOT INSCRIBING YET — more regtest first (creator, 2026-09-12).** The rare sats are
   peeled and ready (153 carriers, 150 consecutive, `PIECE_CARRIERS` filled), but the
   engine and inscribe path need more verification before anything goes on chain. There is
