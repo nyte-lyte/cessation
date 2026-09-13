@@ -34,8 +34,10 @@ failures. Suites green after: 29 purity + 14,033 scale + 14 refresh-integrity.
   tab open across two full lifespans (min 3 years, median ~42) so effectively
   unreachable, and every page load replays correctly. Fixing it changes rendering at
   the moment the flourish ends — a deliberate design call, not a silent patch.
-- **Remove the 7 dead `*HueDeg` uniforms?** Declared, uploaded every frame, never
-  read by the shader. ~228 bytes. Harmless either way.
+- ~~Remove the 7 dead `*HueDeg` uniforms?~~ **DONE 2026-09-12.** Removed with their
+  lookups and uploads; 49 uniforms declared, 0 unread. Proven a no-op: the active
+  uniform set is identical before and after (49 both), same draw count, no errors.
+  Bundle 83052 -> 81927 bytes.
 
 ## Current state
 

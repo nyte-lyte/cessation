@@ -828,10 +828,10 @@ immutability reason.
   null, so a fresh viewer is always correct. Measured visual difference mid-cycle:
   mean 5.4/255, max 58. Fixing it means deciding what happens at the moment the
   flourish ends, which changes rendering — not worth the risk unprompted.
-- **7 dead uniforms** — `u_nitrogenHueDeg`, `u_creatinineHueDeg`, `u_sodiumHueDeg`,
-  `u_chlorideHueDeg`, `u_co2HueDeg`, `u_calciumHueDeg`, `u_partnerInheritedHueDeg`.
-  Declared in GLSL, computed and uploaded every frame by JS, never read by the
-  shader — the RGB uniforms superseded them. ~228 bytes. Harmless, removable.
+- ~~7 dead uniforms~~ **REMOVED 2026-09-12.** `u_nitrogenHueDeg`,
+  `u_creatinineHueDeg`, `u_sodiumHueDeg`, `u_chlorideHueDeg`, `u_co2HueDeg`,
+  `u_calciumHueDeg`, `u_partnerInheritedHueDeg` — declared in GLSL, never read by
+  the shader; the RGB uniforms superseded them. See "Dead uniform removal" below.
 - **`ensureMinMax._for` / `ecgRanks._for` caches never hit**, because
   `lcEffectiveCollection()` returns a fresh array each call. Measured cost at
   N=300: 0.05 ms/frame, 0.3% of a 60fps budget. Dead code, not a defect.
@@ -845,3 +845,31 @@ immutability reason.
   counter is per proxy process, so restart it between runs).
 - The lesson worth keeping: **the suites were green through all five findings.**
   Rendering in a browser caught the first two; injecting failures caught the rest.
+
+
+## Dead uniform removal (2026-09-12)
+
+Removed the 7 uniforms the shader declared but never read, along with their
+`getUniformLocation` calls, the `hueLoc` field in all 6 beam configs, and the two
+dead upload lines. 49 uniforms now declared, **0 never read**.
+
+**They were never actually uploaded.** A uniform no GLSL code reads is INACTIVE in
+the linked program, so `getUniformLocation` already returned null and the
+`if (cfg.hueLoc)` / `if (uPartnerInheritedHueDegLoc)` guards short-circuited every
+frame. So this cost bytes and 7 wasted lookups at init, not per-frame work. (An
+earlier note in this file said they were "uploaded every frame" — they were not.)
+
+**What had to stay.** The `hue` value each beam's `update()` returns is NOT dead —
+the very next line feeds it to the live `u_*RGB` uniform via `hsbToRgb(hue, …)`.
+Likewise `partnerInheritedHueDeg` still drives `u_partnerRGB`. Only the uploads and
+the locations went; every computation remains.
+
+**Proof it changed nothing.** Rendered the same piece against regtest ord on the
+old and new bundles and dumped the uniform set the compiled program exposes:
+
+    old: lookups 56, active 49, inactive 7, draws 342, errors 0
+    new: lookups 49, active 49, inactive 0, draws 342, errors 0
+    active set identical: True
+
+The 7 inactive names in the old run were exactly the 7 removed. Bundle 83052 ->
+81927 bytes (1,125 saved). All suites green.

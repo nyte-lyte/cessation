@@ -31,17 +31,11 @@ uniform float u_totalYears;
 uniform float u_lifespanYears;
 
 uniform float u_nitrogenStrength;
-uniform float u_nitrogenHueDeg;
 uniform float u_creatinineStrength;
-uniform float u_creatinineHueDeg;
 uniform float u_sodiumStrength;
-uniform float u_sodiumHueDeg;
 uniform float u_chlorideStrength;
-uniform float u_chlorideHueDeg;
 uniform float u_co2Strength;
-uniform float u_co2HueDeg;
 uniform float u_calciumStrength;
-uniform float u_calciumHueDeg;
 
 uniform float u_nitrogenRadius;
 uniform float u_creatinineRadius;
@@ -76,7 +70,6 @@ uniform float u_inheritedHueDeg;
 uniform float u_inheritedStrength;
 
 uniform float u_reanimationProgress;
-uniform float u_partnerInheritedHueDeg;
 uniform float u_isLiberated;
 uniform float u_voidProgress;
 
@@ -926,29 +919,20 @@ async function init() {
     program,
     "u_nitrogenStrength"
   );
-  const uNitrogenHueDegLoc = gl.getUniformLocation(program, "u_nitrogenHueDeg");
   const uCreatinineStrengthLoc = gl.getUniformLocation(
     program,
     "u_creatinineStrength"
   );
-  const uCreatinineHueDegLoc = gl.getUniformLocation(
-    program,
-    "u_creatinineHueDeg"
-  );
   const uSodiumStrengthLoc = gl.getUniformLocation(program, "u_sodiumStrength");
-  const uSodiumHueDegLoc = gl.getUniformLocation(program, "u_sodiumHueDeg");
   const uChlorideStrength = gl.getUniformLocation(
     program,
     "u_chlorideStrength"
   );
-  const uChlorideHueDeg = gl.getUniformLocation(program, "u_chlorideHueDeg");
   const uCo2StrengthLoc = gl.getUniformLocation(program, "u_co2Strength");
-  const uCo2HueDegLoc = gl.getUniformLocation(program, "u_co2HueDeg");
   const uCalciumStrengthLoc = gl.getUniformLocation(
     program,
     "u_calciumStrength"
   );
-  const uCalciumHueDegLoc = gl.getUniformLocation(program, "u_calciumHueDeg");
   const uPAxisNormLoc = gl.getUniformLocation(program, "u_pAxisNorm");
   const uRAxisNormLoc = gl.getUniformLocation(program, "u_rAxisNorm");
   const uQtcNormLoc = gl.getUniformLocation(program, "u_qtcNorm");
@@ -969,7 +953,6 @@ async function init() {
   const uInheritedHueDegLoc = gl.getUniformLocation(program, "u_inheritedHueDeg");
   const uInheritedStrengthLoc = gl.getUniformLocation(program, "u_inheritedStrength");
   const uReanimationProgressLoc    = gl.getUniformLocation(program, "u_reanimationProgress");
-  const uPartnerInheritedHueDegLoc = gl.getUniformLocation(program, "u_partnerInheritedHueDeg");
   const uIsLiberatedLoc            = gl.getUniformLocation(program, "u_isLiberated");
   const uVoidProgressLoc           = gl.getUniformLocation(program, "u_voidProgress");
 
@@ -1519,7 +1502,7 @@ async function init() {
       label: 'N (BUN)', labKey: 'nitrogen', phaseKey: 'N',
       phaseSeed: (h) => (h / 99) * 2 * Math.PI, tickTwoPi: true,
       tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.NITROGEN, coll),
-      strengthLoc: uNitrogenStrengthLoc, hueLoc: uNitrogenHueDegLoc, radiusLoc: uNitrogenRadiusLoc,
+      strengthLoc: uNitrogenStrengthLoc, radiusLoc: uNitrogenRadiusLoc,
       update({ ph, p, ds, coll }) {
         const amp = getBreathingAmplitude(ds);
         let str = clamp(0.58 * (0.5 + 0.5 * Math.sin(ph) * amp), 0, 1);
@@ -1532,7 +1515,7 @@ async function init() {
       label: 'C (Cr)', labKey: 'creatinine', phaseKey: 'C',
       phaseSeed: (h) => (h / 99) * 1.3 * Math.PI, tickTwoPi: true,
       tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CREATININE, coll),
-      strengthLoc: uCreatinineStrengthLoc, hueLoc: uCreatinineHueDegLoc, radiusLoc: uCreatinineRadiusLoc,
+      strengthLoc: uCreatinineStrengthLoc, radiusLoc: uCreatinineRadiusLoc,
       update({ ph, p, ds, coll }) {
         const amp = getBreathingAmplitude(ds);
         let str = clamp((0.4 + 0.3 * p) * (0.5 + 0.5 * Math.sin(ph) * amp), 0, 1);
@@ -1545,7 +1528,7 @@ async function init() {
       label: 'Na', labKey: 'sodium', phaseKey: 'Na',
       phaseSeed: (h) => sodiumPhaseSeed(h), tickTwoPi: false,
       tempoFn: (ds) => sodiumTempoSeconds(ds),
-      strengthLoc: uSodiumStrengthLoc, hueLoc: uSodiumHueDegLoc, radiusLoc: uSodiumRadiusLoc,
+      strengthLoc: uSodiumStrengthLoc, radiusLoc: uSodiumRadiusLoc,
       update({ ph, p, ds, baseHueDeg, totalYears }) {
         const arr = sodiumArrivalProgress(totalYears, lifespanYears);
         const amp = sodiumAmplitude(ds, ds.healthIndex ?? 0.5, arr, p);
@@ -1562,7 +1545,7 @@ async function init() {
       label: 'Cl', labKey: 'chloride', phaseKey: 'Cl',
       phaseSeed: (h) => chloridePhaseSeed(h), tickTwoPi: false,
       tempoFn: (ds) => chlorideTempoSeconds(ds),
-      strengthLoc: uChlorideStrength, hueLoc: uChlorideHueDeg, radiusLoc: uChlorideRadiusLoc,
+      strengthLoc: uChlorideStrength, radiusLoc: uChlorideRadiusLoc,
       update({ ph, p, ds, baseHueDeg, totalYears }) {
         const arr = chlorideArrivalProgress(totalYears, lifespanYears);
         const amp = chlorideAmplitude(ds, ds.healthIndex ?? 0.5, arr, p);
@@ -1579,7 +1562,7 @@ async function init() {
       label: 'CO2', labKey: 'carbonDioxide', phaseKey: 'CO2',
       phaseSeed: (h) => (h / 99) * 1.1 * Math.PI, tickTwoPi: true,
       tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CO2, coll),
-      strengthLoc: uCo2StrengthLoc, hueLoc: uCo2HueDegLoc, radiusLoc: null,
+      strengthLoc: uCo2StrengthLoc, radiusLoc: null,
       update({ ph, p, baseHueDeg, co2Pulse }) {
         const str = clamp(0.26 + 0.18 * (1 - p) + 0.22 * co2Pulse, 0, 0.62);
         let hue = baseHueDeg - (24 + 12 * p) + nudgeCO2;
@@ -1592,7 +1575,7 @@ async function init() {
       label: 'Ca', labKey: 'calcium', phaseKey: 'Ca',
       phaseSeed: (h) => (h / 99) * 0.7 * Math.PI, tickTwoPi: true,
       tempoFn: (ds, coll) => getBeamTempoSeconds(ds, BEAM.CALCIUM, coll),
-      strengthLoc: uCalciumStrengthLoc, hueLoc: uCalciumHueDegLoc, radiusLoc: uCalciumRadiusLoc,
+      strengthLoc: uCalciumStrengthLoc, radiusLoc: uCalciumRadiusLoc,
       update({ ph, p, baseHueDeg, caPulse, pCO2, pPR }) {
         const str = clamp(0.06 + 0.08 * (1 - pCO2) + 0.16 * caPulse, 0, 0.30);
         let hue = baseHueDeg + (45 + 25 * p) + nudgeCa;
@@ -1755,7 +1738,6 @@ async function init() {
     if (uInheritedHueDegLoc) gl.uniform1f(uInheritedHueDegLoc, inheritedHueDeg);
     if (uInheritedStrengthLoc) gl.uniform1f(uInheritedStrengthLoc, inheritedStrength);
     if (uReanimationProgressLoc) gl.uniform1f(uReanimationProgressLoc, reanimationProgress);
-    if (uPartnerInheritedHueDegLoc) gl.uniform1f(uPartnerInheritedHueDegLoc, partnerInheritedHueDeg);
     if (uIsLiberatedLoc) gl.uniform1f(uIsLiberatedLoc, isLiberated);
     if (uVoidProgressLoc) gl.uniform1f(uVoidProgressLoc, voidProgress);
 
@@ -1787,7 +1769,6 @@ async function init() {
       const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, drawCollection);
       const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, coll: drawCollection, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
-      if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);
       if (cfg.radiusLoc)   gl.uniform1f(cfg.radiusLoc, p);
       if (beamRGBLocs[i])  gl.uniform3fv(beamRGBLocs[i], hsbToRgb(hue, beamSat[i], beamBri[i]));
     }

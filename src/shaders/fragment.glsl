@@ -16,17 +16,11 @@ uniform float u_lifespanYears;
 
 // Beam uniforms
 uniform float u_nitrogenStrength;
-uniform float u_nitrogenHueDeg;
 uniform float u_creatinineStrength;
-uniform float u_creatinineHueDeg;
 uniform float u_sodiumStrength;
-uniform float u_sodiumHueDeg;
 uniform float u_chlorideStrength;
-uniform float u_chlorideHueDeg;
 uniform float u_co2Strength;
-uniform float u_co2HueDeg;
 uniform float u_calciumStrength;
-uniform float u_calciumHueDeg;
 
 // Blob size uniforms — winsorized lab percentile (0..1)
 // Higher value → larger, more spatially dominant form
@@ -71,7 +65,6 @@ uniform float u_inheritedStrength; // 0..1, fades toward 0 over piece lifespan
 
 // Entropy pool / reanimation uniforms
 uniform float u_reanimationProgress;    // 0 = nirvana/waiting, 1 = fully reanimated
-uniform float u_partnerInheritedHueDeg; // partner's lineage hue in degrees
 uniform float u_isLiberated;            // 1 = karma exhausted, final cycle
 uniform float u_voidProgress;           // 0 = holding radial, 1 = void (both partners ceased)
 
