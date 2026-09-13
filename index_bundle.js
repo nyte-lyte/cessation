@@ -1089,6 +1089,10 @@ async function init() {
     return _lcMergedEntries().findIndex(e => e.pieceIndex === currentDataSetIndex);
   }
 
+  function lcCycleYears() {
+    if (!lc.ready || lc.cycleStartBlock === null) return null;
+    return (lc.currentBlockHeight - lc.cycleStartBlock) / BLOCKS_PER_YEAR;
+  }
   function lcCycleLifeFraction() {
     if (!lc.ready || lc.cycleStartBlock === null) return null;
     const span = lc.cessationBlock - lc.cycleStartBlock;
@@ -1641,8 +1645,9 @@ async function init() {
     );
     setHSBUniforms(activeDataSet, drawCollection);
 
-    gl.uniform1f(uTotalYearsLoc, totalYears);
-    gl.uniform1f(uLifespanYearsLoc, lifespanYears);
+    const _cycY = lcCycleYears();
+    gl.uniform1f(uTotalYearsLoc,    _cycY !== null ? _cycY : totalYears);
+    gl.uniform1f(uLifespanYearsLoc, (_cycY !== null && lc.cycleLifespanYears) ? lc.cycleLifespanYears : lifespanYears);
 
     const pAxisNorm = clamp(
       normalize(activeDataSet.ecg.pAxis, minMaxValues.pAxis.min, minMaxValues.pAxis.max),

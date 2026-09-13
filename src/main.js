@@ -676,6 +676,13 @@ async function init() {
   //
   // Block-native like every other lifecycle event here. Returns null before the
   // chain is known; the caller falls back to wall clock for dev and early boot.
+  // Unclamped age within the current life, in years. Unclamped on purpose: between
+  // cessation and the reanimation firing, this exceeds the cycle's lifespan, and the
+  // shader's dissolution ramp needs exactly that overshoot.
+  function lcCycleYears() {
+    if (!lc.ready || lc.cycleStartBlock === null) return null;
+    return (lc.currentBlockHeight - lc.cycleStartBlock) / BLOCKS_PER_YEAR;
+  }
   function lcCycleLifeFraction() {
     if (!lc.ready || lc.cycleStartBlock === null) return null;
     const span = lc.cessationBlock - lc.cycleStartBlock;
@@ -1430,8 +1437,21 @@ async function init() {
     );
     setHSBUniforms(activeDataSet, drawCollection);
 
-    gl.uniform1f(uTotalYearsLoc, totalYears);
-    gl.uniform1f(uLifespanYearsLoc, lifespanYears);
+    // CYCLE-RELATIVE, not measured from inscription.
+    //
+    // The shader derives its OWN lifeFraction and its nirvanaProgress dissolution
+    // ramp from these two numbers, so feeding it inscription-relative years meant
+    // that once a piece was half a year past its FIRST lifespan,
+    //     nirvanaProgress = clamp((u_totalYears - u_lifespanYears)/0.5, 0, 1)
+    // saturated at 1.0 for ever. finalColor became pure nirvanaState, and with
+    // reanimationProgress back at 0 that is u_nirvanaRGB * 0.90 — a single flat
+    // colour over the whole canvas. Every reanimated piece stopped being artwork.
+    //
+    // Reincarnation means each life ages from zero, so the shader is told about the
+    // CURRENT life: how far into it we are, and how long it is meant to last.
+    const _cycY = lcCycleYears();
+    gl.uniform1f(uTotalYearsLoc,    _cycY !== null ? _cycY : totalYears);
+    gl.uniform1f(uLifespanYearsLoc, (_cycY !== null && lc.cycleLifespanYears) ? lc.cycleLifespanYears : lifespanYears);
 
     // ECG axis uniforms — pAxis and rAxis normalized over dataset min/max
     const pAxisNorm = clamp(

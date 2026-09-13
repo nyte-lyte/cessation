@@ -124,14 +124,15 @@ Consequences accepted deliberately:
 
 ## Outstanding — decisions, before any inscribing
 
-- **A REANIMATED PIECE RENDERS A FLAT COLOUR — BLOCKING.** Found 2026-09-12 by simulating
-  age. Past its first cessation, every frame is solid `rgb(211,32,143)`, stddev **0.00** —
-  the artwork is gone, at every cycle, regardless of collection size. Ruled out: NaN
-  uniforms (all 48 finite), a stalled loop (151 draws/2.5s, `u_time` advancing), the
-  blended dataset, the test rig, and `lifeFraction`. **The fault is almost certainly in
-  `src/shaders/fragment.glsl`, in a path only reached after reanimation — not yet
-  examined.** Median lifespan is ~42 years, so roughly half the collection would reach
-  this within a normal lifetime. See [testing.md](testing.md) → "AGE".
+- **~~A reanimated piece renders a flat colour~~ FIXED 2026-09-12.** Past its first
+  cessation every frame was solid `rgb(211,32,143)`, stddev 0.00 — the artwork gone.
+  Cause: `fragment.glsl` computes `nirvanaProgress` from `u_totalYears - u_lifespanYears`,
+  and those were inscription-relative, so the dissolution ramp saturated at 1.0 for ever
+  and `finalColor` became `u_nirvanaRGB * 0.90` — one colour for the whole canvas. Fixed by
+  feeding the shader **cycle-relative** years. **Lesson: the shader keeps its own copy of
+  the lifecycle maths — `lifeFraction` and `nirvanaProgress` both — so fixing timing in JS
+  alone is not enough. Grep the shader too.** Verified at cycles 0/4/12: real images, all
+  distinct, moving. See [testing.md](testing.md) → "AGE".
 - **~~`lifeFraction` never resets on reanimation~~ FIXED 2026-09-12.** Age was measured
   from the original inscription and clamped to 1, pinning a piece at 1.0 for ever once it
   outlived its first lifespan. Reanimation is **reincarnation** — each cycle now begins a

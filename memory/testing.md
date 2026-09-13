@@ -179,37 +179,54 @@ becomes `liberated: true` — correct, piece 0 is genesis with no partner. Piece
 `cycle 1` at +60y, `cycle 4` at +200y, and at +600y `[lc] VOID — both partners liberated`,
 `cycle 9`. The whole arc runs without error.
 
-### THE BUG: a reanimated piece renders a FLAT COLOUR — it stops being the artwork
+### FIXED: a reanimated piece rendered a FLAT COLOUR — the artwork disappeared
 
-Found 2026-09-12 by simulating age. Once a piece passes its first cessation and reanimates,
-every frame is a **solid magenta rectangle** — `rgb(211, 32, 143)`, standard deviation
-**0.00** across the canvas interior. Not frozen art: no art at all.
+Found and fixed 2026-09-12 by simulating age. Past its first cessation, every frame was a
+solid magenta rectangle, `rgb(211,32,143)`, standard deviation **0.00**. Not frozen art —
+no art at all, at every cycle, identical whether the collection held 2 pieces or 30.
+
+**The cause, in `fragment.glsl`:**
+
+```glsl
+float nirvanaProgress = clamp((u_totalYears - u_lifespanYears) / 0.5, 0.0, 1.0);
+...
+vec3 finalColor = mix(livingColor, nirvanaState, nirvanaProgress);
+finalColor      = mix(finalColor, rgbColor, lifeRestores);
+```
+
+`u_totalYears` was measured from **inscription**, so half a year past the piece's FIRST
+lifespan `nirvanaProgress` saturated at 1.0 and stayed there for ever. `finalColor` became
+pure `nirvanaState`, and with `reanimationProgress` back at 0 after the transition finished,
+that is `u_nirvanaRGB * 0.90` — **one colour for the entire canvas**. `lifeRestores` is
+`smoothstep(0.5, 1.0, reanimationProgress)`, also 0, so the living image was never restored.
+
+Arithmetic confirms it exactly: `u_nirvanaRGB` is `hsb(hue, 0.85, 0.92)`, and
+`0.92 × 0.90 = 0.828` → `211/255 = 0.827`; saturation 0.85 gives the min channel `32/255`.
+The observed flat colour *is* `u_nirvanaRGB * 0.90`.
+
+**THE SHADER KEEPS ITS OWN COPY OF THE LIFECYCLE MATHS.** It re-derives `lifeFraction` at
+line 128 and `nirvanaProgress` at line 493 from raw years. Fixing `lifeFraction` in JS did
+nothing for either — the same quantity lived in three places and only one was corrected.
+**When changing lifecycle timing, grep the shader too.**
+
+**The fix:** JS now feeds `u_totalYears` and `u_lifespanYears` **cycle-relative** values via
+`lcCycleYears()` and `lc.cycleLifespanYears`, so all three shader uses become correct at
+once — the drift term `t`, the internal `lifeFraction`, and the dissolution ramp.
+`lcCycleYears()` is deliberately **unclamped**: between cessation and the reanimation
+firing it exceeds the cycle's lifespan, which is exactly the overshoot the dissolution ramp
+needs, and it drops back to ~0 when the new life begins.
+
+**Verified after the fix**, piece 1 (29.7-year lifespan) on a fresh regtest engine:
 
 ```
-cycle 0, alive   mean RGB [209, 78, 73]   stddev 53.70   real image
-cycle 1          mean RGB [211, 32, 143]  stddev  0.00   FLAT
-cycle 4          mean RGB [211, 32, 143]  stddev  0.00   FLAT
-cycle 14         mean RGB [211, 32, 143]  stddev  0.00   FLAT
++20y   cycle 0    interior stddev 49.46   REAL IMAGE
++60y   cycle 0    interior stddev 65.38   REAL IMAGE
++200y  cycle 4    interior stddev 63.74   REAL IMAGE
++600y  cycle 12   interior stddev 50.86   REAL IMAGE
 ```
 
-Identical bytes at every cycle, and identical whether the collection has 2 pieces or 30 —
-so the output does not depend on the data at all.
-
-**What has been ruled out:**
-- **Not NaN in the uniforms.** All 48 uniforms are finite. Sampled at cycle 1:
-  `u_time` 391.55, `u_totalYears` 60.04, `u_lifespanYears` 29.73,
-  `u_reanimationProgress` 0, `u_isLiberated` 0, `u_voidProgress` 0, beam strengths 0.22–0.41.
-- **Not a stalled render loop.** 151 draws in 2.5 s, and `u_time` advances (233 → 235).
-  Uniforms change every frame; the pixels do not.
-- **Not the blended dataset.** Replayed outside the browser: no non-finite fields, beam
-  tempos 7.4–26.4 s, hue anchor finite.
-- **Not the test rig.** The freeze persists with the proxy mining at 2 blocks/sec, and with
-  four screenshots taken 2 s apart.
-- **Not `lifeFraction`.** See below.
-
-**So the fault is almost certainly inside the fragment shader**, in a path only reached
-after reanimation — the live uniforms reaching it are sane, and the output is a constant.
-`src/shaders/fragment.glsl` has not been examined yet. **Unresolved.**
+All four frames distinct, and moving — 4 distinct screenshots over 6 s at +200y and +600y.
+`scale.test.mjs` 14,033 checks and `engine_purity` 29 checks still pass.
 
 ### `lifeFraction` did reset — fixed, and verified, but it was not the cause
 
