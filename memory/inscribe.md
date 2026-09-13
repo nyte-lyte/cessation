@@ -448,6 +448,42 @@ expensive mistake this project has made and it cannot be undone.
 
 ---
 
+## 7b. The hot wallet is NOT clean — check before any mainnet run (2026-09-13)
+
+`bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin -rpcwallet=ord listunspent` shows
+**5 spendable, unlocked UTXOs**, four of which are dust and ~14,000 confirmations old:
+
+    679 sat  899ff180e9cd3224…:0
+    874 sat  f9fd6b63bfc08643…:0
+    874 sat  ca343338b7e6d6a7…:0
+    874 sat  be1a0751fc636ac8…:0
+  98344 sat  b464191a62a900cf…:1   (the funding UTXO)
+
+The dust four are consistent with old v1/v2 inscription outputs. ord normally
+classifies inscription-bearing outputs as *ordinal* rather than *cardinal* and will
+not spend them as funding — but that was NOT verifiable at the time of writing
+because mainnet ord was stopped. **Before any mainnet run, start ord and check
+`ord wallet balance`: the dust must show under `ordinal`, not `cardinal`.** If it
+shows as cardinal, lock those outpoints or move them out.
+
+This is the real argument for inscribing v3 from a **fresh wallet**: not inscription
+numbering (see below), but that a wallet holding only the funding UTXO and the
+carrier being inscribed has nothing else for ord to pick up by mistake.
+
+### Inscription numbers are NOT wallet-relative — a fresh wallet will not reset them
+
+Worth recording because the regtest run makes it look otherwise. On the regtest chain
+the v3 engine is inscription **82**, piece 0 is **83**, piece 30 is **113** — sequential
+chain positions, high only because 82 inscriptions already existed there from earlier
+test runs. Inscription numbers are assigned globally, in order, across all of Bitcoin.
+No wallet choice changes them, and on mainnet piece 0 will take whatever the next
+global number is.
+
+What identifies the collection is the **parent/child relationship**: every piece is a
+child of the engine, so `/r/children/<engineId>` returns exactly the collection and
+nothing else. That is the durable identity, and it is already working — verified at
+31 pieces on regtest.
+
 ## 8. Pre-flight
 
 - [ ] External volume mounted; node synced; `pruned=false`
