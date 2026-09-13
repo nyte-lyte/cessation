@@ -121,12 +121,48 @@ using baked data.
   path only dev uses — a testing improvement in itself, and the reason dev never showed
   these bugs.
 
+## The failing test — WRITTEN 2026-09-12, `test/engine_purity.test.mjs`
+
+`node test/engine_purity.test.mjs` → **14 checks, 13 failed.** Red is the bug, not a
+broken test. It goes green as the plan below is worked through.
+
+The plan originally said to extend `scale.test.mjs` to drive the ECG rankings directly.
+**That is not possible** — they are closure variables inside `init()`, so no test can call
+them. Their unreachability *is* part of the finding, so the new file uses three angles:
+
+**1. Behavioural, and the strongest evidence.** Lift a render-path function twice against
+two *different* module-scope `healthDataSets` bindings and call it with an identical
+dataset both times. A function whose answer comes from its arguments returns the same
+value twice; one that reaches for baked data does not. Measured:
+
+```
+getBeamTempoSeconds   9.172s vs 9.121s   beam tempo differs by the ENGINE's build
+getBeamHueAnchorDeg   88.28° vs 86.46°   nearly 2 degrees of hue
+```
+
+Those numbers are the bug, demonstrated rather than argued: the same piece renders
+differently depending on what array the engine was compiled with, not on what is on chain.
+
+**`winsorizedPercentileForLab` is the control, and it PASSES** — handed a collection
+explicitly it is already pure. That matters: it shows the test distinguishes a pure
+function from an impure one, so the 13 failures are the code, not the method.
+
+**2. Source guard on the nine init-time rankings** — the only check available while they
+remain unreachable.
+
+**3. Engine purity** — `src/main.js` must not import `healthDataSets` at module scope, and
+`index_bundle.js` must contain no `ecg`/`labs` blocks at all.
+
+The behavioural test stays meaningful after the refactor: whatever the new signature is,
+output must depend on what is passed in, not on what the engine was built with.
+
+`node test/scale.test.mjs` still passes 14,064 checks — no regression.
+
 ## Order of work
 
-1. **Write the failing test first.** Extend `scale.test.mjs` to drive the ECG rankings at
-   collection sizes 30/31/40/100 and assert they *change* when the collection grows. It
-   must fail against today's code — otherwise it is not testing the bug.
-2. Refactor group 1 to take the collection as an argument. Test goes green.
+1. ~~Write the failing test first.~~ **DONE** — `test/engine_purity.test.mjs`, 13 of 14
+   failing against today's code, with the control passing.
+2. Refactor group 1 and 1b to take the collection as an argument. Test goes green.
 3. Groups 2 and 3 — delete fallbacks, handle null.
 4. Group 4 — move the import behind `DEV_START`, seed dev from the file.
 5. `node build.js`, confirm the bundle no longer contains the array and shrinks ~12.6%.
