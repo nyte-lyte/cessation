@@ -1,6 +1,20 @@
-# Plan — remove the baked dataset array from the engine
+# Removing the baked dataset array from the engine — DONE
 
-Written 2026-09-12. **Not started. No code changed.**
+Written and completed 2026-09-12. **The engine is now pure code.**
+
+```
+bundle          100,173 -> 80,972 bytes   (19.2% smaller)
+engine_purity   29 checks, 0 failed
+scale.test      14,033 checks, 0 failed
+dev mode        340 draws, rendered, 0 errors
+ON CHAIN        3 pieces inscribed on regtest against the dataless engine:
+                all render, 0 errors, each reporting
+                "[lc] collection resolved — 3 piece(s) on chain"
+```
+
+Every dataset now comes from the chain: the piece's own CBOR metadata, plus siblings
+discovered via `/r/children`. `data/health_data_sets.js` is imported only inside a
+`DEV_START/DEV_END` block and `build.js` no longer bundles it at all.
 
 ## The intent
 
@@ -213,9 +227,40 @@ output must depend on what is passed in, not on what the engine was built with.
    through this** — only the browser render caught it. It is now initialised to 0 and
    set by `recomputePartnerInheritedHue()` once the partner is discoverable.
 
-4. Group 3 — `_lcMergedEntries` fallbacks. **Coupled to group 4:** removing the baked
-   seed leaves dev with no collection at all, so dev seeding must land in the same
-   change.
+4. ~~Groups 3 and 4.~~ **DONE 2026-09-12**, together as predicted.
+   - `_lcMergedEntries` no longer seeds from baked data. A piece alone is a collection
+     of one — the true state of piece 0 before any sibling exists.
+   - `lcCycleDataset` returns **null** when own metadata has not landed, instead of a
+     baked row.
+   - The beam pre-advance uses `lcCycleDataset()` and **breaks** rather than
+     dereferencing null.
+   - Boot: **every** piece now awaits `lc.ownDataReady`, not just those past the
+     bundled length. `lcReleaseOwnData()` is in a `finally`, so it always resolves.
+   - `minMaxValues` is no longer imported. It is `const minMaxValues = {}`, filled by
+     `ensureMinMax(collection)` at the top of `draw()`, cached on collection identity
+     like `ecgRanks`.
+   - The import moved behind `DEV_START/DEV_END`; `build.js` stops reading and
+     bundling `health_data_sets.js` entirely.
+   - Dev seeds `lc.collectionDatasets` from the local file in `initLifecycle`'s catch,
+     so **dev now drives the same code path as chain** instead of a second one only dev
+     takes — that divergence is why these bugs went unseen for so long.
+   - `computeHSBFromStats(dataSet, healthDataSets)`'s parameter renamed to `datasets`;
+     it shadowed the import and read as if it used baked data.
+
+## Two more "never draws" caught by rendering, not by tests
+
+Both suites stayed green through both of these. Only the browser caught them — the same
+lesson as group 2's `lc` initialisation order.
+
+1. **`draw()` threw on an empty collection.** With no baked array the collection is empty
+   until own metadata lands, and every step below dereferences a dataset:
+   `TypeError: Cannot read properties of undefined (reading 'date')`, `draws: 0`.
+   `draw()` now bails on a clear frame and returns. **A piece that throws in `draw()`
+   never renders again — that is how v1 failed.**
+2. **Dev init read an empty `minMaxValues`.** A DEV console helper calls
+   `computeLiberationThreshold` at init, before any chain discovery:
+   `TypeError: Cannot read properties of undefined (reading 'min')`, blank canvas.
+   Dev now seeds the ranges from the local file immediately.
 5. Group 4 — move the import behind `DEV_START`, seed dev from the file.
    **Bigger than it looks:** `minMaxValues` is imported on the same line and is used
    throughout the live render path. It is already refreshed in place from the live

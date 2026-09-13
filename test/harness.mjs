@@ -65,17 +65,29 @@ export function liftFromMainJs(names, { inject = '', consts = [] } = {}) {
 // A piece minted after the engine has no baked entry, and every tempoFn
 // dereferences the dataset, so an undefined here throws inside init() and the
 // piece never draws.
-export function initDatasetForPiece(bakedDatasets, ownPieceIndex) {
-  return bakedDatasets[ownPieceIndex] ?? bakedDatasets[bakedDatasets.length - 1];
+//
+// The engine no longer carries a baked array (see memory/dataless_engine_plan.md),
+// so the source is now the piece's OWN dataset via lcCycleDataset() — which is
+// null until its CBOR metadata lands. init() must not dereference that null, so
+// the pre-advance loop breaks instead. This models both halves.
+export function initDatasetForPiece(collection, ownPieceIndex) {
+  const hit = collection.find?.(d => d?.pieceIndex === ownPieceIndex);
+  if (hit) return hit.dataset;
+  return collection[ownPieceIndex] ?? null;   // null = own metadata not yet landed
 }
 
-const INIT_DS_SOURCE = 'healthDataSets[currentDataSetIndex]\n                  ?? healthDataSets[healthDataSets.length - 1]';
+const INIT_DS_SOURCE = 'const _initDs = lcCycleDataset();';
+const INIT_DS_GUARD  = 'if (!_initDs) break;';
 
 export function assertInitDatasetGuardUnchanged(report) {
   const src = readFileSync(join(ROOT, 'src/main.js'), 'utf8');
   report.checks++;
   if (!src.includes(INIT_DS_SOURCE)) {
-    report.fail('harness', 'the _initDs fallback in src/main.js no longer matches initDatasetForPiece() in harness.mjs — a piece past the baked array may crash in init() again');
+    report.fail('harness', 'the _initDs source in src/main.js no longer matches initDatasetForPiece() in harness.mjs — update the harness before trusting these results');
+  }
+  report.checks++;
+  if (!src.includes(INIT_DS_GUARD)) {
+    report.fail('harness', 'the beam pre-advance no longer guards against a null _initDs — a piece whose metadata has not landed will throw inside init() and never draw');
   }
 }
 

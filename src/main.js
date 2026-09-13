@@ -1,17 +1,42 @@
 // ---------------------------------------------
 // main.js
 // ---------------------------------------------
-import { healthDataSets, minMaxValues } from "../data/health_data_sets.js";
+// DEV_START
+// Dev has no chain to discover anything from, so it reads the datasets from the
+// repo. build.js strips this block, so THE INSCRIBED ENGINE CARRIES NO DATA —
+// each piece supplies its own via CBOR metadata and finds its siblings on chain.
+import { healthDataSets } from "../data/health_data_sets.js";
+// DEV_END
 import { blendDatasets, computeKarma, computeLiberationThreshold, getAgedDataset, applyCollectionInfluence, computeMinMaxValues, karmaClearanceRate, remainingKarma } from "../data/decay_logic.js";
 
-// minMaxValues starts from the baked-in mint dataset, then is refreshed in place from
-// the full sibling collection as it's discovered/grows — the collection is a living
-// organism; only the starting datasets are fixed at mint. Mutated in place (not
-// reassigned) since it's an imported binding shared by every function that closes over it.
+// Derived entirely from whatever collection the piece can see — empty until the
+// first refresh, which is why ensureMinMax() runs before anything reads it.
+// Mutated in place (never reassigned) because every function below closes over
+// this one object.
+const minMaxValues = {};
 function refreshMinMaxValues(allDatasets) {
   const fresh = computeMinMaxValues(allDatasets);
   for (const key in fresh) minMaxValues[key] = fresh[key];
 }
+// Populate from `collection` if it has not been done for that collection yet.
+// Cached on identity like ecgRanks: sibling discovery replaces the array rather
+// than mutating it, so a new identity is exactly when a recompute is due.
+function ensureMinMax(collection) {
+  if (!collection || !collection.length) return;
+  if (ensureMinMax._for === collection && minMaxValues.ventRate) return;
+  ensureMinMax._for = collection;
+  refreshMinMaxValues(collection);
+}
+
+// DEV_START
+// Dev has the datasets on disk, so seed the ranges immediately. Without this the
+// DEV console helpers below run at init() before any chain discovery and read an
+// empty minMaxValues — which threw in computeKarma and left dev with a blank
+// canvas. On chain this block is stripped and the ranges come from the collection.
+if (typeof healthDataSets !== 'undefined' && healthDataSets.length) {
+  refreshMinMaxValues(healthDataSets);
+}
+// DEV_END
 
 const canvas = document.getElementById("canvas");
 const gl = canvas.getContext("webgl2");
@@ -582,7 +607,7 @@ async function init() {
     if (lc.ownDataset)   return lc.ownDataset;
     const fromCollection = lc.collectionDatasets.find(d => d.pieceIndex === currentDataSetIndex);
     if (fromCollection)  return fromCollection.dataset;
-    return healthDataSets[currentDataSetIndex];
+    return null;   // own metadata has not landed yet
   }
 
   // The living collection is what this piece can actually SEE on chain — the
@@ -607,11 +632,6 @@ async function init() {
   // so use lcOwnPosition() for this piece's slot.
   function _lcMergedEntries() {
     const byIndex = new Map();
-    if (!lc.collectionResolved) {
-      for (let i = 0; i < healthDataSets.length; i++) {
-        byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
-      }
-    }
     for (const d of lc.collectionDatasets) {
       if (typeof d.pieceIndex === 'number' && d.dataset) {
         byIndex.set(d.pieceIndex, { pieceIndex: d.pieceIndex, dataset: d.dataset });
@@ -620,17 +640,10 @@ async function init() {
     if (lc.ownDataset) {
       byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
     }
-    // A collection can never be empty — a piece is always at least itself.
-    if (byIndex.size === 0) {
-      const ownBaked = healthDataSets[currentDataSetIndex];
-      if (ownBaked) {
-        byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: ownBaked });
-      } else {
-        for (let i = 0; i < healthDataSets.length; i++) {
-          byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
-        }
-      }
-    }
+    // A collection can never be empty — a piece is always at least itself. With
+    // no baked array there is nothing else to fall back to, and nothing else is
+    // wanted: a piece alone IS a collection of one, which is the true state of
+    // piece 0 before any sibling is inscribed.
     return [...byIndex.values()].sort((a, b) => a.pieceIndex - b.pieceIndex);
   }
   // One piece's dataset by pieceIndex, from the merged live view. Null when that
@@ -998,6 +1011,22 @@ async function init() {
       console.log(`[lc] ready — block ${lc.currentBlockHeight}, cessation ${lc.cessationBlock}, cycle ${lc.cycleCount}, liberated: ${lc.isLiberated}`);
     } catch (e) {
       console.warn('[lc] lifecycle engine inactive (not in ord env)', e);
+      // DEV_START
+      // No chain to discover from. Seed the living collection from the repo file
+      // so dev drives the SAME code path as chain rather than a second one that
+      // only dev ever takes — that divergence is why these bugs went unseen.
+      if (typeof healthDataSets !== 'undefined' && healthDataSets.length) {
+        lc.collectionDatasets = healthDataSets.map((d, i) => ({
+          id: null, pieceIndex: i, dataset: d, hashTail: null, inscriptionUnix: null,
+        }));
+        lc.ownDataset = healthDataSets[currentDataSetIndex]
+                     ?? healthDataSets[healthDataSets.length - 1];
+        lc.collectionResolved = true;
+        refreshMinMaxValues(lcEffectiveCollection());
+        recomputePartnerInheritedHue();
+        console.log(`[lc] dev — seeded ${healthDataSets.length} piece(s) from the local file`);
+      }
+      // DEV_END
     } finally {
       // Never leave boot waiting — if init threw before the own-metadata step,
       // the piece still renders from baked data.
@@ -1284,10 +1313,13 @@ async function init() {
     // so an undefined here throws inside init() and the piece never draws at all.
     // Fall back to the last baked dataset: tempo is already documented above as
     // an approximation, and being slightly off beats not rendering.
-    const _initDs  = healthDataSets[currentDataSetIndex]
-                  ?? healthDataSets[healthDataSets.length - 1];
+    // Own dataset only. Boot now awaits lc.ownDataReady before the first draw,
+    // so this is populated by the time it is read; the guard below still skips
+    // the pre-advance rather than throwing if it somehow is not.
+    const _initDs = lcCycleDataset();
     const _initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
     for (const cfg of beamConfigs) {
+      if (!_initDs) break;   // no own data yet — phases start at their seed
       const seed  = cfg.phaseSeed(lastTwoHashDigits);
       const tempo = Math.max(1e-3, cfg.tempoFn(_initDs, lcEffectiveCollection()));
       if (cfg.tickTwoPi) {
@@ -1344,6 +1376,17 @@ async function init() {
     // post-reanimation blend) — falls back to local healthDataSets in dev/early boot.
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
     const drawCollection = getDrawCollection();
+    // NOTHING TO DRAW YET. With no baked array the collection is empty until this
+    // piece's own CBOR metadata lands, and every step below dereferences a dataset.
+    // Bail on a clear frame rather than throwing: a piece that throws in draw()
+    // never renders again, which is how v1 failed. lcPoll/initLifecycle call
+    // draw() again once data arrives.
+    if (!drawCollection.length) {
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      return;
+    }
+    // minMaxValues is derived, not imported — populate it before anything reads it.
+    ensureMinMax(drawCollection);
     const _ecg = ecgRanks(drawCollection);
     // getAgedDataset expects a POSITION into the dense drawCollection, not a
     // pieceIndex. They coincide when pieces are contiguous (0..N-1), but for
@@ -1507,15 +1550,14 @@ async function init() {
   // pieces sat on black for tens of seconds before the first frame, and it got
   // worse with every piece minted.
   //
-  // Pieces 0..N-1 are baked into the engine and can draw on frame 1. A piece
-  // minted after the engine has no baked entry, so it waits on lc.ownDataReady —
-  // its own metadata only, not the collection. That promise always resolves, so
-  // a failure still yields a frame rather than a black screen.
+  // The engine carries no datasets, so EVERY piece waits for its own metadata —
+  // not just those minted after the engine, as when a baked array existed. It
+  // waits on lc.ownDataReady (its own CBOR only, not the whole collection), and
+  // lcReleaseOwnData() sits in a `finally`, so the promise always resolves and a
+  // failure still yields a frame rather than a black screen.
   (async () => {
     const lifecycle = initLifecycle().catch(() => {});
-    if (currentDataSetIndex >= healthDataSets.length) {
-      await Promise.race([lc.ownDataReady, lifecycle]);
-    }
+    await Promise.race([lc.ownDataReady, lifecycle]);
     gl.clear(gl.COLOR_BUFFER_BIT);
     draw();
   })();
@@ -1561,10 +1603,10 @@ function percentile(value, sortedArray) {
   return rank / (sortedArray.length - 1); // ensures [0, 1] range
 }
 
-function computeHSBFromStats(dataSet, healthDataSets) {
-  const glucoseValues = healthDataSets.map((d) => d.labs.glucose);
-  const potassiumValues = healthDataSets.map((d) => d.labs.potassium);
-  const egfrValues = healthDataSets.map((d) => d.labs.eGFR);
+function computeHSBFromStats(dataSet, datasets) {
+  const glucoseValues = datasets.map((d) => d.labs.glucose);
+  const potassiumValues = datasets.map((d) => d.labs.potassium);
+  const egfrValues = datasets.map((d) => d.labs.eGFR);
 
   glucoseValues.sort((a, b) => a - b);
   potassiumValues.sort((a, b) => a - b);

@@ -214,9 +214,13 @@ for (const n of [1, 2, 3, BAKED, BAKED + 1, 40, 100]) {
     const ctx = `init beams own=${own}${own >= BAKED ? ' (past baked array — new mint)' : ''}`;
     const ds = initDatasetForPiece(baked, own);
 
+    // A null dataset is now a LEGITIMATE state, not a failure: the engine carries
+    // no baked array, so a piece has nothing until its own CBOR metadata lands.
+    // What matters is that init() handles it — the pre-advance breaks rather than
+    // dereferencing null — so the piece still reaches a first frame.
     r.checks++;
     if (!ds) {
-      r.fail(ctx, 'no dataset available for the beam phase pre-advance — init() will throw before the first frame');
+      assertInitDatasetGuardUnchanged(r);   // the `if (!_initDs) break;` guard
       continue;
     }
 

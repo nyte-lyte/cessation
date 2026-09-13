@@ -14,15 +14,18 @@ let   vertGlsl     = readFileSync('./src/shaders/vertex.glsl',   'utf8');
 let   fragGlsl     = readFileSync('./src/shaders/fragment.glsl', 'utf8');
 const css          = readFileSync('./style.css',                  'utf8');
 let   decayLogic   = readFileSync('./data/decay_logic.js',        'utf8');
-let   healthData   = readFileSync('./data/health_data_sets.js',   'utf8');
+// data/health_data_sets.js is deliberately NOT bundled. The engine is pure code:
+// each piece carries its own dataset in CBOR metadata and discovers its siblings
+// on chain, so an engine-side copy is the same data inscribed once per piece and
+// goes stale the moment a new reading arrives. main.js imports it only inside a
+// DEV_START/DEV_END block, which is stripped below.
+// See memory/dataless_engine_plan.md.
 let   mainJs       = readFileSync('./src/main.js',                'utf8');
 
 // ── Strip ES module syntax ────────────────────────────────────
 
 decayLogic = decayLogic.replace(/^export\s*\{[^}]+\};\s*$/m, '');
 
-healthData = healthData.replace(/^import\s+.*$/m, '');
-healthData = healthData.replace(/^export\s*\{[^}]+\};\s*$/m, '');
 
 mainJs = mainJs.replace(/^import\s+.*\n/gm, '');
 
@@ -54,7 +57,6 @@ function stripComments(src) {
 vertGlsl   = stripComments(vertGlsl);
 fragGlsl   = stripComments(fragGlsl);
 decayLogic = stripComments(decayLogic);
-healthData = stripComments(healthData);
 // mainJs: strip only line comments and whitespace, preserve BAKE block comments
 mainJs = mainJs.replace(/\/\/[^\n]*/g, '');
 mainJs = mainJs.replace(/[ \t]+$/gm, '');
@@ -111,8 +113,6 @@ const _vertSrc = \`${vertEsc}\`;
 const _fragSrc = \`${fragEsc}\`;
 
 ${decayLogic.trim()}
-
-${healthData.trim()}
 
 ${mainJs.trim()}
 })();`;

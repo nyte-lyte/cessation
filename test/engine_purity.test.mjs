@@ -167,11 +167,19 @@ comparePure('getBeamHueAnchorDeg',
 // instructions. Checked against the built bundle, which is what is inscribed.
 
 {
+  // Dev still needs the datasets — there is no chain to discover from. What
+  // matters is that the import is DEV-guarded, so build.js strips it and the
+  // inscribed engine carries nothing. An unguarded import would ship the data.
   r.checks++;
-  const importLine = /^import\s*\{[^}]*healthDataSets[^}]*\}\s*from/m.test(src);
-  if (importLine) {
-    r.fail('engine-purity',
-      'src/main.js imports healthDataSets at module scope — the engine still carries data');
+  const m = src.match(/^import\s*\{[^}]*healthDataSets[^}]*\}\s*from.*$/m);
+  if (m) {
+    const before = src.slice(0, src.indexOf(m[0]));
+    const guarded = before.lastIndexOf('DEV_START') > before.lastIndexOf('DEV_END');
+    if (!guarded) {
+      r.fail('engine-purity',
+        'src/main.js imports healthDataSets OUTSIDE a DEV_START/DEV_END block — ' +
+        'build.js will not strip it and the inscribed engine will carry the data');
+    }
   }
 }
 
@@ -182,15 +190,21 @@ comparePure('getBeamHueAnchorDeg',
   if (bundle === null) {
     r.fail('engine-purity', 'index_bundle.js not found — run `node build.js` first');
   } else {
-    // The datasets are recognisable by their shape, not their name: a bundled
-    // array of objects each carrying an `ecg` and a `labs` block.
-    const hasData = /"?ecg"?\s*:\s*\{/.test(bundle) && /"?labs"?\s*:\s*\{/.test(bundle);
-    if (hasData) {
-      const approx = (bundle.match(/"?labs"?\s*:\s*\{/g) || []).length;
+    // Distinguish DATA from CODE. `ecg: {` also appears in decay_logic's
+    // blendDatasets / getAgedDataset / applyCollectionInfluence, which *build*
+    // dataset-shaped objects — that is code and must stay. Real baked data is
+    // recognisable by literal readings: a `date:` string next to numeric ECG
+    // fields, which no constructor emits (they use `date: 'aged'` and friends).
+    const literals = bundle.match(/date:\s*["'`]\d{4}-\d{2}-\d{2}["'`]/g) || [];
+    if (literals.length) {
       r.fail('engine-purity',
-        `index_bundle.js still contains baked health data (~${approx} datasets) — ` +
-        `the inscribed engine is carrying ${(12655 / bundle.length * 100).toFixed(1)}% data ` +
-        `that every piece already holds in its own metadata`);
+        `index_bundle.js still contains ${literals.length} baked health readings — ` +
+        `the inscribed engine is carrying data that every piece already holds in ` +
+        `its own CBOR metadata`);
+    }
+    r.checks++;
+    if (/healthDataSets/.test(bundle)) {
+      r.fail('engine-purity', 'index_bundle.js still references healthDataSets');
     }
   }
 }
