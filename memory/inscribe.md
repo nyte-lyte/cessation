@@ -46,7 +46,7 @@ It will catch up from 966,856. Expect that to take a while but not a rebuild —
 index is intact. Verify before trusting it:
 
 ```
-curl -s http://127.0.0.1:8080/r/blockheight          # ord
+curl -s http://127.0.0.1:80/r/blockheight          # ord
 bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin getblockcount   # should converge
 ```
 
@@ -55,6 +55,26 @@ uncommitted work. `kill -INT` and wait; never `kill -9`.
 
 Note it is not needed for regtest work at all — the regtest env is a separate ord on
 port 9001 and is unaffected.
+
+### ord2.sh serves on port 80, not 8080 — and on ALL interfaces
+
+Corrected 2026-09-16. `ord2.sh` passes no `--http-port`, so `ord server` takes the
+default **80**. An earlier instance in these notes was on 8080, which means it had
+been started with an explicit port; the wrapper does not. This matters because
+`ord wallet` also defaults to `--server-url http://localhost:80`, so the two agree
+only when the server is left on the default.
+
+It also binds to `*:80` — **all interfaces, not loopback**. Verified with
+`lsof -nP -iTCP:80 -sTCP:LISTEN`. What that exposes is the block explorer and the
+recursive endpoints, i.e. public chain data, not keys and not wallet operations —
+`ord wallet` talks to bitcoind locally. Still an unauthenticated service reachable
+from the local network. Recorded as a fact for the security pass.
+
+**Catch-up shows no height change until it commits.** ord commits in batches, so a
+gap smaller than the commit interval leaves `/r/blockheight` frozen at the old value
+for the whole catch-up. Watch `stat -f '%Sm' /Volumes/Bitcoin/Ord/index.redb` instead
+— a moving mtime means it is working. Measured 2026-09-16: a 502-block gap reported
+no height movement at all while actively writing.
 
 ### The ord index is a month of work — protect it
 
@@ -636,7 +656,7 @@ and only then continue.** One piece at risk instead of thirty-one.
   hard refusal, not a preference.
 - **`ord2.sh` lacks `--server-url`**, so `ord wallet` commands hunt for a server on port
   80 and fail with `Connection refused`. Add
-  `wallet --server-url http://127.0.0.1:8080` (or whatever port the index server is on).
+  `wallet --server-url http://127.0.0.1:80` (or whatever port the index server is on).
 - A piece inscription dry-ran at **544 sats** on mainnet at 1 sat/vB (608 measured on
   regtest) — the estimate holds.
 
