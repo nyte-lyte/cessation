@@ -524,8 +524,9 @@ wallet costs nothing over reusing the hot one.
 ### The loop, per piece
 
 1. Unlock exactly ONE carrier in `ord-cold` (`lockunspent true '[{...}]'`).
-2. `node peel.js handoff --carrier <txid>:<vout> --to <fresh-wallet-addr> --fee-rate <R> --broadcast`
-   — **NOT `ord wallet send`.** See "Why the transfer cannot use ord" below.
+2. `node peel.js handoff --piece <N> --to <fresh-wallet-addr> --fee-rate <R> --broadcast`
+   — **use `--piece`, not `--carrier`.** It resolves the outpoint from PIECE_CARRIERS
+   so the ordering cannot be got wrong by hand. NOT `ord wallet send`; see below.
 3. Confirm, then inscribe that piece from the fresh wallet with `--sat` and
    `--postage 330sat` as `inscribe.js` prints.
 4. Next piece. Never two carriers in the fresh wallet at once.
@@ -538,6 +539,32 @@ what the one-at-a-time loop buys, and it is why it must not be "optimised" into 
 batch move. Confirmed again 2026-09-13: a carrier arriving in a fresh wallet reports
 as `cardinal: 330, ordinal: 0` — ord sees an uninscribed rare carrier as ordinary
 spendable change and will fund from it.
+
+### `--piece N` — the ordering cannot be typed wrong
+
+`PIECE_CARRIERS` maps piece index -> sat, oldest sat first, and the outpoint appears
+only in a trailing comment. So nothing mechanical connected "piece 7" to the right
+UTXO; it relied on a human pasting the correct txid. On mainnet that mistake is
+permanent AND silent — the piece lands on the wrong Nakamoto sat, everything succeeds,
+and the collection's ordering is wrong for ever.
+
+`--piece N` closes it. It reads the sat for piece N out of `inscribe.js`, then scans
+the wallet's LOCKED outpoints (which is exactly the carrier set) for the one holding
+that sat **at offset 0**, and refuses if the value does not equal the expected postage.
+
+ord cannot shortcut this: `/sat/<n>` returns `satpoint: null` because `ord2.sh` does
+not pass `--index-addresses`. The scan is 160 `/output` calls and takes a few seconds.
+
+**Verified against the real mainnet carriers 2026-09-18** (dry run, nothing broadcast).
+The independently resolved outpoint matched the recorded comment for every piece tried:
+
+    piece  0 -> 00ca3bab0828b36c315dd4f8b98a024b216c4559…:1   MATCH
+    piece  1 -> 4070a87b10202aa7fd2df379ada5a2ed3ae850b9…:1   MATCH
+    piece  7 -> ab633404545cac147e2aa5af238fe604fd4205b9…:1   MATCH
+    piece 29 -> 05307624397e8838d321f773d2e89353c3b750d1…:1   MATCH
+
+That is also an independent check on the PIECE_CARRIERS table itself: the comments were
+written from the peel, and the resolution reads the live chain, and they agree.
 
 ### Why the transfer cannot use `ord wallet send` — corrected 2026-09-18
 

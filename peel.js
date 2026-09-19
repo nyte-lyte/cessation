@@ -137,6 +137,52 @@ function assertNoLoss(label, outpoints, lo, hi, expected) {
 }
 
 // ── plan ─────────────────────────────────────────────────────────────────────
+// Which carrier belongs to piece N, resolved from the sat rather than typed.
+//
+// PIECE_CARRIERS in inscribe.js maps piece index -> sat, oldest sat first. The
+// outpoint appears only in a trailing comment, so nothing mechanical connected
+// "piece 7" to the right UTXO — it relied on a human pasting the correct txid.
+// On mainnet that mistake is permanent and silent: the piece simply lands on the
+// wrong Nakamoto sat and the collection's ordering is wrong for ever.
+//
+// ord cannot answer "where is sat N" (satpoint is null without --index-addresses),
+// so this scans the wallet's LOCKED outpoints — which is exactly the carrier set —
+// and finds the one holding that sat AT OFFSET 0.
+function carrierForPieceIndex(n) {
+  const src = readFileSync(path.join(__dirname, 'inscribe.js'), 'utf8');
+  const body = src.match(/const PIECE_CARRIERS = \[([\s\S]*?)\n\];/);
+  if (!body) { console.error('  cannot find PIECE_CARRIERS in inscribe.js'); process.exit(1); }
+  const rows = [...body[1].matchAll(/\{ sat: (\d+), postage: (\d+) \}/g)]
+    .map(m => ({ sat: m[1], postage: Number(m[2]) }));
+  if (n < 0 || n >= rows.length) {
+    console.error(`  piece ${n} out of range — PIECE_CARRIERS has ${rows.length} entries`);
+    process.exit(1);
+  }
+  const want = rows[n];
+  console.log(`  piece ${n} wants sat ${want.sat} (postage ${want.postage})`);
+
+  const locked = bjson(['listlockunspent'], true) || [];
+  console.log(`  scanning ${locked.length} locked carriers for it…`);
+  for (const o of locked) {
+    const op = `${o.txid}:${o.vout}`;
+    const d = ordOutput(op);
+    if (!d) continue;
+    const r = (d.sat_ranges || [])[0];
+    if (!r) continue;
+    if (String(r[0]) === want.sat) {
+      if (d.value !== want.postage) {
+        console.error(`  FOUND ${op} but value ${d.value} != expected postage ${want.postage}`);
+        process.exit(1);
+      }
+      console.log(`  resolved  ${op}  (sat at offset 0, ${d.value} sat)`);
+      return op;
+    }
+  }
+  console.error(`  sat ${want.sat} not found at offset 0 of any locked carrier in ${CFG.wallet}.`);
+  console.error(`  It may already have been handed off, or the wallet/locks are wrong.`);
+  process.exit(1);
+}
+
 // ── handoff: move ONE carrier out of storage, sat-preservingly ───────────────
 //
 // `ord wallet send` cannot do this. ord refuses to drive `ord-cold` at all —
@@ -155,13 +201,17 @@ function assertNoLoss(label, outpoints, lo, hi, expected) {
 // The fee is the tail, so it is paid out of the funding input and can never
 // reach the carrier. Any other ordering breaks that.
 function cmdHandoff(args, broadcast) {
-  const carrier = args['--carrier'];
-  const to      = args['--to'];
-  const rate    = Number(args['--fee-rate'] || 1);
-  if (!carrier || !to) {
-    console.error('usage: node peel.js handoff --carrier <txid:vout> --to <address> [--fee-rate 1] [--broadcast]');
+  const to   = args['--to'];
+  const rate = Number(args['--fee-rate'] || 1);
+  const pieceArg = args['--piece'];
+  if (!to || (!args['--carrier'] && pieceArg === undefined)) {
+    console.error('usage: node peel.js handoff (--piece <N> | --carrier <txid:vout>) --to <address> [--fee-rate 1] [--broadcast]');
+    console.error('       --piece is preferred: it resolves the carrier from PIECE_CARRIERS so the order cannot be got wrong.');
     process.exit(1);
   }
+  const carrier = pieceArg !== undefined
+    ? carrierForPieceIndex(Number(pieceArg))
+    : args['--carrier'];
   const [ctxid, cvoutStr] = carrier.split(':');
   const cvout = Number(cvoutStr);
 
