@@ -1188,3 +1188,42 @@ safety property, not a habit, and must not be optimised into a batch move.
 way — 65 carrier-sized arrivals across 38 transactions between 2026-05-03 and
 2026-06-20, median 15 minutes apart. The one-at-a-time loop is the proven procedure;
 v3 changes only the destination wallet.
+
+
+## Regtest run against the CURRENT engine — 2026-09-18
+
+The previous regtest collection (engine 82,121 bytes, block 984) ran a **pre-immune-
+system** engine. Three commits changed engine source after it was inscribed, including
+the two most consequential of the audit — `9870a28` (computeMinMaxValues guards) and
+`fb4e020` (ecgRanks guards + the isUsableDataset ingest contract). So the build destined
+for mainnet had been verified by the suites and by proxy-served browser renders, but had
+never itself been through an inscription run.
+
+Re-run end to end to close that:
+
+    engine    c1cc8b8291a14fea27751549c18d83f885d502041e0e011631cdf970b2f03335i0
+              text/javascript, 83,138 bytes, block 1026 — the exact mainnet build
+    pieces    30, blocks 1026-1055, one block each, 30 distinct blocks, no duplicates
+    metadata  30 clean / 0 problems — four keys each, no identity, no rehearsal data
+    indices   0-29, all distinct
+    lifespans 25 distinct (hash-tail collisions, expected at this collection size)
+
+Pacing measured at a steady **11 s/piece, min and max both 11 s** — the runner sleeps
+deliberately so each arrival is watchable. Twice during this run I misread progress as
+"slow" because the monitoring sleeps were being truncated; the per-piece log mtimes are
+the reliable measure, not elapsed wall time between checks.
+
+### Rebuilding the viewer
+
+`/private/tmp/.../scratchpad` is swept periodically — `mintview/index.html`,
+`mintserve.mjs` and `run30.sh` had all vanished between sessions and were rebuilt. Worth
+expecting rather than being surprised by. The viewer is same-origin with ord (serves the
+page at `/` and proxies everything else to 9001), which avoids CORS entirely.
+
+### Opening a browser for the creator
+
+Use `open -a "Brave Browser" <url>` — NOT the CDP automation instance. While an
+automation Brave is running on its own `--user-data-dir`, macOS treats it as *the* Brave
+application, so `open -a` hands URLs to it and the creator's own window never shows them.
+Kill the automation browser before opening anything for a human. (Also note
+`pgrep -ci brave` under-reports; `ps -Ao comm | grep -ci brave` is accurate.)
