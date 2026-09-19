@@ -476,41 +476,33 @@ expensive mistake this project has made and it cannot be undone.
 
 ---
 
-## 7b. The hot wallet is NOT clean — check before any mainnet run (2026-09-13)
+## 7b. The hot wallet — checked and CLEAR (resolved 2026-09-18)
 
-`bitcoin-cli -datadir=/Volumes/Bitcoin/Bitcoin -rpcwallet=ord listunspent` shows
-**5 spendable, unlocked UTXOs**, four of which are dust and ~14,000 confirmations old:
+An earlier version of this section flagged four unlocked dust UTXOs in the hot `ord`
+wallet (679/874/874/874 sat, ~14,000 confirmations) as "consistent with old v1/v2
+inscription outputs" and said to verify before any mainnet run. **Verified, and the
+concern was unfounded** — that was an inference from size and age, not evidence.
 
-    679 sat  899ff180e9cd3224…:0
-    874 sat  f9fd6b63bfc08643…:0
-    874 sat  ca343338b7e6d6a7…:0
-    874 sat  be1a0751fc636ac8…:0
-  98344 sat  b464191a62a900cf…:1   (the funding UTXO)
+Checked with ord caught up (`--no-sync`, safe here: these outputs are ~14,000
+confirmations old, so a 130-block index lag cannot affect them):
 
-The dust four are consistent with old v1/v2 inscription outputs. ord normally
-classifies inscription-bearing outputs as *ordinal* rather than *cardinal* and will
-not spend them as funding — but that was NOT verifiable at the time of writing
-because mainnet ord was stopped. **Before any mainnet run, start ord and check
-`ord wallet balance`: the dust must show under `ordinal`, not `cardinal`.** If it
-shows as cardinal, lock those outpoints or move them out.
+    ord wallet --name ord balance  ->  cardinal 101,645   ordinal 35,922
 
-This is the real argument for inscribing v3 from a **fresh wallet**: not inscription
-numbering (see below), but that a wallet holding only the funding UTXO and the
-carrier being inscribed has nothing else for ord to pick up by mistake.
+`/output/<outpoint>` for all four: **`inscriptions: 0`**. They are dust change from
+the v1/v2 run, nothing more. The cardinal figure is exactly those four plus the 98,344
+funding UTXO.
 
-### Inscription numbers are NOT wallet-relative — a fresh wallet will not reset them
+**The real inscriptions are protected.** ord tracks **90** inscriptions in the hot
+wallet — 30 pieces x 3 layers, matching the history of the same sats being inscribed
+three times. They count as `ordinal`, so ord will not select them as funding, and 32
+UTXOs are locked as a second line.
 
-Worth recording because the regtest run makes it look otherwise. On the regtest chain
-the v3 engine is inscription **82**, piece 0 is **83**, piece 30 is **113** — sequential
-chain positions, high only because 82 inscriptions already existed there from earlier
-test runs. Inscription numbers are assigned globally, in order, across all of Bitcoin.
-No wallet choice changes them, and on mainnet piece 0 will take whatever the next
-global number is.
+Note the postage sum across those 90 (66,674 sat) exceeds the `ordinal` balance
+(35,922). That is not a discrepancy: stacked inscriptions share a UTXO, so postage
+double-counts outputs that carry more than one layer.
 
-What identifies the collection is the **parent/child relationship**: every piece is a
-child of the engine, so `/r/children/<engineId>` returns exactly the collection and
-nothing else. That is the durable identity, and it is already working — verified at
-31 pieces on regtest.
+Moot for v3 in any case — v3 inscribes from a fresh wallet (§7c) and the hot wallet is
+never in the path.
 
 ## 7c. Where v3 goes — decided 2026-09-13, transfer step VERIFIED on regtest
 
