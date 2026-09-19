@@ -426,8 +426,33 @@ re-creates it as the parent of every child (§7c):
 
 ```
 ord wallet inscribe --fee-rate <R> --sat 1459982499999999 \
-    --postage <that carrier's full size> --file index_bundle.js
+    --postage 330sat --file index_bundle.js
 ```
+
+**`--postage 330sat`, NOT 546.** Located and verified on chain 2026-09-18: the engine
+sat sits in `b6bee748d138f06b7ddf710ab0bed97842dffda4bc9ed0eaebf6628bdba47878:1`, a
+**330-sat** carrier with the sat at offset 0 (2 ranges). The seven Omegas are
+"546/546/546/546/330/330/330" and the engine's is one of the 330s — the four 546-sat
+carriers hold entirely different sats (1952159999999999, 1946032499999999,
+1934694999999999, 1933312499999999). Reading "546" off the Omega description and
+typing it here would set the wrong postage on the single most expensive inscription
+in the project.
+
+Move it with `handoff --sat`, which resolves the outpoint rather than trusting a
+pasted one:
+
+```
+PEEL_NETWORK=mainnet PEEL_DATADIR=/Volumes/Bitcoin/Bitcoin \
+PEEL_WALLET=ord-cold PEEL_ORD_URL=http://127.0.0.1:80 \
+node peel.js handoff --sat 1459982499999999 --to <ord-v3 addr> --fee-rate 1 --broadcast
+```
+
+**Timing.** The engine is the first inscription of the real run, and once inscribed it
+is the parent of every piece for ever — a change means a new engine and a new
+collection. So it should go AFTER the piece-30 rehearsal, not before: that rehearsal is
+the only test that exercises a real new reading arriving on chain, and it is the last
+thing that could still surface an engine bug. Also do not move its carrier days ahead;
+an uninscribed rare carrier sits in the hot wallet as `cardinal`, i.e. spendable.
 
 **Batch mode is worth considering.** v1/v2 did 28 pieces in one batch reveal
 (`mode: separate-outputs`, per-inscription postages matching each carrier). That gives the

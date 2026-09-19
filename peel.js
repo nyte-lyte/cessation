@@ -137,6 +137,27 @@ function assertNoLoss(label, outpoints, lo, hi, expected) {
 }
 
 // ── plan ─────────────────────────────────────────────────────────────────────
+// Resolve a carrier by the SAT it must carry, for sats not in PIECE_CARRIERS —
+// principally the engine's Omega (1459982499999999). Same argument as --piece:
+// pasting an outpoint by hand is the error-prone part, and on mainnet the mistake
+// is permanent.
+function carrierForSat(satStr) {
+  const locked = bjson(['listlockunspent'], true) || [];
+  console.log(`  looking for sat ${satStr} across ${locked.length} locked carriers…`);
+  for (const o of locked) {
+    const op = `${o.txid}:${o.vout}`;
+    const d = ordOutput(op);
+    if (!d) continue;
+    const r = (d.sat_ranges || [])[0];
+    if (r && String(r[0]) === String(satStr)) {
+      console.log(`  resolved  ${op}  (sat at offset 0, ${d.value} sat)`);
+      return op;
+    }
+  }
+  console.error(`  sat ${satStr} not found at offset 0 of any locked carrier in ${CFG.wallet}.`);
+  process.exit(1);
+}
+
 // Which carrier belongs to piece N, resolved from the sat rather than typed.
 //
 // PIECE_CARRIERS in inscribe.js maps piece index -> sat, oldest sat first. The
@@ -204,14 +225,16 @@ function cmdHandoff(args, broadcast) {
   const to   = args['--to'];
   const rate = Number(args['--fee-rate'] || 1);
   const pieceArg = args['--piece'];
-  if (!to || (!args['--carrier'] && pieceArg === undefined)) {
-    console.error('usage: node peel.js handoff (--piece <N> | --carrier <txid:vout>) --to <address> [--fee-rate 1] [--broadcast]');
-    console.error('       --piece is preferred: it resolves the carrier from PIECE_CARRIERS so the order cannot be got wrong.');
+  const satArg   = args['--sat'];
+  if (!to || (!args['--carrier'] && pieceArg === undefined && satArg === undefined)) {
+    console.error('usage: node peel.js handoff (--piece <N> | --sat <SAT> | --carrier <txid:vout>) --to <address> [--fee-rate 1] [--broadcast]');
+    console.error('       --piece resolves from PIECE_CARRIERS; --sat resolves any other carrier (e.g. the engine Omega).');
+    console.error('       --carrier takes a raw outpoint and is the only form that can be typed wrong.');
     process.exit(1);
   }
-  const carrier = pieceArg !== undefined
-    ? carrierForPieceIndex(Number(pieceArg))
-    : args['--carrier'];
+  const carrier = pieceArg !== undefined ? carrierForPieceIndex(Number(pieceArg))
+                : satArg   !== undefined ? carrierForSat(satArg)
+                : args['--carrier'];
   const [ctxid, cvoutStr] = carrier.split(':');
   const cvout = Number(cvoutStr);
 
