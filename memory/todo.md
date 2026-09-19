@@ -4,6 +4,32 @@ Rewritten 2026-08-16, updated end of session 2026-08-16. Every claim was re-veri
 against the code. The previous version of this file asserted a state the code did not
 match — see "Why this file was wrong" at the bottom before trusting any old checkmark.
 
+## THE PLAN — settled 2026-09-18
+
+1. ~~Regtest 0-29 on the current engine~~ **DONE.** Engine `c1cc8b82…3335i0`, 83,138
+   bytes at block 1026; pieces 0-29 at blocks 1027-1055, clean metadata, tip 1056.
+   **Do not redo this and do not reset `ord-env`** — it is the chain piece 30 lands on.
+2. **Labs arrive** (taken 2026-09-18, results expected within days) → add the reading to
+   `data/health_data_sets.js` as index 30.
+3. **Rehearse piece 30 on that standing regtest chain.** The test is not that it
+   inscribes — it is that the EXISTING 30 re-rank because of it. Compare piece 0 before
+   and after; `truncproxy.mjs` renders any piece against N siblings for a direct
+   before/after.
+4. **If that goes well, go live with 31 pieces.**
+
+### Before the mainnet run — the two resets that bit once already
+
+Both `dist/` and `inscribed_blocks.json` will be full of REGTEST state again after
+step 3, exactly as they were on 2026-09-16:
+
+- `dist/` will hold regtest-anchored HTML and metadata, including a piece 30 whose
+  `inscriptionUnix` and `hashTail` come from a regtest block. Purge it.
+- `inscribed_blocks.json` will hold 31 regtest heights, so the one-block-per-piece
+  guard would compare mainnet blocks against regtest ones and protect nothing. Reset
+  to `{}`.
+
+Neither is optional and neither announces itself.
+
 ## DECIDED 2026-09-13 — inscribe AFTER the next reading, not before
 
 The next ECG/lab reading is expected late September 2026. Nothing goes on mainnet
