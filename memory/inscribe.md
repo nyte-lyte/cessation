@@ -581,6 +581,46 @@ in flight. Nothing else.
 assistant session, the seed enters that transcript. Stated as a fact about the command,
 not a recommendation about who should run it.
 
+## 7d. The v3 wallet — creation, encryption, and the order to do it in
+
+Rehearsed on regtest 2026-09-18 against `v3test`. **Encryption is compatible with the
+ord workflow**, which was the open question:
+
+| step | result |
+|---|---|
+| `ord wallet --name X balance` on a LOCKED encrypted wallet | works — reads are fine |
+| `ord wallet --name X send` while LOCKED | fails loudly: `RpcError -13 "Please enter the wallet passphrase with walletpassphrase first."` |
+| after `bitcoin-cli -rpcwallet=X walletpassphrase "<pass>" <secs>` | signs and broadcasts normally |
+
+Cost of encrypting: one `walletpassphrase` before each signing step. Forgetting it is a
+clean error, not a silent failure or a corrupted transaction.
+
+**`encryptwallet` does NOT invalidate existing keys.** Core prints *"the keypool has
+been flushed and a new HD seed was generated"*, which reads alarmingly — it refers to
+FUTURE key generation. Verified: after encrypting, the wallet still reported its full
+balance and still signed a spend of a pre-existing UTXO.
+
+### Order matters, and it is one-way
+
+1. `ord --datadir <dd> wallet --name <v3wallet> create`
+   → **prints the BIP39 mnemonic ONCE, to stdout.** Write it down before pressing
+   anything else. This is the step that was missed for `ord` and `ord-cold`, which is
+   why neither has a seed backup today.
+2. `bitcoin-cli -rpcwallet=<v3wallet> encryptwallet "<passphrase>"`
+3. `bitcoin-cli -rpcwallet=<v3wallet> backupwallet "<path off this machine>"`
+
+**Step 3 must come after step 2.** A backup taken before encryption is an unencrypted
+copy of the keys, and stays unencrypted for ever regardless of what is done to the
+original afterwards. Core itself says so after encrypting: *"You need to make a new
+backup with the backupwallet RPC."*
+
+### Why this wallet in particular must be backed up at creation
+
+It holds the ENGINE permanently — the parent of every piece, spent and re-created on
+each child inscription (§7c). Losing it does not just lose custody of the pieces: the
+collection can never grow again, because no future piece could use `--parent`. That is
+a different and worse failure than losing a carrier.
+
 ## 8. Pre-flight
 
 - [ ] External volume mounted; node synced; `pruned=false`
