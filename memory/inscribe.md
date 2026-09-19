@@ -524,8 +524,8 @@ wallet costs nothing over reusing the hot one.
 ### The loop, per piece
 
 1. Unlock exactly ONE carrier in `ord-cold` (`lockunspent true '[{...}]'`).
-2. `ord wallet send --fee-rate <R> --postage 330sat <fresh-wallet-addr> <txid>:<vout>:0`
-   — **`--postage` is mandatory, see the measurement below.**
+2. `node peel.js handoff --carrier <txid>:<vout> --to <fresh-wallet-addr> --fee-rate <R> --broadcast`
+   — **NOT `ord wallet send`.** See "Why the transfer cannot use ord" below.
 3. Confirm, then inscribe that piece from the fresh wallet with `--sat` and
    `--postage 330sat` as `inscribe.js` prints.
 4. Next piece. Never two carriers in the fresh wallet at once.
@@ -538,6 +538,46 @@ what the one-at-a-time loop buys, and it is why it must not be "optimised" into 
 batch move. Confirmed again 2026-09-13: a carrier arriving in a fresh wallet reports
 as `cardinal: 330, ordinal: 0` — ord sees an uninscribed rare carrier as ordinary
 spendable change and will fund from it.
+
+### Why the transfer cannot use `ord wallet send` — corrected 2026-09-18
+
+An earlier version of this section said to move carriers with `ord wallet send`. **That
+does not work**, and the 2026-09-13 rehearsal missed it because the source there was an
+ord-created wallet.
+
+`ord-cold` is a standard Core wallet carrying `pkh`/`sh`/`tr`/`wpkh` descriptors; ord
+builds taproot-only wallets (2 `tr` descriptors). ord therefore refuses it outright:
+
+    error: wallet "ord-cold" contains unexpected output descriptors, and does not
+    appear to be an `ord` wallet, create a new wallet with `ord wallet create`
+
+So the transfer is assembled by hand, the same way the peel itself was —
+`createrawtransaction` / `signrawtransactionwithwallet` / `sendrawtransaction`, which
+is why `peel.js` already had the machinery. `node peel.js handoff` wraps it:
+
+    PEEL_NETWORK=mainnet PEEL_DATADIR=/Volumes/Bitcoin/Bitcoin \
+    PEEL_WALLET=ord-cold PEEL_ORD_URL=http://127.0.0.1:80 \
+    node peel.js handoff --carrier <txid>:<vout> --to <addr> --fee-rate 1 [--broadcast]
+
+What it enforces, because the ordering IS the safety argument:
+
+    input[0]  = the carrier          output[0] = EXACTLY the carrier's value
+    input[1]  = funding              output[1] = change
+
+Sats traverse a transaction in input order, so `output[0]` takes the first `value`
+sats — the carrier's, rare sat still at offset 0. The fee is the tail, paid from the
+funding input, and cannot reach the carrier. The command refuses to build if the
+carrier is not `input[0]` or `output[0]` does not equal its value exactly. It also
+excludes every locked outpoint from funding selection, so it can never pay a fee with
+another carrier, and it re-locks the carrier if the run was a dry run or failed.
+
+**Rehearsed 2026-09-18 on regtest**, deliberately from a Core-native wallet
+(`coldtest`, same `pkh/sh/tr/wpkh` descriptors, ord rejects it identically):
+
+    carrier 330 sat, first sat 4505000410582
+    -> destination output: 330 sat, first sat 4505000410582   both OK
+
+Dry run is the default; it re-locked the carrier afterwards, verified.
 
 ### Measured on regtest 2026-09-13 — `ord wallet send` postage
 

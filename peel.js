@@ -137,6 +137,88 @@ function assertNoLoss(label, outpoints, lo, hi, expected) {
 }
 
 // ── plan ─────────────────────────────────────────────────────────────────────
+// ── handoff: move ONE carrier out of storage, sat-preservingly ───────────────
+//
+// `ord wallet send` cannot do this. ord refuses to drive `ord-cold` at all —
+// "contains unexpected output descriptors, and does not appear to be an `ord`
+// wallet" — because that wallet carries pkh/sh/wpkh/tr descriptors while ord
+// builds taproot-only wallets. So the transfer has to be assembled by hand, the
+// same way the peel itself was.
+//
+// The shape is the whole safety argument:
+//
+//   input[0]  = the carrier            output[0] = EXACTLY the carrier's value
+//   input[1+] = funding                output[1] = change
+//
+// Sats traverse a transaction in input order, so output[0] takes the first
+// `value` sats — which are precisely the carrier's, rare sat still at offset 0.
+// The fee is the tail, so it is paid out of the funding input and can never
+// reach the carrier. Any other ordering breaks that.
+function cmdHandoff(args, broadcast) {
+  const carrier = args['--carrier'];
+  const to      = args['--to'];
+  const rate    = Number(args['--fee-rate'] || 1);
+  if (!carrier || !to) {
+    console.error('usage: node peel.js handoff --carrier <txid:vout> --to <address> [--fee-rate 1] [--broadcast]');
+    process.exit(1);
+  }
+  const [ctxid, cvoutStr] = carrier.split(':');
+  const cvout = Number(cvoutStr);
+
+  const d = ordOutput(carrier);
+  if (!d) { console.error(`  cannot read ${carrier} from ord at ${CFG.ordUrl}`); process.exit(1); }
+  const value  = d.value;
+  const ranges = d.sat_ranges || [];
+  if (!ranges.length) { console.error('  ord returned no sat_ranges — is --index-sats on?'); process.exit(1); }
+  const firstSat = ranges[0][0];
+
+  console.log(`  carrier   ${carrier}`);
+  console.log(`  value     ${value} sat`);
+  console.log(`  first sat ${firstSat}   (this is the one that must survive)`);
+  console.log(`  ranges    ${ranges.length}`);
+
+  // Never fund from another carrier. Everything locked is off limits, and the
+  // carrier being moved is excluded explicitly because we are about to unlock it.
+  const locked = bjson(['listlockunspent'], true) || [];
+  const exclude = new Set(locked.map(o => `${o.txid}:${o.vout}`));
+  exclude.add(carrier);
+
+  const fee = feeFor(2, 2, rate);
+  const funders = cardinals(fee + DUST, exclude);
+  if (!funders.length) {
+    console.error(`  no cardinal UTXO >= ${fee + DUST} sat to pay the fee — fund ${CFG.wallet} first`);
+    process.exit(1);
+  }
+  const funder = funders[funders.length - 1];        // smallest that covers it
+  const change = funder.sats - fee;
+  if (change < DUST) { console.error(`  change ${change} below dust`); process.exit(1); }
+
+  const ins  = [{ txid: ctxid, vout: cvout }, { txid: funder.txid, vout: funder.vout }];
+  const outs = [{ addr: to, sats: value }, { addr: newAddress(), sats: change }];
+
+  console.log(`  funding   ${funder.txid}:${funder.vout}  ${funder.sats} sat`);
+  console.log(`  fee       ${fee} sat @ ${rate} sat/vB   change ${change} sat`);
+  console.log(`  shape     in[0]=carrier(${value})  out[0]=${value} -> ${to.slice(0,20)}…`);
+
+  // The invariant, asserted rather than assumed.
+  if (outs[0].sats !== value) { console.error('  REFUSING: output[0] != carrier value'); process.exit(1); }
+  if (`${ins[0].txid}:${ins[0].vout}` !== carrier) { console.error('  REFUSING: carrier is not input[0]'); process.exit(1); }
+
+  // Unlock only for as long as it takes to build; restore on any failure.
+  bcli(['lockunspent', 'true', JSON.stringify([{ txid: ctxid, vout: cvout }])], true);
+  let txid = null;
+  try {
+    txid = buildAndMaybeSend(ins, outs, broadcast, 'handoff');
+  } finally {
+    if (!txid) lockOutputs([{ txid: ctxid, vout: cvout }]);   // dry run or failure: re-lock
+  }
+  if (!txid) { console.log('  [dry run] nothing broadcast; carrier re-locked'); return; }
+
+  console.log(`  broadcast ${txid}`);
+  console.log(`  verify once confirmed:  curl -s ${CFG.ordUrl}/output/${txid}:0 -H 'Accept: application/json'`);
+  console.log(`  expect: value ${value}, first sat ${firstSat}`);
+}
+
 function cmdPlan(args) {
   const range = args['--range'];
   const carriers = parseInt(args['--carriers'], 10);
@@ -420,7 +502,7 @@ for (let i = 1; i < argv.length; i++) if (argv[i].startsWith('--')) {
   args[argv[i]] = (argv[i + 1] && !argv[i + 1].startsWith('--')) ? argv[++i] : true;
 }
 const broadcast = !!args['--broadcast'];
-if (!broadcast && ['split','roundb','roundc'].includes(cmd)) console.log('(dry run — pass --broadcast to send)\n');
+if (!broadcast && ['split','roundb','roundc','handoff'].includes(cmd)) console.log('(dry run — pass --broadcast to send)\n');
 
 switch (cmd) {
   case 'plan':   cmdPlan(args); break;
@@ -429,11 +511,13 @@ switch (cmd) {
   case 'roundc': cmdRoundC(broadcast); break;
   case 'collect': cmdCollect(); break;
   case 'status': cmdStatus(); break;
+  case 'handoff': cmdHandoff(args, broadcast); break;
   default:
     console.log('node peel.js plan --range <txid:vout> --carriers <N> --chunks <K> [--fee-rate 1]');
     console.log('node peel.js split  [--broadcast]');
     console.log('node peel.js roundb [--broadcast]     # chunks -> tails   (then confirm)');
     console.log('node peel.js roundc [--broadcast]     # tails  -> carriers (then confirm)');
     console.log('node peel.js collect                  # verify + lock the carriers');
+    console.log('node peel.js handoff --carrier <txid:vout> --to <addr> [--fee-rate 1] [--broadcast]');
     console.log('node peel.js status');
 }
