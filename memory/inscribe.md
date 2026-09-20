@@ -899,6 +899,18 @@ and only then continue.** One piece at risk instead of thirty-one.
   `wallet --server-url http://127.0.0.1:80` (or whatever port the index server is on).
 - A piece inscription dry-ran at **544 sats** on mainnet at 1 sat/vB (608 measured on
   regtest) — the estimate holds.
+- **`peel.js` defaults to REGTEST** (`peel.js:34-37`: `regtest`, `ord-env`, `ord`,
+  port 9001). Mainnet is selected only by the `PEEL_*` env prefix. The documented
+  one-liner is long enough that a terminal **wraps it**, which splits the
+  `PEEL_NETWORK=mainnet …` prefix from the `node` call — the env vars never apply and
+  the command silently targets regtest. Hit on 2026-09-20 on the engine handoff; it
+  failed safe only because regtest has no `ord-cold` loaded (`error code: -18`), and
+  the wrapped address line came back as `command not found: bc1p…`.
+
+  **Do not paste the long form.** Use `./handoff-engine.sh` (dry run by default,
+  `--broadcast` to send). It hard-codes the sat, the v3 address and the mainnet env,
+  and refuses to run unless `getblockchaininfo` reports `chain: main`, ord and the node
+  are level, and `ord-cold` is actually unlocked. Short enough that it cannot wrap.
 
 ### Why K=1 — decided 2026-09-07
 
