@@ -129,6 +129,27 @@ wallet. If you add a wallet, add it here.
 - **Mnemonic written down offline, BIP39 passphrase empty.** Record "passphrase: none"
   alongside it — restore tools always prompt, and entering one derives a different
   empty wallet rather than failing.
+- **Two different things are both called "passphrase" here. Do not conflate them.**
+  (1) the **BIP39** passphrase — the optional 25th word on the seed. Yours is EMPTY;
+  `ord wallet create` prints it as `"passphrase": ""`. (2) the **Core encryption**
+  passphrase, set separately with `encryptwallet`, required by `walletpassphrase`
+  before signing. These are unrelated, and mistaking (1) for (2) cost a session on
+  2026-09-20. The encryption passphrase is NOT recorded in this repo — the repo is
+  **public** (github.com/nyte-lyte/cessation). Keep it wherever the mnemonic lives.
+- **`encryptwallet` did NOT regenerate the seed, despite what it says.** It returns a
+  fixed string ending *"a new HD seed was generated. You need to make a new backup"*.
+  That is boilerplate, not a report. Verified 2026-09-20: `ord-v3` still carries ord's
+  own **2 taproot-only descriptors on BIP86 (86h/0h/0h)** with the original fingerprint
+  `5281c2de`, still deriving the addresses holding the funds. Had Core re-run its own
+  descriptor setup it would have produced its standard **8** descriptors across
+  `pkh`/`sh`/`wpkh`/`tr` — which is exactly what `ord-cold` shows, so the contrast is
+  visible on this machine. **The mnemonic remains valid and the backup is good.**
+  To check this on any wallet: `listdescriptors` — 2 `tr` on 86h = ord's import
+  survived; 8 across four paths = Core replaced them.
+- **How to tell if a wallet is encrypted at all**, rather than guessing from fields:
+  `walletlock` succeeds on an encrypted wallet and fails with `-15 running with an
+  unencrypted wallet` otherwise. `getwalletinfo`'s `unlocked_until` is present only
+  when encrypted, but the A/B on `walletlock` is unambiguous.
 - **Backed up** to `~/wallet-backups/ord-v3-backup.dat`, and the backup is
   restore-VERIFIED: restored under a temp name, came back encrypted with the same
   master fingerprint `5281c2de` and the same 2 descriptors.
