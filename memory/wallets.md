@@ -146,6 +146,12 @@ wallet. If you add a wallet, add it here.
   visible on this machine. **The mnemonic remains valid and the backup is good.**
   To check this on any wallet: `listdescriptors` — 2 `tr` on 86h = ord's import
   survived; 8 across four paths = Core replaced them.
+- **Passphrase swap deferred — DECIDED 2026-09-20 (creator): after the collection is
+  live.** The current encryption passphrase is weak and has been exposed in assistant
+  transcripts. `walletpassphrasechange` replaces it without touching the seed,
+  descriptors or addresses, so this is safe to do at any time — it is deferred, not
+  overlooked. Accepted risk during the inscription run; do it once v3 is inscribed,
+  alongside the ord index backup (inscribe.md §9). **Do not re-raise mid-run.**
 - **How to tell if a wallet is encrypted at all**, rather than guessing from fields:
   `walletlock` succeeds on an encrypted wallet and fails with `-15 running with an
   unencrypted wallet` otherwise. `getwalletinfo`'s `unlocked_until` is present only
