@@ -33,16 +33,24 @@ if [ "$ORD_HEIGHT" != "$NODE_HEIGHT" ]; then
 fi
 echo "mainnet ✓  ord and node both at $NODE_HEIGHT"
 
-# --- ord-cold must be unlocked ------------------------------------------------
-UNLOCKED=$("$BCLI" -datadir="$DATADIR" -rpcwallet=ord-cold getwalletinfo \
-           | sed -n 's/.*"unlocked_until": \([0-9]*\).*/\1/p')
-NOW=$(date +%s)
-if [ -z "$UNLOCKED" ] || [ "$UNLOCKED" -le "$NOW" ]; then
-  echo "REFUSING: ord-cold is locked. Unlock it first:" >&2
-  echo "  $BCLI -datadir=$DATADIR -rpcwallet=ord-cold walletpassphrase \"PASSPHRASE\" 600" >&2
-  exit 1
+# --- ord-cold must be able to sign ------------------------------------------
+# An UNENCRYPTED wallet has no "unlocked_until" field at all. Treating a missing
+# field as "locked" refused a wallet that was always ready (2026-09-20).
+WI=$("$BCLI" -datadir="$DATADIR" -rpcwallet=ord-cold getwalletinfo)
+if ! echo "$WI" | grep -q unlocked_until; then
+  echo "ord-cold is not encrypted — nothing to unlock, it can sign"
+else
+  UNLOCKED=$(echo "$WI" | sed -n 's/.*"unlocked_until": \([0-9]*\).*/\1/p')
+  NOW=$(date +%s)
+  if [ "$UNLOCKED" -le "$NOW" ]; then
+    echo "REFUSING: ord-cold is encrypted and locked. Unlock it first:" >&2
+    echo "  $BCLI -datadir=$DATADIR -rpcwallet=ord-cold walletpassphrase \"PASSPHRASE\" 600" >&2
+    echo "  (run that in a SEPARATE terminal — not with '!' — so the passphrase" >&2
+    echo "   does not land in the assistant transcript)" >&2
+    exit 1
+  fi
+  echo "ord-cold unlocked ✓  ($(( (UNLOCKED - NOW) / 60 )) min remaining)"
 fi
-echo "ord-cold unlocked ✓  ($(( (UNLOCKED - NOW) / 60 )) min remaining)"
 echo
 
 PEEL_NETWORK=mainnet \
