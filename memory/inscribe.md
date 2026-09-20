@@ -705,6 +705,47 @@ each child inscription (§7c). Losing it does not just lose custody of the piece
 collection can never grow again, because no future piece could use `--parent`. That is
 a different and worse failure than losing a carrier.
 
+## 7e. Dress rehearsal of the REAL command — 2026-09-19
+
+Every regtest run before this omitted `--sat`, so the command that actually runs on
+mainnet had never executed anywhere:
+
+    ord wallet inscribe --fee-rate R --sat <SAT> --postage 330sat \
+        --parent <engine> --file <piece>.html --json-metadata <piece>.json
+
+Rehearsed in full on regtest: carrier created in a Core-native wallet, locked, handed
+off with `peel.js handoff --sat`, into an **encrypted** wallet, unlocked with
+`walletpassphrase`, engine inscribed into that same wallet, then the piece inscribed on
+the carrier with `--sat`. Result:
+
+    vout[0]  10,000 sat  <- the PARENT (engine), returned to the wallet
+    vout[1]     330 sat  <- the piece; first sat = the targeted sat, at offset 0
+
+`--sat` targeted correctly, `--postage 330sat` preserved the carrier exactly, and the
+rare sat survived at offset 0 of the inscription output.
+
+### Three things this established
+
+**1. The parent must be in the inscribing wallet — hard error, not guidance.**
+Inscribing from `v3test` while the engine sat in `ord` failed outright:
+
+    error: parent c1cc8b82…3335i0 not in wallet
+
+So the engine must be inscribed INTO the v3 wallet and stay there. §7c said this; now
+it is enforced by ord rather than by discipline.
+
+**2. The output layout is [parent, piece] — the piece is vout 1, NOT vout 0.**
+The returned parent takes vout 0. Checking vout 0 after a piece inscription shows the
+engine's 10,000-sat output and a completely unrelated first sat — which reads exactly
+like a destroyed rare sat when nothing is wrong. **Verify vout 1**, or read
+`satpoint` off `/r/inscription/<id>`, which names the correct vout directly.
+
+This is a transfer-vs-inscribe difference worth holding: `handoff` builds
+`out[0] = carrier` because there is no parent. The inscribe tx does not.
+
+**3. An encrypted wallet needs `walletpassphrase` before inscribing**, exactly as the
+7d rehearsal showed for `send`. Reads work locked; signing does not.
+
 ## 8. Pre-flight
 
 - [ ] External volume mounted; node synced; `pruned=false`
