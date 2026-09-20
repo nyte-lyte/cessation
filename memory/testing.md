@@ -1346,3 +1346,38 @@ between sessions. Rebuilding them, note: **do not use Python `%`-formatting on t
 handle was already opened for writing. The server then serves an empty 200 and the tab
 looks blank for no visible reason. Write the file with a `__ENGINE__` placeholder and
 `sed` it, which is what the working version does.
+
+
+## Piece 30 on chain — the prediction held (2026-09-19)
+
+The real 2026-09-18 reading, inscribed onto the standing regtest chain as
+`d4d7d9865b35c14ae05b9316b03a23142a54b4c4b64157aacd01ba77624633b5i0`, block 1092.
+
+    children  31 (one page)
+    ledger    31 pieces, blocks 1062-1092, 31 distinct blocks, no duplicates
+    metadata  31 clean / 0 problems, indices 0-30, piece 30 dated 2026-09-18
+
+### Predicted before, measured after
+
+| predicted | actual |
+|---|---|
+| 0 of 9 lab percentiles move for piece 0 | **0 of 9** |
+| ECG ranks shift ~0.01-0.02 | 0.0115, 0.0126, 0.0046, 0.0012 |
+| `rAxis` moves DOWN while others rise | **0.5862 -> 0.5667** |
+
+`rAxis` is the detail worth trusting: the new reading's rAxis of 89 ranks ABOVE piece
+0's, so piece 0 drops a place even as the denominator grows from 29 to 30. Every other
+rank rises. A prediction that got the direction of one field right against the trend of
+the other four is a prediction that understood the mechanism rather than guessed.
+
+### Why lab percentiles did not move at all
+
+`winsorizedPercentileForLab` is a min-max normalisation against the P05/P95 clip points,
+not a rank. The new reading sits entirely inside the collection — 0 of 17 ranges widen —
+so the clip points are unchanged and every piece's position within the band is
+identical. Only the rank-based ECG percentiles, whose denominator is the collection
+size, could move.
+
+**This is what a real reading arriving looks like: subtle.** The synthetic rehearsal
+piece moved 36 of 43 uniforms because it was engineered a quarter-spread past every
+maximum. If a future real reading produces a shift on that scale, check the reading.
