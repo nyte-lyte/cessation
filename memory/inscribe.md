@@ -1008,6 +1008,36 @@ parent of every child inscription. Destination confirmed `ismine: true` in `ord-
 **Every piece is a child of THIS id** — `--parent 936f1fbe…067i0`, piece 0 included.
 The engine is the inscription root; piece 0 is the genesis art piece, not the parent.
 
+## 8d. THE RUN — v3 pieces as they land
+
+| piece | inscription id | sat | block | charms | cost |
+|---|---|---|---|---|---|
+| 0 | `35e961c5f4003a9e064db70e6d1c55b7314ce4b38413d3d93a32b116c748122fi0` | 12425429610010 | 967879 | vindicated | 619 + 212 handoff |
+
+**Piece 0, verified on chain 2026-09-20:**
+- `satpoint …:1:0` — Nakamoto sat at **offset 0**, `value 330`, carrier intact.
+  Output layout for a parented inscription is `[parent, piece]`, so the piece is
+  **vout 1**, not vout 0. Reading vout 0 and calling it a mismatch is a mistake this
+  project has already made once.
+- `parents: [engine]`, and the engine's `/r/children` returns it. The collection exists.
+- Content **byte-identical** to `dist/cessation_piece_00.html` (322 bytes).
+- **§7a's unverifiable gate is now satisfied.** The mainnet composed CBOR cannot be
+  checked before broadcast (ord puts metadata in the reveal witness, which does not
+  exist until signing). Read back from `/r/metadata` after confirmation it decodes to
+  exactly `pieceIndex, hashTail, inscriptionUnix, dataset` with the correct values and
+  no identity string. **Do this read-back after every piece** — it is the only real
+  check that the piece can find its own data.
+- `charms: ["vindicated"]` — expected on every parented piece (`--parent` puts the
+  inscription on input 1, which would have been cursed pre-jubilee). Not a problem.
+
+**Measured cost per piece: ~830 sat** (619 inscribe + 212 carrier handoff) at 1 sat/vB.
+
+**The overlap that makes the run bearable:** hand off piece N+1's carrier immediately
+after inscribing piece N, so the two confirmations run in parallel rather than in
+series. `handoff-piece.sh` knows about the pending reveal and allows it; the
+one-bare-carrier-at-a-time rule is still enforced at inscribe time, which is where it
+actually matters.
+
 ## 9. Still open — corrected 2026-09-20
 
 This section was stale and gave three wrong answers to anyone consulting it mid-run.
