@@ -786,15 +786,39 @@ This is a transfer-vs-inscribe difference worth holding: `handoff` builds
 
 ## 8. Pre-flight
 
-- [ ] External volume mounted; node synced; `pruned=false`
-- [ ] `bitcoind -version` reports **31.x** (not 30.x)
-- [ ] Both wallets load; UTXOs match [wallets.md](wallets.md)
-- [ ] All carriers locked except the one in hand
-- [ ] `inscribed_blocks.json` reset for a fresh inscription run
-- [ ] `PIECE_CARRIERS` filled from the real split tx — it ships empty on purpose
-- [ ] Engine bundle rebuilds byte-identical; `node test/scale.test.mjs` passes
-- [ ] Metadata gate passed (§7)
-- [ ] Wallet backups taken
+Verified 2026-09-20. A tick means it was CHECKED on the day, not assumed — several of
+these were true in fact while the box sat unticked, which is how another session
+concluded the v3 wallet did not exist.
+
+- [x] External volume mounted; `pruned=false`; not in IBD — node at 967,864
+- [x] `bitcoind -version` reports **31.1.0**
+- [x] Wallets load; balances recorded — `ord` 35,922 (all ordinal) / `ord-cold` 111,052
+      / `ord-v3` 101,300. All three now in [wallets.md](wallets.md).
+- [x] All carriers locked — **160** in `ord-cold`
+- [x] `inscribed_blocks.json` reset to `{}` and `dist/` empty
+- [x] `PIECE_CARRIERS` filled — 150 entries, first sat 12425429610010, all postage 330,
+      consecutive ascending; independently confirmed against chain by `handoff --piece`
+- [x] Engine rebuilds **byte-identical** (83,444 bytes); **all seven suites pass**
+      (engine_purity, scale, refresh_integrity, reanimation, newcomer, any_reading, boot)
+- [x] Wallet backups taken — all three in `~/wallet-backups/`, `ord-v3`'s restore-verified
+- [ ] **ord level with bitcoind** — at the last check ord was 14 blocks behind (967,850
+      vs 967,864). It catches up on its own while the machine is awake. `--no-sync` is
+      NOT acceptable for the run: targeting a carrier moved minutes earlier needs a
+      current index.
+- [ ] **Metadata gate (§7)** — cannot be fully satisfied pre-broadcast; see §7a for the
+      protocol that replaces it, including decoding piece 0 from the mempool before
+      inscribing piece 1.
+
+### Two that re-dirty themselves — re-check IMMEDIATELY before the first broadcast
+
+`dist/` and `inscribed_blocks.json` were cleared on 2026-09-16 and again on 2026-09-19,
+and **both were dirty again by 2026-09-20** — a `--dry-run` gate test had run
+`inscribe.js 0`, which regenerates the files and claims a ledger entry as a side effect.
+Regtest block 1093 and a regtest timestamp were sitting in `dist/` looking ready to
+inscribe.
+
+Any command that runs `inscribe.js`, including a dry run, re-dirties both. Check them
+last, not first.
 
 ---
 

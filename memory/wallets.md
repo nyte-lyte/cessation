@@ -113,6 +113,50 @@ Four of the black uncommons (adrejuehvqo, adkoglpialm, abigrncmehu, aaexuaaadws)
 (cjcytrkpena, dmvuhsnspyo, ytgwcbgmcw) are additional, more recent buys; dmvuhsnspyo (2015,
 25-BTC epoch) and cjcytrkpena (12.5-BTC epoch) are from older/scarcer epochs.
 
+## Inscribing wallet — `ord-v3`  ⭐ v3 inscribes FROM here
+
+**Created, encrypted and funded 2026-09-18.** This entry was missing until 2026-09-20,
+and its absence caused a real error: another session read this file, concluded the
+wallet still had to be created, and would have run `ord wallet create` against a funded
+wallet. If you add a wallet, add it here.
+
+- Bitcoin Core descriptor wallet at `/Volumes/Bitcoin/Bitcoin/ord-v3/wallet.dat`
+  (12 KB). Taproot-only, 2 descriptors — created by `ord wallet create`, so ord will
+  drive it (unlike `ord-cold`, see below).
+- **ENCRYPTED.** `getwalletinfo` shows `unlocked_until`. Signing needs
+  `bitcoin-cli -rpcwallet=ord-v3 walletpassphrase "<pass>" <secs>` first; reads work
+  locked. Verified on regtest that ord honours this (inscribe.md §7d).
+- **Mnemonic written down offline, BIP39 passphrase empty.** Record "passphrase: none"
+  alongside it — restore tools always prompt, and entering one derives a different
+  empty wallet rather than failing.
+- **Backed up** to `~/wallet-backups/ord-v3-backup.dat`, and the backup is
+  restore-VERIFIED: restored under a temp name, came back encrypted with the same
+  master fingerprint `5281c2de` and the same 2 descriptors.
+- **Balance: 101,300 sat**, swept from `ord`'s cardinal side 2026-09-18
+  (txid `74485ab7…03d8`, 341 vB, 1.01 sat/vB). Covers the engine plus 31 pieces at
+  1 sat/vB with roughly 2.3x margin.
+- **What it will hold:** the v3 engine, PERMANENTLY — ord spends and re-creates the
+  parent on every child inscription, so it must stay here or the collection can never
+  grow — plus whichever carrier is in flight. Never two carriers at once.
+
+### Why `ord-cold` cannot be the inscribing wallet
+
+It is a Core-native wallet with 8 descriptors (`pkh`/`sh`/`tr`/`wpkh`). ord refuses it:
+*"contains unexpected output descriptors, and does not appear to be an `ord` wallet"*.
+Carriers therefore move out of it by raw transaction — `node peel.js handoff` — not by
+`ord wallet send`. See inscribe.md §7c.
+
+### All three wallets, at a glance (2026-09-20)
+
+| wallet | role | encrypted | backed up | balance |
+|---|---|---|---|---|
+| `ord` | archive: v1/v2, 90 inscriptions across 32 outputs | no | yes | 35,922 sat (all ordinal) |
+| `ord-cold` | storage: 160 locked carriers | no | yes | 111,052 sat |
+| `ord-v3` | **inscribes v3** | **yes** | yes, restore-verified | 101,300 sat |
+
+`ord` and `ord-cold` have **no mnemonic recorded** — their `.dat` backups are the only
+route back in, and those backups are unencrypted copies of the keys.
+
 ## Deprecated / stale
 - **UniSat wallet — NO LONGER USED going forward.** It was the original off-node source for
   the first inscription run's sats. Ignore all UniSat references in `MEMORY.md` / older notes.

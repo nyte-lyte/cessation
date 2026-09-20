@@ -1,51 +1,60 @@
 # Cessation — Project Memory
 
-## READ FIRST (session ending 2026-09-12)
-**Decision: re-inscribing the whole project on fresh sats, v3 engine only.** Nothing is
-inscribed on mainnet yet — the creator's call is more verification first, and it keeps
-paying: four bugs found this session that no test suite caught.
+## READ FIRST (2026-09-20)
 
-**THE ENGINE NOW CARRIES NO DATA.** Each piece holds its own dataset in CBOR metadata and
-discovers siblings on chain; the engine is pure code. Bundle 100,173 → 80,972 bytes.
-Plan and verification: [dataless_engine_plan.md](dataless_engine_plan.md).
+**Re-inscribing the whole project on fresh sats, v3 engine only. Nothing is on mainnet
+yet.** Two previous attempts failed and one put a real name on chain permanently. The
+bar is "make sure everything works this time."
 
-**Rare sats are ready.** 153 carriers peeled from the 907-sat Nakamoto range, **150
-consecutive** from `12425429610010`, all locked in `ord-cold`; `PIECE_CARRIERS` in
-`inscribe.js` is filled oldest-first. ~87,000 sats spent, nothing lost across ~310 mainnet
-transactions. [inscribe.md](inscribe.md) §8b is the operational state.
+### State
 
-**Bugs found and fixed this session** — every one caught by rendering or reading the chain,
-none by the 14,000-check harness:
-- **Canvas never scaled** — 300×200 at every viewport, 25% of the frame. Live on mainnet.
-- **ECG rankings frozen to a baked snapshot** — colour re-ranked with the chain, geometry
-  did not. Would have diverged at piece 31.
-- **Three "never draws"** — `lc` used before initialisation, `draw()` on an empty
-  collection, and a DEV helper reading an empty `minMaxValues`.
-- **A reanimated piece rendered a FLAT COLOUR** — the artwork vanished past first
-  cessation. Live in v1 and v2 too; it just needed 30 years to show. The shader keeps its
-  **own copy** of the lifecycle maths, so fixing timing in JS alone did nothing.
-  [testing.md](testing.md) → "AGE".
-- **Reanimation is reincarnation** (creator): each cycle is a new life and ages from zero,
-  block-native. Was pinned at `lifeFraction` 1.0 for ever.
+- **Branch: `main`.** It was six weeks stale until 2026-09-20 and still carried the
+  100 KB baked-data engine; it has been fast-forwarded to the tested tree. Other
+  branches (`canvas-scaling-fix`, `zero-baked-engine`, `engine-v2-growable`) are history
+  — do not work from them. A reading committed to `zero-baked-engine` on 09-19 had to be
+  cherry-picked across.
+- **Engine: 83,444 bytes, carries no data at all** (0 `healthDataSets` references).
+  Each piece reads its own dataset from `/r/metadata/self` and discovers siblings via
+  `/r/children`. **Consequence: it cannot render anywhere without an ord server** —
+  a copy on a normal website holds black. Proven, not theorised.
+- **Collection: 31 pieces**, 0–30. Piece 30 is the real 2026-09-18 reading.
+- **Seven test suites**, all green: engine_purity, scale, refresh_integrity,
+  reanimation, newcomer, any_reading, boot.
+- **Three full regtest runs**, the last (2026-09-19) inscribing engine + 31 pieces on
+  the exact build destined for mainnet.
 
-**Verified on regtest:** all 30 pieces inscribed one at a time on the dataless engine, every
-one reporting `collection resolved — 30 piece(s) on chain`; a piece at a sparse high index
-(the v1 failure case); the living collection moving existing pieces as siblings arrive; and
-the full lifecycle simulated to +600 years through 12 reanimation cycles to liberation and
-void.
+### Wallets — all three documented in [wallets.md](wallets.md)
 
-- Bitcoin Core is on **31.1** — `--no-backup` is retired, never pass it.
-- `node test/scale.test.mjs` — 14,033 checks. `node test/engine_purity.test.mjs` — 29.
-  Both must pass before anything is inscribed.
-- **How to inscribe, and the rules that protect the rare sats: [inscribe.md](inscribe.md).**
-- Full state and open decisions: [todo.md](todo.md). Evidence: [testing.md](testing.md).
-- Terminology — **use this, it has been got wrong before**: **inscribing** is writing to
-  chain (what the creator does); **minting** is a collector claiming. Never call an
-  inscription run a mint. Swept across the repo 2026-09-13; the only surviving uses of
-  "mint" are this line and the tracker site's own schema names (`mint_time`,
-  `health_index_at_mint`, `type: MINT` in tracker.md), which are identifiers in a
-  separate codebase and were left alone deliberately. `inscribe.js` builds the per-piece files and prints the ord command;
-  it does not broadcast.
+| wallet | role | encrypted | balance |
+|---|---|---|---|
+| `ord` | archive: v1/v2, 90 inscriptions | no | 35,922 sat (all ordinal) |
+| `ord-cold` | storage: 160 locked carriers | no | 111,052 sat |
+| `ord-v3` | **inscribes v3** | **yes** | 101,300 sat |
+
+All three backed up to `~/wallet-backups/`; `ord-v3`'s is restore-verified. `ord` and
+`ord-cold` have **no mnemonic recorded** — their `.dat` files are the only way back in.
+
+### What is left before going live
+
+1. ord level with bitcoind (it drifts whenever the laptop sleeps; `--no-sync` is not
+   acceptable for the run)
+2. Engine first: `--sat 1459982499999999 --postage 330sat` — **330, not 546**
+3. Then pieces one at a time: `node peel.js handoff --piece N` → inscribe
+4. **Re-check `dist/` and `inscribed_blocks.json` immediately before the first
+   broadcast** — anything that runs `inscribe.js`, including a dry run, re-dirties both
+
+### Bugs found and fixed in the audit (2026-09-12 → 09-19)
+
+Canvas shipped at 300×200 (live on mainnet v2); ECG rankings frozen to a baked
+snapshot; reanimated pieces rendered flat colour; window resizes forked extra render
+loops (60 → 497 draws/sec); a failed own-metadata fetch left a piece permanently black;
+a flaky gateway could silently re-rank the whole collection; one malformed future
+reading could corrupt every piece already on chain; and boot stopped drawing frame one
+synchronously, so a hidden tab would render nothing.
+
+**Every one of those passed the test suites at the time.** Two needed a browser, three
+needed injected failures, one needed a test that boots the shipped bundle.
+
 
 ## What It Is
 Generative art project inscribed on the Bitcoin blockchain. Each piece is derived from a specific health data snapshot (one ECG/lab reading; 30 of them so far, 2018 onward). The subject has a rare cardiomyopathy. The art visualizes the lifecycle and disease progression of a human life.
