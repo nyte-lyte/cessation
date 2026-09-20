@@ -956,14 +956,67 @@ confirmed on its own once the spike drained, with no bump and nothing wasted. Th
 **Rule: before raising a bid, check the backlog above your rate and the actual confirmation
 times of recent transactions. Do not raise it because the estimator says so.**
 
-## 9. Still open
+## 9. Still open — corrected 2026-09-20
 
-- **The sat plan — DECIDED 2026-09-06:** the 6 spare Omegas do **not** carry pieces for
-  now; **246** Nakamoto sats get peeled out of the 907 (the maximum; 247 is one sat short because both chunks peel together) into single-sat carriers (§5b).
-  Still to design: the *batched* peel procedure, and its cost at a real fee rate.
-- **`PIECE_CARRIERS` is still empty** — fill it from `peel.js status` once the first 15
-  rounds finish. It prints entries oldest-first, ready to paste.
-- **Batch vs one-at-a-time** — §6.
-- **Rounds 16–123 of the peel**, waiting on 1 sat/vB (§8b).
-- **An index backup.** The index is current as of 2026-09-07 after a 13.5-hour catch-up;
-  the only copies are from 2024. Deprioritised by the creator, recorded as a known risk.
+This section was stale and gave three wrong answers to anyone consulting it mid-run.
+Every claim below was re-verified against chain and code on 2026-09-20. What it used
+to say, and why it was wrong, is at the bottom.
+
+### Genuinely open — one thing
+
+- **An index backup.** `/Volumes/Bitcoin/Ord/index.redb` is **174 GiB** (`du -sh`, grown from the ~164 GiB recorded in §1); a full
+  `--index-sats` rebuild from genesis took **over a month**. The only copies are from
+  2024. There is nowhere to put a real backup today: the internal disk has 75 GiB free
+  (too small), and the only other volume *is* the one holding the index, so a copy
+  there survives nothing that would actually kill it. A backup needs a drive that is
+  not currently attached.
+
+  **What losing it would cost, honestly:** it does not endanger a single sat. Keys,
+  carriers and locks live in the wallets and their backups, not in the index. What it
+  costs is the *ability to inscribe* — `ord` cannot select a sat without a sat index —
+  so the collection would stall for about a month mid-run.
+
+  **And a stall is not a break.** The collection is open-ended by design: a new piece
+  every ~3 months as new health data arrives. A collection sitting at, say, piece 12
+  is an *incomplete* collection, not a *broken* one — it renders correctly, the
+  lifecycle runs, and `lcRefreshSiblings` picks up piece 13 whenever it lands. That
+  is the difference between this risk and the v1/v2 failures, and it is why the
+  creator deprioritised it. Recorded as a known, bounded risk.
+
+### Settled — do not reopen these
+
+- **The sat plan.** Settled 2026-09-06 and executed. The 6 spare Omegas are held back
+  and carry no pieces. **153** single-sat carriers were peeled from the 907-sat
+  Nakamoto range (§5b), not the 246 originally contemplated — the peel was stopped
+  deliberately once 150 consecutive sats were in hand, which is ~37 years at four
+  pieces a year. Accounting closes at 153 + 303 (still inside chunk A) + 451
+  (chunk B, untouched) = 907 / 907 across ~310 mainnet txs. The batched peel
+  procedure was designed, built (`peel.js`), run at 1 sat/vB, and cost ~87,000 sats
+  — about 570 per carrier.
+
+- **`PIECE_CARRIERS` is filled.** 150 entries in `inscribe.js`, oldest sat first,
+  `12425429610010 .. 12425429610159`, re-verified 2026-09-20 as **0 non-consecutive
+  steps**. Piece 0 sits on `12425429610010`, the oldest Nakamoto sat held. The 3
+  spares (`12425429610463..465`, after the gap) are in `SPARE_CARRIERS` and
+  deliberately unassigned. Nothing remains to be pasted in from `peel.js status`.
+
+- **Rounds 16–123 of the peel are done.** The peel is finished. All 153 carriers are
+  330 sats with one Nakamoto sat at offset 0 and are persistently locked in
+  `ord-cold`, which stays sat storage. Carriers come over to `ord-v3` one at a time
+  via `handoff` (§7c).
+
+- **Batch vs one-at-a-time — one at a time.** Decided in §7c, and it is a *safety
+  property*, not a preference. With exactly one carrier in the inscribing wallet
+  there is no second carrier for `ord` to reach for when it funds the commit — so a
+  rare sat cannot be spent as change or burned to fees. Batching removes that
+  guarantee. §6 describes the mechanics; §7c is the decision.
+
+### Why this section was wrong
+
+It was written before the peel ran and never revised after. It claimed
+`PIECE_CARRIERS` was empty (150 entries), that rounds 16–123 were still waiting on
+1 sat/vB (complete), and listed batch-vs-one-at-a-time as undecided (decided in §7c,
+for a safety reason). This is the project's documented failure mode — `todo.md` has
+a "Why this file was wrong" section for the same reason — so: **when a section says
+something is pending, re-verify it against chain and code before acting on it, and
+correct it in place the moment it stops being true.**
