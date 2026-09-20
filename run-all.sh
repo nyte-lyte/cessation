@@ -76,14 +76,17 @@ do_handoff(){ # $1 = piece index; echoes txid
   echo "$tx"
 }
 
-wait_unclaimed_block(){ # echoes "height hash ts" for a block not already used
-  local i h hash ts used
+wait_unclaimed_block(){ # $1 = piece being built; echoes "height hash ts"
+  local me=$1 i h hash ts used
   for i in $(seq 1 120); do
     h=$("$BCLI" -datadir="$DD" getblockcount)
+    # A piece may re-claim the block IT already recorded (inscribe.js:321 allows a
+    # re-run of the same piece), so only OTHER pieces' claims block us here.
     used=$(node -e '
       const fs=require("fs"); const f="inscribed_blocks.json";
       const j=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,"utf8")):{};
-      console.log(Object.values(j).some(v=>String(v.height)===process.argv[1])?"yes":"no");' "$h")
+      const me=process.argv[2];
+      console.log(Object.entries(j).some(([k,v])=>k!==me&&String(v.height)===process.argv[1])?"yes":"no");' "$h" "$me")
     if [ "$used" = "no" ]; then
       hash=$("$BCLI" -datadir="$DD" getblockhash "$h")
       ts=$("$BCLI" -datadir="$DD" getblockheader "$hash" | sed -n 's/.*"time": \([0-9]*\).*/\1/p')
@@ -107,14 +110,16 @@ fi
 for (( N=START; N<=END; N++ )); do
   echo; say "════════ PIECE $N ════════"
 
-  read -r H HASH TS <<<"$(wait_unclaimed_block)"
+  read -r H HASH TS <<<"$(wait_unclaimed_block "$N")"
   say "anchor block $H"
   node inscribe.js "$N" "$HASH" "$TS" "$ENGINE" "$H" >/dev/null || die "inscribe.js failed for piece $N"
 
+  # Unlock BEFORE the gate dry-run: the dry run checks the unlock too, so gating
+  # first always failed on a locked wallet (hit on the first real run, 2026-09-20).
+  "$UNLOCK" >/dev/null || die "could not unlock ord-v3"
+
   ./inscribe-piece.sh "$N" >/dev/null || die "gates failed for piece $N — see ./inscribe-piece.sh $N"
   say "gates ✓"
-
-  "$UNLOCK" >/dev/null || die "could not unlock ord-v3"
 
   OUT=$(./inscribe-piece.sh "$N" --broadcast-for-real 2>&1) || { echo "$OUT" >&2; die "inscribe failed for piece $N"; }
   REVEAL=$(echo "$OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
