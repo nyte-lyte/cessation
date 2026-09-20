@@ -501,6 +501,44 @@ expensive mistake this project has made and it cannot be undone.
 
 ---
 
+## 7a. The gate CANNOT be fully satisfied pre-broadcast — what to do instead
+
+§7 asks for the CBOR of the **composed** inscription, not the source JSON. Tested
+2026-09-20: that is not reachable before broadcast. `ord wallet inscribe --dry-run`
+returns a `reveal_psbt`, but the PSBT is UNSIGNED — `decodepsbt` shows both inputs with
+**no keys at all**, no witness and no tapscript. The inscription envelope is only
+constructed at signing, so there is nothing to decode.
+
+An attempt to predict it instead also failed: `test/cbor_encode.mjs` reproduces ord's
+bytes for only 20 of 31 pieces, because encoding choices differ. So the composed bytes
+cannot be known in advance.
+
+**What IS achievable, and should be the protocol:**
+
+1. **Pre-broadcast, check the source JSON** — exactly four keys, no identity-shaped
+   content, all 17 values finite. That is what `inscribe.js`'s gate does, and what was
+   run on all 31 regtest pieces.
+2. **Trust the path, which is measured.** inscribe.js -> `--json-metadata` -> ord's CBOR
+   was verified on chain across three full regtest runs: 31/31 clean, four keys, no
+   identity, correct dates. The mainnet path is the same code.
+3. **Decode the composed CBOR of piece 0 from the mempool, BEFORE inscribing piece 1.**
+   It cannot be unsent, but it caps the blast radius at one piece instead of thirty-one.
+   This is the step that replaces the impossible one.
+
+### CBOR fidelity, measured 2026-09-20
+
+Compared ord's on-chain metadata against the source JSON for all 31 regtest pieces,
+decoded with a reference library (`cbor2`), not only our own decoder:
+
+- Everything is **f64** — 4 x `0xfb` markers per piece, zero `0xfa`. Nothing is
+  encoded at reduced precision, which was the fear.
+- **30 of 31 pieces round-trip exactly.** One differed: piece 25's `healthIndex`,
+  source `0.42842540792540795`, on chain `0.4284254079254079` — **5.55e-17, one ULP**,
+  from JS `JSON.stringify` and Rust `serde_json` disagreeing on the last bit of a
+  17-significant-digit double.
+- Harmless: `healthIndex` is derived, the engine recomputes it for blended datasets,
+  and no ranking depends on distinguishing two values 1e-16 apart.
+
 ## 7b. The hot wallet — checked and CLEAR (resolved 2026-09-18)
 
 An earlier version of this section flagged four unlocked dust UTXOs in the hot `ord`
