@@ -981,6 +981,33 @@ confirmed on its own once the spike drained, with no bump and nothing wasted. Th
 **Rule: before raising a bid, check the backlog above your rate and the actual confirmation
 times of recent transactions. Do not raise it because the estimator says so.**
 
+## 8c. THE ENGINE IS INSCRIBED — 2026-09-20
+
+```
+ENGINE ID  936f1fbe6eb8f3a88ca6b6efde96722124182518b2a713210dfcfdec06410f67i0
+commit     70cbeeda702eb283dbc78a152a492d43c2aadb54ff20917144f8e37564222d20
+reveal     936f1fbe6eb8f3a88ca6b6efde96722124182518b2a713210dfcfdec06410f67
+sat        1459982499999999 (Omega black uncommon), at OFFSET 0 of the reveal output
+bundle     index_bundle.js, 83,444 bytes, md5 b1ef3a96dbd4f47bca5e357e8e888628
+fees       21,330 sat total (212 commit + 21,118 reveal) at exactly 1.00 sat/vB
+held by    ord-v3, address bc1p4zzfrvzsjg62rwfahvx7myxur9z2zj7pg29la9m70zcs4lfe002q9e96cp
+```
+
+Also in `ENGINE_ID.txt` at the repo root, which is what `inscribe.js` runs should read
+rather than anyone retyping 66 hex characters.
+
+**The sat traversal, verified on the signed transactions before either confirmed:**
+commit `in[0]` was the carrier (engine sat + 329 padding) and `in[1]` the funding, so
+commit `out[0]` (21,448 sat) took the engine sat at offset 0; the reveal then paid its
+21,118-sat fee off the tail, leaving `out[0]` as **330 sat — the engine sat plus its
+original 329 padding, still at offset 0**. The carrier shape survived intact.
+
+**The engine must never leave `ord-v3`** (§7c): ord spends and re-creates it as the
+parent of every child inscription. Destination confirmed `ismine: true` in `ord-v3`.
+
+**Every piece is a child of THIS id** — `--parent 936f1fbe…067i0`, piece 0 included.
+The engine is the inscription root; piece 0 is the genesis art piece, not the parent.
+
 ## 9. Still open — corrected 2026-09-20
 
 This section was stale and gave three wrong answers to anyone consulting it mid-run.
