@@ -17,18 +17,21 @@ fail(){ echo "  VERIFY FAILED: $*" >&2; exit 1; }
 J=$(curl -s "$ORD/inscription/$ID" -H 'Accept: application/json')
 echo "$J" | grep -q '"id"' || fail "ord does not know inscription $ID"
 
+LOCAL_BYTES=$(wc -c < "$HTML" | tr -d ' ')
 node -e '
-const j=JSON.parse(process.argv[1]), want={sat:process.argv[2], engine:process.argv[3], n:Number(process.argv[4])};
+const j=JSON.parse(process.argv[1]), want={sat:process.argv[2], engine:process.argv[3], n:Number(process.argv[4]), bytes:Number(process.argv[5])};
 const errs=[];
 if(String(j.sat)!==want.sat) errs.push(`sat is ${j.sat}, expected ${want.sat}`);
 if(j.value!==330) errs.push(`value is ${j.value}, expected 330 (carrier not intact)`);
 if(!/:0$/.test(j.satpoint)) errs.push(`satpoint ${j.satpoint} is not at offset 0`);
 if(!(j.parents||[]).includes(want.engine)) errs.push(`parents ${JSON.stringify(j.parents)} does not include the engine`);
-if(j.content_length!==322) errs.push(`content_length ${j.content_length}, expected 322`);
+// NOT a constant: the HTML length varies with the width of hue/ht/block, e.g.
+// hue="84.0000" is a byte shorter than hue="324.0000". Compare to the real file.
+if(j.content_length!==want.bytes) errs.push(`content_length ${j.content_length}, local file is ${want.bytes}`);
 if(!/^text\/html/.test(j.content_type||"")) errs.push(`content_type ${j.content_type}`);
 if(errs.length){console.error("  "+errs.join("\n  "));process.exit(1);}
 console.log(`  chain record ✓  sat ${j.sat}, offset 0, value 330, parent=engine, height ${j.height}, charms ${JSON.stringify(j.charms)}`);
-' "$J" "$SAT" "$ENGINE" "$N" || fail "inscription record wrong"
+' "$J" "$SAT" "$ENGINE" "$N" "$LOCAL_BYTES" || fail "inscription record wrong"
 
 curl -s "$ORD/content/$ID" -o /tmp/vp_$$.html
 cmp -s /tmp/vp_$$.html "$HTML" || { rm -f /tmp/vp_$$.html; fail "on-chain content differs from $HTML"; }
