@@ -38,36 +38,8 @@ cmp -s /tmp/vp_$$.html "$HTML" || { rm -f /tmp/vp_$$.html; fail "on-chain conten
 rm -f /tmp/vp_$$.html
 echo "  content ✓  byte-identical to $HTML"
 
-curl -s "$ORD/r/metadata/$ID" | node -e '
-let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
-const buf=Buffer.from(s.trim().replace(/^"|"$/g,""),"hex");
-let i=0;
-function rd(){const b=buf[i++],mt=b>>5,ai=b&31;let v=ai;
-  if(ai===24)v=buf[i++];else if(ai===25){v=buf.readUInt16BE(i);i+=2;}
-  else if(ai===26){v=buf.readUInt32BE(i);i+=4;}
-  else if(ai===27){v=Number(buf.readBigUInt64BE(i));i+=8;}
-  switch(mt){case 0:return v;case 1:return -1-v;
-    case 3:{const t=buf.slice(i,i+v).toString("utf8");i+=v;return t;}
-    case 4:{const a=[];for(let k=0;k<v;k++)a.push(rd());return a;}
-    case 5:{const o={};for(let k=0;k<v;k++){const kk=rd();o[kk]=rd();}return o;}
-    case 7:{if(ai===27)return buf.readDoubleBE(i-8);if(ai===26)return buf.readFloatBE(i-4);return v;}}
-  throw new Error("cbor mt "+mt);}
-const on=rd();
-const local=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
-const errs=[];
-const keys=Object.keys(on).sort().join(",");
-if(keys!=="dataset,hashTail,inscriptionUnix,pieceIndex") errs.push("keys on chain are "+keys);
-if(on.pieceIndex!==local.pieceIndex) errs.push(`pieceIndex ${on.pieceIndex} != ${local.pieceIndex}`);
-if(on.hashTail!==local.hashTail) errs.push(`hashTail ${on.hashTail} != ${local.hashTail}`);
-if(on.inscriptionUnix!==local.inscriptionUnix) errs.push(`inscriptionUnix mismatch`);
-if(on.dataset.date!==local.dataset.date) errs.push(`date ${on.dataset.date} != ${local.dataset.date}`);
-for(const grp of ["ecg","labs"]) for(const k of Object.keys(local.dataset[grp]))
-  if(Math.abs(on.dataset[grp][k]-local.dataset[grp][k])>1e-9) errs.push(`${grp}.${k} ${on.dataset[grp][k]} != ${local.dataset[grp][k]}`);
-const blob=JSON.stringify(on);
-if(/\/Users\/|hillyer|jess|@gmail|\.local/i.test(blob)) errs.push("IDENTITY STRING IN ON-CHAIN METADATA");
-if(errs.length){console.error("  "+errs.join("\n  "));process.exit(1);}
-console.log(`  metadata ✓  four keys, ${on.dataset.date}, ecg+labs match source, no identity`);
-});' "$META" || fail "on-chain CBOR metadata wrong"
+HEX=$(curl -s "$ORD/r/metadata/$ID")
+node cbor_verify.mjs "$HEX" "$META" || fail "on-chain CBOR metadata wrong"
 
 curl -s "$ORD/r/children/$ENGINE/inscriptions" 2>/dev/null | grep -q "$ID" \
   || curl -s "$ORD/r/children/$ENGINE" | grep -q "$ID" \
