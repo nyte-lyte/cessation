@@ -32,13 +32,20 @@ echo "mainnet ✓  ord and node both at $NODE_H"
 # is specifically a BARE carrier, which ord reads as ordinary spendable change.
 BARE=$("$BCLI" -datadir="$DATADIR" -rpcwallet=ord-v3 listunspent 0 \
        | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",async()=>{
+           const fs=require("fs"),f="pending_reveals.json";
+           let pend=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,"utf8")):{};
+           const still={};
            const u=JSON.parse(s).filter(x=>Math.round(x.amount*1e8)===330);
            const bare=[];
            for(const o of u){
              const r=await fetch(`http://127.0.0.1:80/output/${o.txid}:${o.vout}`,{headers:{accept:"application/json"}});
              const j=await r.json();
-             if(!(j.inscriptions||[]).length) bare.push(`${o.txid}:${o.vout}`);
+             if((j.inscriptions||[]).length) continue;            // indexed as inscribed
+             if(pend[o.txid]){ still[o.txid]=pend[o.txid]; continue; }  // our own reveal, not yet indexed
+             bare.push(`${o.txid}:${o.vout}`);
            }
+           // drop reveals that ord has now indexed, so the file cannot grow stale
+           if(fs.existsSync(f)) fs.writeFileSync(f,JSON.stringify(still,null,2)+"\n");
            console.log(bare.join(","));})')
 if [ -n "$BARE" ]; then
   echo "REFUSING: ord-v3 already holds an UNINSCRIBED carrier: $BARE" >&2

@@ -79,6 +79,23 @@ if [ "${2:-}" != "--broadcast-for-real" ]; then
 fi
 
 echo "INSCRIBING PIECE $N — permanent."
-exec ./ord2.sh wallet --server-url http://127.0.0.1:80 --name ord-v3 inscribe \
+OUT=$(./ord2.sh wallet --server-url http://127.0.0.1:80 --name ord-v3 inscribe \
   --fee-rate 1 --sat "$SAT" --postage 330sat --parent "$ENGINE" \
-  --file "$HTML" --json-metadata "$META"
+  --file "$HTML" --json-metadata "$META")
+echo "$OUT"
+
+# Record the reveal. Until it confirms, ord reports its outputs as having no
+# inscriptions -- indistinguishable from a bare carrier. handoff-piece.sh reads this
+# so it can bring the NEXT carrier over while this one is still confirming, without
+# having to relax the "no bare carrier in the wallet" rule.
+REVEAL=$(echo "$OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+  try{console.log(JSON.parse(s).reveal||"")}catch(e){console.log("")}})')
+if [ -n "$REVEAL" ]; then
+  node -e '
+    const fs=require("fs"),f="pending_reveals.json";
+    const j=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,"utf8")):{};
+    j[process.argv[1]]={piece:Number(process.argv[2]),sat:process.argv[3],at:new Date().toISOString()};
+    fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n");
+    console.log("  recorded pending reveal "+process.argv[1].slice(0,16)+"… for piece "+process.argv[2]);
+  ' "$REVEAL" "$N" "$SAT"
+fi

@@ -5,3 +5,6 @@ dist/
 peel_state.json
 data/rehearsal_datasets.js
 v3_destination.txt
+
+# local run state — which reveals are broadcast but not yet indexed
+pending_reveals.json
