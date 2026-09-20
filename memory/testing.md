@@ -1227,3 +1227,47 @@ automation Brave is running on its own `--user-data-dir`, macOS treats it as *th
 application, so `open -a` hands URLs to it and the creator's own window never shows them.
 Kill the automation browser before opening anything for a human. (Also note
 `pgrep -ci brave` under-reports; `ps -Ao comm | grep -ci brave` is accurate.)
+
+
+## Piece 30 — the real reading (2026-09-18), and a prediction before the rehearsal
+
+Reading taken 2026-09-18, added on branch `zero-baked-engine` and cherry-picked onto
+the working branch as `e6d1848`. **Note the branch trap:** `zero-baked-engine` forked
+at `388e1db` (2026-08-17) and carries 3 commits; the working branch carries 67,
+including the whole audit. A dataset committed to the wrong branch looks identical to
+one committed to the right one — `git branch -a` and a merge-base check are the way to
+tell, not the file contents.
+
+    date 2026-09-18
+    ecg  ventRate 61, PR 164, QRS 81, QT 411, QTc 415, pAxis 75, rAxis 89, tAxis 63
+    labs glucose 121, BUN 14, creat 0.65, eGFR 111, Na 138, K 4.3, Cl 106, CO2 24, Ca 9.5
+
+### It sits entirely inside the collection — 0 of 17 ranges widen
+
+Which is exactly the calibration recorded after the synthetic rehearsal: a real reading
+usually lands inside the existing spread, where the stand-in was engineered a
+quarter-spread past every maximum and moved 36 of 43 uniforms.
+
+### Predicted effect on the existing thirty — stated BEFORE the rehearsal
+
+- **Lab percentiles: 0 of 9 move** for piece 0. `winsorizedPercentileForLab` is a
+  min-max normalisation against the P05/P95 clip points; the new reading shifts
+  neither, so positions within the band are unchanged.
+- **ECG ranks move slightly**, because those are rank-based and the denominator goes
+  29 -> 30:
+
+      qtcInterval  0.6552 -> 0.6667      ventRate  0.6207 -> 0.6333
+      pAxis        0.8621 -> 0.8667      tAxis     0.9655 -> 0.9667
+      rAxis        0.5862 -> 0.5667   (DOWN — the new rAxis of 89 ranks above piece 0)
+
+**So the arrival should be subtle.** A dramatic visual shift would be a reason to
+investigate, not to celebrate. That is the opposite of the instinct built by the
+synthetic rehearsal, and worth holding onto.
+
+### A test that failed the first time the project succeeded
+
+`newcomer.test.mjs` asserted `REAL.length !== 30` and broke the moment the real piece-30
+reading landed. The collection is open-ended by design, so a hardcoded count is a test
+that fails on success. `inscribe.js`'s own header already said "never hardcode a piece
+count — index the collection, don't count it"; the test violated it. Fixed to follow the
+collection, along with the aged-path indices that assumed 30.

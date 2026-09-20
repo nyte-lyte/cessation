@@ -31,8 +31,12 @@ const realSrc  = strip(readFileSync(join(ROOT, 'data/health_data_sets.js'), 'utf
 // health_data_sets.js computes each reading's healthIndex with decay_logic's
 // normalize(), so the two have to be lifted together.
 const REAL = new Function(`${decaySrc}\n${realSrc}\nreturn healthDataSets;`)();
-if (!Array.isArray(REAL) || REAL.length !== 30) {
-  console.log(`FAIL — expected 30 real datasets, found ${REAL?.length}`);
+// Never assert a piece COUNT. The collection is open-ended by design — a new
+// reading every few months, for as long as the creator is alive — so a hardcoded
+// count is a test that fails the first time the project succeeds. (It did: this
+// read `!== 30` and broke the moment the real piece-30 reading landed.)
+if (!Array.isArray(REAL) || REAL.length < 2) {
+  console.log(`FAIL — expected a collection of real datasets, found ${REAL?.length}`);
   process.exit(1);
 }
 
@@ -168,7 +172,7 @@ for (const dir of [+1, -1]) {
     }
     // the aged path is what every live piece runs every frame
     for (const lf of [0, 0.5, 1]) {
-      for (const i of [0, 15, 29, 30]) {
+      for (const i of [0, Math.floor(REAL.length / 2), REAL.length - 1, REAL.length]) {
         r.checks++;
         const aged = decay.getAgedDataset(i, lf, grown, mm);
         const bad = [];
