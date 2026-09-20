@@ -454,10 +454,17 @@ the only test that exercises a real new reading arriving on chain, and it is the
 thing that could still surface an engine bug. Also do not move its carrier days ahead;
 an uninscribed rare carrier sits in the hot wallet as `cardinal`, i.e. spendable.
 
-**Batch mode is worth considering.** v1/v2 did 28 pieces in one batch reveal
-(`mode: separate-outputs`, per-inscription postages matching each carrier). That gives the
-input↔output mirroring of §3.1 by construction. It does mean all those pieces share a
-block, which conflicts with §3.5 — resolve that before choosing.
+**Batch mode was considered and REJECTED — settled, see §7c and §9.** v1/v2 did 28
+pieces in one batch reveal (`mode: separate-outputs`, per-inscription postages matching
+each carrier), which does give the input↔output mirroring of §3.1 by construction. It
+is still rejected for v3, for two independent reasons:
+
+1. **Safety.** §3.3 measured ord pulling a second carrier in as a funding input and
+   burning its rare sats. One carrier in the wallet at a time means there is no second
+   one to take. Batching gives that guarantee up.
+2. **§3.5.** Every piece needs its own block — a batch puts them all in one.
+
+Do not reopen this.
 
 ---
 
@@ -851,10 +858,16 @@ first — piece 0 on `12425429610010`, the oldest Nakamoto sat held. The 3 spare
 **150 consecutive sats is ~37 years at four pieces a year.**
 
 ### Still to do before anything is inscribed
+*(list from 2026-09-12; first item cleared 2026-09-20)*
 
-- **More regtest verification of the engine and inscribe path** — the creator's call, and
-  the right one. The v1/v2 history is two collections inscribed on code that had not been
-  proven. Nothing about the peel changes that.
+- ~~**More regtest verification of the engine and inscribe path**~~ — **DONE.** This was
+  the creator's call and the right one: the v1/v2 history is two collections inscribed on
+  code that had not been proven. Since then: three full regtest runs, the last carrying
+  **31 pieces including the real piece-30 reading** (engine `91a1a1ae…841ai0`, 83,444
+  bytes); eight engine bugs found and fixed, every one of which had passed the suites as
+  they stood; the suite itself grown from 2 files to 7, all passing. The piece-30
+  rehearsal is the one that mattered — it is the only test that exercises a genuinely new
+  reading arriving on chain, which §6 requires before the engine goes on mainnet.
 - **The metadata gate is only PARTLY satisfied** — see below.
 - Engine not inscribed. `inscribed_blocks.json` reset to `{}` and the block-reuse guard
   re-tested (a repeated block is refused).
@@ -981,7 +994,13 @@ to say, and why it was wrong, is at the bottom.
   is an *incomplete* collection, not a *broken* one — it renders correctly, the
   lifecycle runs, and `lcRefreshSiblings` picks up piece 13 whenever it lands. That
   is the difference between this risk and the v1/v2 failures, and it is why the
-  creator deprioritised it. Recorded as a known, bounded risk.
+  creator deprioritised it.
+
+  **DECIDED 2026-09-20 (creator): inscribe first, back up after.** Not an oversight
+  and not a deferral to be re-raised — a decision made with the cost understood.
+  Accepted risk, closed. Take the backup once the collection is inscribed and ord
+  is stopped cleanly (`kill -INT`, never `-9`); that also retires the three 2024
+  `.old` copies and reclaims 242 GB.
 
 ### Settled — do not reopen these
 
