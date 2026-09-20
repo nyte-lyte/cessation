@@ -1528,6 +1528,14 @@ async function init() {
     // resizing the window brought it back. Re-arming costs one idle frame and makes
     // the piece recover by itself from any transient gateway failure.
     if (!drawCollection.length) {
+      // Say so, once. A blank piece with no explanation is indistinguishable from
+      // a broken engine — for anyone debugging a live inscription years from now,
+      // the difference between "no dataset yet" and "the renderer is dead" is the
+      // whole diagnosis. Once, not per frame: this runs at 60fps.
+      if (!draw._saidNoDataset) {
+        draw._saidNoDataset = true;
+        console.error('[lc] holding black — no dataset yet; waiting on /r/metadata and sibling discovery');
+      }
       gl.clear(gl.COLOR_BUFFER_BIT);
       scheduleDraw();
       return;
@@ -1717,9 +1725,24 @@ async function init() {
     const lifecycle = initLifecycle().catch(() => {});
     await Promise.race([lc.ownDataReady, lifecycle]);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    // Through scheduleDraw, not draw(), so the very first frame is inside the
-    // guard too — a throw on frame one must not be the one that kills the loop.
-    scheduleDraw();
+    // Draw frame one SYNCHRONOUSLY, then let scheduleDraw carry the loop.
+    //
+    // This used to call scheduleDraw() alone, which made the first frame wait on
+    // requestAnimationFrame. rAF is throttled or suspended in a hidden tab, and a
+    // renderer that captures without the page being visible would find a blank
+    // canvas — and for this collection the live render IS the thumbnail. Caught by
+    // test/boot.test.mjs, whose rAF stub never fires: zero frames, zero uniforms,
+    // no error.
+    //
+    // draw() re-arms the loop itself on success, and _rafPending stops that from
+    // forking a second one. The catch is why this is not simply draw(): a throw on
+    // frame one must not be the thing that prevents the loop ever starting.
+    try {
+      draw();
+    } catch (e) {
+      console.error('[boot] first frame threw — continuing', e);
+      scheduleDraw();
+    }
   })();
 
   // DEV_START

@@ -1271,3 +1271,49 @@ reading landed. The collection is open-ended by design, so a hardcoded count is 
 that fails on success. `inscribe.js`'s own header already said "never hardcode a piece
 count — index the collection, don't count it"; the test violated it. Fixed to follow the
 collection, along with the aged-path indices that assumed 30.
+
+
+## boot.test.mjs — and the bug it found immediately (2026-09-19)
+
+Cherry-picked from `zero-baked-engine` along with `cbor_encode.mjs`. Everything else in
+`test/` exercises LIFTED functions; this boots the shipped `index_bundle.js` against a
+stubbed DOM, WebGL2 context and `/r/*` surface and asks whether the piece renders at
+all, and renders finite numbers. It is the "uniform completeness" axis this file has
+listed as unbuilt since the beginning.
+
+**Do not merge that branch to get it.** `zero-baked-engine` forked at 388e1db and its
+other two commits are a SUPERSEDED implementation of the dataless refactor — trial merge
+produced 10 conflicts in src/main.js, inscribe.js, build.js and the test files. Take the
+files, not the history.
+
+### What it caught in its first run
+
+**Boot no longer drew frame one synchronously.** The audit's scheduleDraw() change
+routed the first frame through `requestAnimationFrame`, so with the stub's non-firing
+rAF the engine produced **0 draws, 0 uniforms, no error at all**. Silent.
+
+That was mine, and it matters beyond the stub: rAF is throttled or suspended in a hidden
+tab, and for this collection the live render IS the thumbnail. Boot now calls `draw()`
+directly inside a try/catch, then lets `scheduleDraw()` carry the loop — synchronous
+first frame, throw safety, still one loop. 28 checks/4 failed -> 77 checks/0 failed.
+
+**The engine now says why it is holding black.** The empty-collection guard was silent;
+the test's argument is right that a blank piece with no explanation is indistinguishable
+from a broken engine. It logs once (not per frame — draw runs at 60fps).
+
+### Two compatibility fixes the cherry-pick needed
+
+- `liftModule` on this branch took `(relPath, names)` and silently ignored a third
+  options argument, so the boot test's `{ inject }` was dropped and lifting
+  health_data_sets.js threw `normalize is not defined`. Now honours `inject`, prepended.
+- The test's fetch stub returned `{ json }` with no `ok`/`status`. Since the immune-system
+  change the engine READS those to tell a 404 from a transport failure, so every sibling
+  fetch was classified as a failure and the collection never committed. A mock of fetch
+  must now carry the fields a real Response has.
+
+### A trap worth remembering
+
+The test installs `process.on('uncaughtException', …)` to keep async engine failures from
+killing the report. The side effect is that a throw during setup exits **0 with no
+output** — it looked like a passing silent test. If this file ever prints nothing, it
+crashed; re-run with the handler logging before believing it.

@@ -22,11 +22,16 @@ export const ROOT = join(here, '..');
 // Rather than add a package.json (which would change how the project loads
 // everywhere else), strip the module syntax the same way build.js does and
 // evaluate it. Same source of truth either way — no copy to drift.
-export function liftModule(relPath, names) {
+export function liftModule(relPath, names, { inject = '' } = {}) {
   let src = readFileSync(join(ROOT, relPath), 'utf8');
   src = src.replace(/^import\s+.*$/gm, '');
   src = src.replace(/^export\s*\{[^}]+\};?\s*$/gm, '');
-  const factory = new Function(`${src}\nreturn { ${names.join(', ')} };`);
+  // `inject` supplies bindings the module imports, PREPENDED so they are in scope
+  // for code that runs at module level. health_data_sets.js is the case that needs
+  // it: stripping its import leaves calculateHealthIndex() calling an undefined
+  // normalize(), and it calls it immediately on load. Without this the lift throws
+  // before returning anything.
+  const factory = new Function(`${inject}\n${src}\nreturn { ${names.join(', ')} };`);
   const lifted = factory();
   // Constants are liftable too (KARMA_CLEARANCE_K), so require only that the
   // binding exists — an undefined means the name is wrong or has been removed.

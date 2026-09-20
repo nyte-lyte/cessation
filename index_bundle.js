@@ -1675,6 +1675,11 @@ async function init() {
     const drawCollection = getDrawCollection();
 
     if (!drawCollection.length) {
+
+      if (!draw._saidNoDataset) {
+        draw._saidNoDataset = true;
+        console.error('[lc] holding black — no dataset yet; waiting on /r/metadata and sibling discovery');
+      }
       gl.clear(gl.COLOR_BUFFER_BIT);
       scheduleDraw();
       return;
@@ -1825,7 +1830,12 @@ async function init() {
     await Promise.race([lc.ownDataReady, lifecycle]);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    scheduleDraw();
+    try {
+      draw();
+    } catch (e) {
+      console.error('[boot] first frame threw — continuing', e);
+      scheduleDraw();
+    }
   })();
 
 }
