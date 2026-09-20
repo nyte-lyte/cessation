@@ -8,3 +8,4 @@ v3_destination.txt
 
 # local run state — which reveals are broadcast but not yet indexed
 pending_reveals.json
+run_log.jsonl

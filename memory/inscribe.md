@@ -1013,6 +1013,7 @@ The engine is the inscription root; piece 0 is the genesis art piece, not the pa
 | piece | inscription id | sat | block | charms | cost |
 |---|---|---|---|---|---|
 | 0 | `35e961c5f4003a9e064db70e6d1c55b7314ce4b38413d3d93a32b116c748122fi0` | 12425429610010 | 967879 | vindicated | 619 + 212 handoff |
+| 1 | `2aded0d84c356bf5ee5744c202a578c147539a7cccec3d02093a4c927bfa1e41i0` | 12425429610011 | 967901 | vindicated | 619 + 212 handoff |
 
 **Piece 0, verified on chain 2026-09-20:**
 - `satpoint …:1:0` — Nakamoto sat at **offset 0**, `value 330`, carrier intact.
@@ -1029,6 +1030,24 @@ The engine is the inscription root; piece 0 is the genesis art piece, not the pa
   check that the piece can find its own data.
 - `charms: ["vindicated"]` — expected on every parented piece (`--parent` puts the
   inscription on input 1, which would have been cursed pre-jubilee). Not a problem.
+
+**The rest of the run is automated — `./run-all.sh <start> <end>`.** Decided 2026-09-20
+after doing pieces 0 and 1 by hand. It does, per piece: wait for a block no piece has
+claimed -> `inscribe.js` -> gates -> unlock -> inscribe -> hand off the NEXT carrier so
+its confirmation overlaps -> wait -> `verify-piece.sh` against the chain -> append to
+`run_log.jsonl`. **It HALTS on any failure and retries nothing**, leaving wallet and
+carriers untouched so the state can be inspected. A halt mid-run leaves the collection
+incomplete, which for an open-ended collection is a normal state, not a broken one.
+
+`verify-piece.sh N <id>` is the check, and it is strict: sat number, offset 0, value 330,
+parent = engine, content byte-identical to `dist/`, on-chain CBOR decoded and compared
+field by field against the local metadata, an identity scan of the decoded metadata, and
+presence in the engine's children. It exits non-zero on any discrepancy. Verified
+against pieces 0 and 1 after the fact.
+
+**Who pays what:** `ord-v3` pays the inscription fee (~619); `ord-cold` pays the carrier
+handoff (~212), because `peel.js handoff` builds that transaction from `ord-cold`. So the
+two budgets are separate — check both before a long run.
 
 **Measured cost per piece: ~830 sat** (619 inscribe + 212 carrier handoff) at 1 sat/vB.
 
