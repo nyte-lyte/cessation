@@ -1317,3 +1317,32 @@ The test installs `process.on('uncaughtException', …)` to keep async engine fa
 killing the report. The side effect is that a throw during setup exits **0 with no
 output** — it looked like a passing silent test. If this file ever prints nothing, it
 crashed; re-run with the handler logging before believing it.
+
+
+## Regtest run on the boot-fixed engine — 2026-09-19
+
+Third full run, on the build carrying the synchronous-first-frame fix that
+`boot.test.mjs` surfaced the same day.
+
+    engine    91a1a1ae59051ec1f485d2ae64e88f795cb88a720f90df8900e9baa7548c841ai0
+              text/javascript, 83,444 bytes, block 1062
+    pieces    30, blocks 1062-1091, one block each, 30 distinct blocks, no duplicates
+    metadata  30 clean / 0 problems, indices 0-29 distinct
+    lifespans 26 distinct
+    pacing    11 s/piece, steady
+
+This run is what validates the boot fix on chain: every piece drew frame one without
+waiting on `requestAnimationFrame`.
+
+**The chain is now staged for piece 30** — engine at 1062, pieces 0-29 in place, and the
+real 2026-09-18 reading already in `health_data_sets.js`. Do not reset `ord-env`.
+
+### Viewer rebuild trap, hit twice now
+
+`scratchpad/mintview/index.html` and `mintserve.mjs` are swept from `/private/tmp`
+between sessions. Rebuilding them, note: **do not use Python `%`-formatting on the HTML**
+— the CSS contains `100%` and `width:100%`, so `%` interpolation raises
+`unsupported format character` AND leaves the file truncated to 0 bytes because the
+handle was already opened for writing. The server then serves an empty 200 and the tab
+looks blank for no visible reason. Write the file with a `__ENGINE__` placeholder and
+`sed` it, which is what the working version does.
