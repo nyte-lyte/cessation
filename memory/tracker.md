@@ -1,7 +1,8 @@
 # Tracker Site
 
 ## Location & Stack
-- Repo: ~/cessation-tracker (separate git repo)
+- Repo: **`~/cessation/cessation-tracker`** (separate git repo). NOT `~/cessation-tracker`,
+  which this file claimed until 2026-09-20 and which does not exist.
 - Live: https://cessation-tracker.vercel.app
 - GitHub: https://github.com/nyte-lyte/cessation-tracker
 - Stack: Next.js 16 (Turbopack) + TypeScript + Tailwind v4 + Vercel
@@ -18,6 +19,34 @@
 - src/lib/pieceUtils.ts — computeHSBFromStats, hsbToHex, getPieceMeta, computeStaticUniforms
 - src/shaders/ — fragment.glsl + vertex.glsl (copied from cessation)
 - src/data/ — health_data_sets.js + decay_logic.js (copied from cessation)
+
+## Chain data is GENERATED — do not hand-edit (2026-09-20)
+
+`src/data/inscriptions.ts` is written by **`cessation/sync-tracker.mjs`**. Do not type
+inscription IDs into it.
+
+```
+cd ~/cessation/cessation
+node sync-tracker.mjs            # report what would change
+node sync-tracker.mjs --write    # write inscriptions.ts + copy the 4 shared files
+```
+
+It reads children from the engine's `/r/children`, decodes each piece's `hashTail` and
+`inscriptionUnix` from its own CBOR **using the engine's own decoder lifted from
+`src/main.js`**, and takes `blockHeight`/`sat` from ord. The array length follows the
+local dataset count, never a hardcoded number — the collection is open-ended. Safe to
+re-run mid-inscription-run; uninscribed pieces stay `null`.
+
+It also re-copies `health_data_sets.js`, `decay_logic.js` and both shaders, and refuses
+to copy if the source no longer exports something the tracker's copy currently exports.
+
+**`src/data/decay_logic.d.ts` pins the signatures.** This file was referenced in these
+notes but did not exist until 2026-09-20. It matters more than type hygiene: on that date
+`blendDatasets`, `getAgedDataset` and `applyCollectionInfluence` all gained a required
+`minMaxValues` argument, and omitting it does **not** throw — `healthIndex` is
+interpolated instead of recomputed, so the tracker drifts from the engine with no error
+anywhere. The `.d.ts` turns that into a build failure here. If a sync makes it wrong, fix
+the `.d.ts`; never edit `decay_logic.js` in the tracker, it is overwritten every sync.
 
 ## Build & Dev
 - npm run build → generates 29 static piece pages via generateStaticParams
