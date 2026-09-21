@@ -2,9 +2,22 @@
 
 ## READ FIRST (2026-09-20)
 
-**Re-inscribing the whole project on fresh sats, v3 engine only. Nothing is on mainnet
-yet.** Two previous attempts failed and one put a real name on chain permanently. The
-bar is "make sure everything works this time."
+**v3 IS INSCRIBED — 2026-09-20. The engine and all 31 pieces are live on Bitcoin.**
+Two previous attempts failed and one put a real name on chain permanently; the bar for
+this one was "make sure everything works this time", and it was met — every piece was
+verified against the chain, not against these notes.
+
+```
+engine  936f1fbe6eb8f3a88ca6b6efde96722124182518b2a713210dfcfdec06410f67i0
+        Omega sat 1459982499999999 · 31 children · MUST stay in ord-v3
+pieces  0-30 on consecutive Nakamoto sats 12425429610010 .. 12425429610040
+cost    ~47,282 sat at 1 sat/vB · 128 carriers still locked in ord-cold
+```
+
+Full record in [inscribe.md](inscribe.md) §8d; per-piece log in `run_log.jsonl`.
+**Open, both deferred by decision, not oversight:** the ord index backup
+(inscribe.md §9) and the security pass (wallets.md) — `ord-v3`'s passphrase is a
+placeholder string, and `ord-cold` and `ord` are unencrypted.
 
 ### State
 
