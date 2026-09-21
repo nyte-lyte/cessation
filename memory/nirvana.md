@@ -184,3 +184,39 @@ There is only ONE nirvana = liberation = the void. "Nirvana" is not a waiting st
 - In main.js: computed per-frame as `allInheritedHues[currentDataSetIndex]`, override via `setInheritedHue(deg)` / `resetInheritedHue()`
 - In pieceUtils.ts: `ds_all[Math.max(0, id - 1)]` — same logic, fixed in same session
 - Bug history: was hardcoded to piece 0's hue for all pieces → all nirvana states looked identical ("everything pink")
+
+## The boot flash — observed live 2026-09-20, NOT fixable in v3
+
+**Symptom:** refreshing any piece briefly shows it as it looked when the collection had
+one member — every ranking at the median — before snapping to its true appearance.
+
+**Cause, and it is deliberate.** The boot path in `src/main.js`:
+
+1. Frame one draws **synchronously**, without awaiting the lifecycle (`:1714`).
+2. The piece fetches its own `/r/metadata` and **seeds `collectionDatasets` with itself
+   alone** (`:1127`) — "so the very first draw has valid own data even before the full
+   sibling fetch completes".
+3. `lcReleaseOwnData()` releases that frame (`:1138`) — "Everything below is
+   collection-wide and must not hold up rendering."
+4. `await lcRefreshSiblings()` runs only afterwards (`:1142`): N metadata fetches,
+   batched `SIBLING_FETCH_BATCH` at a time.
+
+With a one-piece collection every field's min equals its max, so `normalize()` returns
+**0.5 for everything** (`:93`, which already notes this is a live path). The flash is
+therefore *any* piece rendered as a collection of one — identical to how piece 0 genuinely
+looked while it was the only inscription.
+
+**It is a tradeoff, not an accident:** render instantly with own data, or hold black
+through a network round trip. Holding black was the earlier behaviour and was changed on
+purpose. The flash lasts as long as the sibling fetch, so it is worse on a slow gateway.
+
+**Not fixable in v3** — the engine is inscribed and immutable, and every piece loads it.
+
+**For a future engine**, in rough order of preference:
+- Keep painting the *previous* resolved frame (or black) until `collectionResolved`, and
+  cross-fade in. Costs first-paint latency, which is exactly what the current design
+  bought.
+- Persist the last resolved collection in `localStorage` keyed by engine id, and seed
+  from it on load — a refresh then re-ranks instantly and only a first-ever visit flashes.
+- Render the one-piece state deliberately different (not median-pinned) so the
+  intermediate frame reads as "loading" rather than as a wrong answer.
