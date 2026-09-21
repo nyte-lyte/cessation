@@ -39,7 +39,11 @@ say "preflight ✓ mainnet, engine ${ENGINE:0:16}…, ord-v3 holds $BAL sat (nee
 
 wait_indexed(){ # $1 = txid, $2 = label
   local tx=$1 label=$2 i c o n
-  for i in $(seq 1 120); do
+  # 240 x 30s = 2 hours. Was 120 (1 hour), raised 2026-09-20 after two near-misses:
+  # at 1 sat/vB the mempool backlog hovers around one block's worth, so a transaction
+  # can sit for 40-50 minutes and still confirm unbumped. Every one has. The timeout
+  # was the impatient part, not the fee.
+  for i in $(seq 1 240); do
     c=$("$BCLI" -datadir="$DD" getrawtransaction "$tx" true 2>/dev/null | sed -n 's/.*"confirmations": \([0-9]*\).*/\1/p' || true)
     if [ -n "$c" ] && [ "$c" -ge 1 ]; then
       o=$(curl -s --max-time 10 "$ORD/r/blockheight" 2>/dev/null || true)
