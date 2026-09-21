@@ -40,13 +40,30 @@ re-run mid-inscription-run; uninscribed pieces stay `null`.
 It also re-copies `health_data_sets.js`, `decay_logic.js` and both shaders, and refuses
 to copy if the source no longer exports something the tracker's copy currently exports.
 
-**`src/data/decay_logic.d.ts` pins the signatures.** This file was referenced in these
-notes but did not exist until 2026-09-20. It matters more than type hygiene: on that date
-`blendDatasets`, `getAgedDataset` and `applyCollectionInfluence` all gained a required
-`minMaxValues` argument, and omitting it does **not** throw — `healthIndex` is
+**`src/data/decay_logic.d.ts` pins the signatures**, and already exists — it was written
+in `bc5ccc9` and documents the same inference problem described below. It matters more
+than type hygiene: `blendDatasets`, `getAgedDataset` and `applyCollectionInfluence` take
+a `minMaxValues` argument, and omitting it does **not** throw — `healthIndex` is
 interpolated instead of recomputed, so the tracker drifts from the engine with no error
 anywhere. The `.d.ts` turns that into a build failure here. If a sync makes it wrong, fix
 the `.d.ts`; never edit `decay_logic.js` in the tracker, it is overwritten every sync.
+
+### CHECK THE REMOTE BEFORE WORKING ON THE TRACKER
+
+On 2026-09-20 I worked on a local checkout that was **26 commits behind `origin/main`**
+and "found" several problems that were already fixed there — the ordinals.com link
+(`154fa4a`), the `.d.ts` (`bc5ccc9`), and `MINT STATUS: available`, which `e7fcc17` shows
+is a deliberate choice ("inscription isn't a sale"), not an oversight. The push was
+rejected, nothing was lost, and the work was discarded. **`git fetch && git log
+HEAD..origin/main` before touching this repo.** Its local checkout goes stale because
+most sessions happen in the cessation repo.
+
+### v3 ID swap — PENDING, decided 2026-09-20
+
+The tracker still carries **v2** inscription IDs and the v2 engine id. Creator's decision:
+leave them until the v3 run finishes, then run `sync-tracker.mjs --write` once, so every
+piece gains a working v3 link in a single change. Swapping mid-run would replace working
+links with "not yet inscribed" on a live public site for hours.
 
 ## Build & Dev
 - npm run build → generates 29 static piece pages via generateStaticParams
