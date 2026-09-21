@@ -1,0 +1,237 @@
+[19:28:56] preflight ✓ mainnet, engine 936f1fbe6eb8f3a8…, ord-v3 holds 76884 sat (need ~16200)
+[19:28:56] piece 13 carrier already present: f4d9cfb85d16ac268f6dfe52f9996cbbe4beee6d086f0739333e932e7b2778dc:0
+
+[19:28:56] ════════ PIECE 13 ════════
+[19:28:56] anchor block 967930
+[19:28:57] gates ✓
+[19:28:59] inscribed — 2e61d8c0f83a79204443c1478536e104607b44ff4ac36cbd523b3caf10d9379fi0
+[19:28:59] handing off piece 14 carrier so it confirms in parallel
+[19:36:01]   piece 13 reveal confirmed and indexed (height 967931)
+  chain record ✓  sat 12425429610023, offset 0, value 330, parent=engine, height 967931, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_13.html
+  metadata ✓  four keys, 2021-12-01, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[19:36:01] piece 13 COMPLETE and verified
+[19:36:01]   piece 14 carrier confirmed and indexed (height 967931)
+
+[19:36:01] ════════ PIECE 14 ════════
+[19:36:02] anchor block 967931
+[19:36:03] gates ✓
+[19:36:05] inscribed — 747c36301c9c6d35dede93a4c79585558adb176e1770fb6616ceacf43268c103i0
+[19:36:05] handing off piece 15 carrier so it confirms in parallel
+[19:43:07]   piece 14 reveal confirmed and indexed (height 967932)
+  chain record ✓  sat 12425429610024, offset 0, value 330, parent=engine, height 967932, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_14.html
+  metadata ✓  four keys, 2022-02-14, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[19:43:08] piece 14 COMPLETE and verified
+[19:43:08]   piece 15 carrier confirmed and indexed (height 967932)
+
+[19:43:08] ════════ PIECE 15 ════════
+[19:43:08] anchor block 967932
+[19:43:09] gates ✓
+[19:43:11] inscribed — 04013d7631936a47c7953712c07edc9eb0b3f0fc84f4760ad1b1789da279934ei0
+[19:43:11] handing off piece 16 carrier so it confirms in parallel
+[19:49:44]   piece 15 reveal confirmed and indexed (height 967933)
+  chain record ✓  sat 12425429610025, offset 0, value 330, parent=engine, height 967933, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_15.html
+  metadata ✓  four keys, 2022-05-13, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[19:49:45] piece 15 COMPLETE and verified
+[19:49:45]   piece 16 carrier confirmed and indexed (height 967933)
+
+[19:49:45] ════════ PIECE 16 ════════
+[19:49:45] anchor block 967933
+[19:49:46] gates ✓
+[19:49:48] inscribed — b4615174fef4536f39f6b0307da7cda08755f35ca76da7ebd4ef8bc0b629a5eci0
+[19:49:48] handing off piece 17 carrier so it confirms in parallel
+[19:50:21]   piece 16 reveal confirmed and indexed (height 967934)
+  chain record ✓  sat 12425429610026, offset 0, value 330, parent=engine, height 967934, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_16.html
+  metadata ✓  four keys, 2022-08-25, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[19:50:22] piece 16 COMPLETE and verified
+[19:50:22]   piece 17 carrier confirmed and indexed (height 967934)
+
+[19:50:22] ════════ PIECE 17 ════════
+[19:50:22] anchor block 967934
+[19:50:23] gates ✓
+[19:50:26] inscribed — 8613cf254fa05cb45208c84d448d10096f622cb6685f8ccaad99f7a435b334e8i0
+[19:50:26] handing off piece 18 carrier so it confirms in parallel
+[20:03:28]   piece 17 reveal confirmed and indexed (height 967935)
+  chain record ✓  sat 12425429610027, offset 0, value 330, parent=engine, height 967935, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_17.html
+  metadata ✓  four keys, 2023-06-12, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[20:03:29] piece 17 COMPLETE and verified
+[20:03:29]   piece 18 carrier confirmed and indexed (height 967935)
+
+[20:03:29] ════════ PIECE 18 ════════
+[20:03:29] anchor block 967935
+[20:03:30] gates ✓
+[20:03:32] inscribed — b960b347890805fadd0c51c16de143c392ed261f727c0f81bc0fe4c8e68f4ce0i0
+[20:03:32] handing off piece 19 carrier so it confirms in parallel
+[20:10:44]   piece 18 reveal confirmed and indexed (height 967936)
+  chain record ✓  sat 12425429610028, offset 0, value 330, parent=engine, height 967936, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_18.html
+  metadata ✓  four keys, 2023-09-05, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[20:10:44] piece 18 COMPLETE and verified
+[20:10:44]   piece 19 carrier confirmed and indexed (height 967936)
+
+[20:10:44] ════════ PIECE 19 ════════
+[20:10:44] anchor block 967936
+[20:10:45] gates ✓
+[20:10:47] inscribed — 155613aa15de498a3099a632df069be02f00e6bdd71a21dc2633e025d6bc4963i0
+[20:10:47] handing off piece 20 carrier so it confirms in parallel
+[20:13:21]   piece 19 reveal confirmed and indexed (height 967937)
+  chain record ✓  sat 12425429610029, offset 0, value 330, parent=engine, height 967937, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_19.html
+  metadata ✓  four keys, 2023-12-05, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[20:13:21] piece 19 COMPLETE and verified
+[20:13:21]   piece 20 carrier confirmed and indexed (height 967937)
+
+[20:13:21] ════════ PIECE 20 ════════
+[20:13:21] anchor block 967937
+[20:13:22] gates ✓
+[20:13:24] inscribed — 6ba57eb3f662a68c933836112f8a64f6c5c80918e147ac8a651fc40669067a5ai0
+[20:13:24] handing off piece 21 carrier so it confirms in parallel
+[20:18:26]   piece 20 reveal confirmed and indexed (height 967939)
+  chain record ✓  sat 12425429610030, offset 0, value 330, parent=engine, height 967939, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_20.html
+  metadata ✓  four keys, 2024-02-05, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[20:18:26] piece 20 COMPLETE and verified
+[20:18:26]   piece 21 carrier confirmed and indexed (height 967939)
+
+[20:18:26] ════════ PIECE 21 ════════
+[20:18:27] anchor block 967939
+[20:18:27] gates ✓
+[20:18:29] inscribed — f85b32629fe4e2e67275d6a86aa57e4d4a0dfbd52a0e64338dfe8fa7b93d4584i0
+[20:18:29] handing off piece 22 carrier so it confirms in parallel
+[20:21:00]   piece 21 reveal confirmed and indexed (height 967940)
+  chain record ✓  sat 12425429610031, offset 0, value 330, parent=engine, height 967940, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_21.html
+  metadata ✓  four keys, 2024-06-10, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[20:21:00] piece 21 COMPLETE and verified
+[20:21:00]   piece 22 carrier confirmed and indexed (height 967940)
+
+[20:21:00] ════════ PIECE 22 ════════
+[20:21:01] anchor block 967940
+[20:21:01] gates ✓
+[20:21:03] inscribed — 6b1284313b2b1d8a272322f9c5f8304c8ec40bd1493a38da6e8b3e00b3e60d23i0
+[20:21:03] handing off piece 23 carrier so it confirms in parallel
+[20:50:09]   piece 22 reveal confirmed and indexed (height 967942)
+  chain record ✓  sat 12425429610032, offset 0, value 330, parent=engine, height 967942, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_22.html
+  metadata ✓  four keys, 2024-09-16, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[20:50:09] piece 22 COMPLETE and verified
+[20:50:09]   piece 23 carrier confirmed and indexed (height 967942)
+
+[20:50:09] ════════ PIECE 23 ════════
+[20:50:09] anchor block 967942
+[20:50:10] gates ✓
+[20:50:12] inscribed — 1af7edbde54d124454f95c3f4ea1c7df95bfdf8fcf18935b2bfb0376449a883ai0
+[20:50:12] handing off piece 24 carrier so it confirms in parallel
+[20:56:45]   piece 23 reveal confirmed and indexed (height 967943)
+  chain record ✓  sat 12425429610033, offset 0, value 330, parent=engine, height 967943, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_23.html
+  metadata ✓  four keys, 2024-12-30, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[20:56:46] piece 23 COMPLETE and verified
+[20:56:46]   piece 24 carrier confirmed and indexed (height 967943)
+
+[20:56:46] ════════ PIECE 24 ════════
+[20:56:46] anchor block 967943
+[20:56:47] gates ✓
+[20:56:48] inscribed — 6f54436e26406591be11924d1b10fcc8ce54395ddd7f8189a97f08947fc0e36di0
+[20:56:48] handing off piece 25 carrier so it confirms in parallel
+[21:15:01]   piece 24 reveal confirmed and indexed (height 967944)
+  chain record ✓  sat 12425429610034, offset 0, value 330, parent=engine, height 967944, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_24.html
+  metadata ✓  four keys, 2025-03-26, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[21:15:01] piece 24 COMPLETE and verified
+[21:15:01]   piece 25 carrier confirmed and indexed (height 967944)
+
+[21:15:01] ════════ PIECE 25 ════════
+[21:15:01] anchor block 967944
+[21:15:02] gates ✓
+[21:15:04] inscribed — dfe1c4c3f532d90acc96ad3b6dc95b22723098e73e785e24f5ccb030c951998fi0
+[21:15:04] handing off piece 26 carrier so it confirms in parallel
+[21:24:36]   piece 25 reveal confirmed and indexed (height 967945)
+  chain record ✓  sat 12425429610035, offset 0, value 330, parent=engine, height 967945, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_25.html
+  metadata ✓  four keys, 2025-06-18, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[21:24:37] piece 25 COMPLETE and verified
+[21:24:37]   piece 26 carrier confirmed and indexed (height 967945)
+
+[21:24:37] ════════ PIECE 26 ════════
+[21:24:37] anchor block 967945
+[21:24:38] gates ✓
+[21:24:39] inscribed — 7773e4587582a087023de45c61f4ff3dce6d89bc8ceec55273542946cb2950edi0
+[21:24:39] handing off piece 27 carrier so it confirms in parallel
+[21:27:20]   piece 26 reveal confirmed and indexed (height 967946)
+  chain record ✓  sat 12425429610036, offset 0, value 330, parent=engine, height 967946, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_26.html
+  metadata ✓  four keys, 2025-09-12, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[21:27:21] piece 26 COMPLETE and verified
+[21:27:21]   piece 27 carrier confirmed and indexed (height 967946)
+
+[21:27:21] ════════ PIECE 27 ════════
+[21:27:21] anchor block 967946
+[21:27:22] gates ✓
+[21:27:23] inscribed — 11bd3cc8601a4e19d6242469ab82a30f1c0ae28555b59cc37fc9f08498c45f34i0
+[21:27:23] handing off piece 28 carrier so it confirms in parallel
+[21:36:55]   piece 27 reveal confirmed and indexed (height 967947)
+  chain record ✓  sat 12425429610037, offset 0, value 330, parent=engine, height 967947, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_27.html
+  metadata ✓  four keys, 2025-12-11, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[21:36:55] piece 27 COMPLETE and verified
+[21:36:55]   piece 28 carrier confirmed and indexed (height 967947)
+
+[21:36:55] ════════ PIECE 28 ════════
+[21:36:55] anchor block 967947
+[21:36:56] gates ✓
+[21:36:58] inscribed — 3583219f694bf00897ba471bc1338514ffe479ed1fb89799e7b9502820f8d938i0
+[21:36:58] handing off piece 29 carrier so it confirms in parallel
+[21:46:00]   piece 28 reveal confirmed and indexed (height 967948)
+  chain record ✓  sat 12425429610038, offset 0, value 330, parent=engine, height 967948, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_28.html
+  metadata ✓  four keys, 2026-03-20, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[21:46:01] piece 28 COMPLETE and verified
+[21:46:01]   piece 29 carrier confirmed and indexed (height 967948)
+
+[21:46:01] ════════ PIECE 29 ════════
+[21:46:01] anchor block 967948
+[21:46:02] gates ✓
+[21:46:03] inscribed — cb3bed3a4c3e65c0e74fddac603ae1cfb70bcd2aa3e0fb99dc2a813a97e86d3bi0
+[21:46:03] handing off piece 30 carrier so it confirms in parallel
+[21:51:38]   piece 29 reveal confirmed and indexed (height 967949)
+  chain record ✓  sat 12425429610039, offset 0, value 330, parent=engine, height 967949, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_29.html
+  metadata ✓  four keys, 2026-06-19, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[21:51:38] piece 29 COMPLETE and verified
+[21:51:38]   piece 30 carrier confirmed and indexed (height 967949)
+
+[21:51:38] ════════ PIECE 30 ════════
+[21:51:38] anchor block 967949
+[21:51:39] gates ✓
+[21:51:41] inscribed — 40b914134170dc5f9220642eb3f4d0ea7cea5c18e7e39655560f08508251d044i0
+[21:54:11]   piece 30 reveal confirmed and indexed (height 967950)
+  chain record ✓  sat 12425429610040, offset 0, value 330, parent=engine, height 967950, charms ["vindicated"]
+  content ✓  byte-identical to dist/cessation_piece_30.html
+  metadata ✓  four keys, 2026-09-18, ecg+labs match source (engine decoder), no identity
+  lineage ✓  listed under the engine's children
+[21:54:11] piece 30 COMPLETE and verified
+
+[21:54:11] ════ RUN COMPLETE: pieces 13..30 ════
+[21:54:11] log: run_log.jsonl

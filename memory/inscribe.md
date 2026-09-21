@@ -1037,54 +1037,76 @@ parent of every child inscription. Destination confirmed `ismine: true` in `ord-
 **Every piece is a child of THIS id** — `--parent 936f1fbe…067i0`, piece 0 included.
 The engine is the inscription root; piece 0 is the genesis art piece, not the parent.
 
-## 8d. THE RUN — v3 pieces as they land
+## 8d. THE RUN — COMPLETE 2026-09-20. All 31 pieces on Bitcoin.
 
-| piece | inscription id | sat | block | charms | cost |
-|---|---|---|---|---|---|
-| 0 | `35e961c5f4003a9e064db70e6d1c55b7314ce4b38413d3d93a32b116c748122fi0` | 12425429610010 | 967879 | vindicated | 619 + 212 handoff |
-| 1 | `2aded0d84c356bf5ee5744c202a578c147539a7cccec3d02093a4c927bfa1e41i0` | 12425429610011 | 967901 | vindicated | 619 + 212 handoff |
+**Engine** `936f1fbe6eb8f3a88ca6b6efde96722124182518b2a713210dfcfdec06410f67i0`
+on Omega sat 1459982499999999, held permanently in `ord-v3`, 31 children.
 
-**Piece 0, verified on chain 2026-09-20:**
-- `satpoint …:1:0` — Nakamoto sat at **offset 0**, `value 330`, carrier intact.
-  Output layout for a parented inscription is `[parent, piece]`, so the piece is
-  **vout 1**, not vout 0. Reading vout 0 and calling it a mismatch is a mistake this
-  project has already made once.
-- `parents: [engine]`, and the engine's `/r/children` returns it. The collection exists.
-- Content **byte-identical** to `dist/cessation_piece_00.html` (322 bytes).
-- **§7a's unverifiable gate is now satisfied.** The mainnet composed CBOR cannot be
-  checked before broadcast (ord puts metadata in the reveal witness, which does not
-  exist until signing). Read back from `/r/metadata` after confirmation it decodes to
-  exactly `pieceIndex, hashTail, inscriptionUnix, dataset` with the correct values and
-  no identity string. **Do this read-back after every piece** — it is the only real
-  check that the piece can find its own data.
-- `charms: ["vindicated"]` — expected on every parented piece (`--parent` puts the
-  inscription on input 1, which would have been cursed pre-jubilee). Not a problem.
+| piece | inscription id | sat | anchor block |
+|---|---|---|---|
+| 0 | `35e961c5f4003a9e064db70e6d1c55b7314ce4b38413d3d93a32b116c748122fi0` | 12425429610010 | 967877 |
+| 1 | `2aded0d84c356bf5ee5744c202a578c147539a7cccec3d02093a4c927bfa1e41i0` | 12425429610011 | 967899 |
+| 2 | `1dd7ee63e1945eb8e34707cfbd8b86715984d80678ee7a469c266f5bf9b97a55i0` | 12425429610012 | 967904 |
+| 3 | `08c2b5271c5c9f9aeefcc6fe977f74f36bcad72584564c0eca7626d9bc04a082i0` | 12425429610013 | 967907 |
+| 4 | `a5f3984fa55d3e6c1d829d2284b5f0232b3a499f1e63bc44430bdb06d56365b4i0` | 12425429610014 | 967909 |
+| 5 | `3e8388adb03d81a1582a8e081ab01c047bdb8be7833d4a42f13589e2073848b0i0` | 12425429610015 | 967914 |
+| 6 | `4df18c747f730fd37d5a3db9e7dccf547e4cba239a2bdd24d9deaff49b3ffdb1i0` | 12425429610016 | 967918 |
+| 7 | `1fad9d4589518af9bf7ee86d7837df76521f14be22d3101a688b14b8d846f805i0` | 12425429610017 | 967919 |
+| 8 | `35560c7ebe7a9e75414b5c0d033b80b26d294c4fcabee927ce84cc93b69d68e5i0` | 12425429610018 | 967920 |
+| 9 | `88ad624d0bab2cd4a8a5ae4ac79449a0e7846c2907aaac2c16b0b8d046108066i0` | 12425429610019 | 967921 |
+| 10 | `4deca53568108cdea23e3eb1eb0e31ce3c55d64bb80f53f57ce17b56da5215f5i0` | 12425429610020 | 967923 |
+| 11 | `7cd937b09413284705bb1731ee379869d20477580a9dd3c84ac74f098035af5di0` | 12425429610021 | 967924 |
+| 12 | `c0c56b70d246ddc44fce003e622b7cb20b96bbaa76a49c8b499a4321924f2adai0` | 12425429610022 | 967925 |
+| 13 | `2e61d8c0f83a79204443c1478536e104607b44ff4ac36cbd523b3caf10d9379fi0` | 12425429610023 | 967930 |
+| 14 | `747c36301c9c6d35dede93a4c79585558adb176e1770fb6616ceacf43268c103i0` | 12425429610024 | 967931 |
+| 15 | `04013d7631936a47c7953712c07edc9eb0b3f0fc84f4760ad1b1789da279934ei0` | 12425429610025 | 967932 |
+| 16 | `b4615174fef4536f39f6b0307da7cda08755f35ca76da7ebd4ef8bc0b629a5eci0` | 12425429610026 | 967933 |
+| 17 | `8613cf254fa05cb45208c84d448d10096f622cb6685f8ccaad99f7a435b334e8i0` | 12425429610027 | 967934 |
+| 18 | `b960b347890805fadd0c51c16de143c392ed261f727c0f81bc0fe4c8e68f4ce0i0` | 12425429610028 | 967935 |
+| 19 | `155613aa15de498a3099a632df069be02f00e6bdd71a21dc2633e025d6bc4963i0` | 12425429610029 | 967936 |
+| 20 | `6ba57eb3f662a68c933836112f8a64f6c5c80918e147ac8a651fc40669067a5ai0` | 12425429610030 | 967937 |
+| 21 | `f85b32629fe4e2e67275d6a86aa57e4d4a0dfbd52a0e64338dfe8fa7b93d4584i0` | 12425429610031 | 967939 |
+| 22 | `6b1284313b2b1d8a272322f9c5f8304c8ec40bd1493a38da6e8b3e00b3e60d23i0` | 12425429610032 | 967940 |
+| 23 | `1af7edbde54d124454f95c3f4ea1c7df95bfdf8fcf18935b2bfb0376449a883ai0` | 12425429610033 | 967942 |
+| 24 | `6f54436e26406591be11924d1b10fcc8ce54395ddd7f8189a97f08947fc0e36di0` | 12425429610034 | 967943 |
+| 25 | `dfe1c4c3f532d90acc96ad3b6dc95b22723098e73e785e24f5ccb030c951998fi0` | 12425429610035 | 967944 |
+| 26 | `7773e4587582a087023de45c61f4ff3dce6d89bc8ceec55273542946cb2950edi0` | 12425429610036 | 967945 |
+| 27 | `11bd3cc8601a4e19d6242469ab82a30f1c0ae28555b59cc37fc9f08498c45f34i0` | 12425429610037 | 967946 |
+| 28 | `3583219f694bf00897ba471bc1338514ffe479ed1fb89799e7b9502820f8d938i0` | 12425429610038 | 967947 |
+| 29 | `cb3bed3a4c3e65c0e74fddac603ae1cfb70bcd2aa3e0fb99dc2a813a97e86d3bi0` | 12425429610039 | 967948 |
+| 30 | `40b914134170dc5f9220642eb3f4d0ea7cea5c18e7e39655560f08508251d044i0` | 12425429610040 | 967949 |
 
-**The rest of the run is automated — `./run-all.sh <start> <end>`.** Decided 2026-09-20
-after doing pieces 0 and 1 by hand. It does, per piece: wait for a block no piece has
-claimed -> `inscribe.js` -> gates -> unlock -> inscribe -> hand off the NEXT carrier so
-its confirmation overlaps -> wait -> `verify-piece.sh` against the chain -> append to
-`run_log.jsonl`. **It HALTS on any failure and retries nothing**, leaving wallet and
-carriers untouched so the state can be inspected. A halt mid-run leaves the collection
-incomplete, which for an open-ended collection is a normal state, not a broken one.
+Sats are **consecutive**, 12425429610010 .. 12425429610040, oldest first.
+Every piece: sat at offset 0, 330-sat carrier intact, `--parent` the engine,
+charm `vindicated`, content byte-identical to `dist/`, on-chain CBOR matched
+field by field with the ENGINE's decoder, no identity string.
 
-`verify-piece.sh N <id>` is the check, and it is strict: sat number, offset 0, value 330,
-parent = engine, content byte-identical to `dist/`, on-chain CBOR decoded and compared
-field by field against the local metadata, an identity scan of the decoded metadata, and
-presence in the engine's children. It exits non-zero on any discrepancy. Verified
-against pieces 0 and 1 after the fact.
+```
+cost      ord-v3   101,300 -> 71,362   (29,938 on 31 inscriptions + engine)
+          ord-cold 111,052 -> 93,708   (17,344 on 32 carrier handoffs)
+          total ~47,282 sat at 1 sat/vB
+carriers  160 locked -> 128 (32 used: 31 pieces + engine). None stranded.
+```
 
-**Who pays what:** `ord-v3` pays the inscription fee (~619); `ord-cold` pays the carrier
-handoff (~212), because `peel.js handoff` builds that transaction from `ord-cold`. So the
-two budgets are separate — check both before a long run.
+### What the run cost in time, and why
 
-**Measured cost per piece: ~830 sat** (619 inscribe + 212 carrier handoff) at 1 sat/vB.
+Two halts, both on `wait_indexed` timing out, both clean — nothing retried,
+every in-flight transaction confirmed on its own afterwards. At 1 sat/vB the
+mempool backlog sat near one block's worth all evening, so transactions were at
+the inclusion margin: most confirmed in 8 minutes, two took 40-50. The fee was
+never the problem — **every transaction confirmed unbumped**. The timeout was
+raised 1h -> 2h mid-run (by `mv`, never by editing the running script) and was
+not needed again.
 
-**The overlap that makes the run bearable:** hand off piece N+1's carrier immediately
-after inscribing piece N, so the two confirmations run in parallel rather than in
-series. `handoff-piece.sh` knows about the pending reveal and allows it; the
-one-bare-carrier-at-a-time rule is still enforced at inscribe time, which is where it
-actually matters.
+Restarting after a halt is **not** the piece it stopped on. If its reveal is
+already broadcast, its carrier is spent and `inscribe-piece.sh` correctly
+refuses. Wait for that reveal, `verify-piece.sh` it, append it to
+`run_log.jsonl`, then start from the NEXT piece.
+
+### The tracker
+
+`node sync-tracker.mjs --write` regenerated the tracker's chain data from the
+chain and swapped v2 -> v3 in one change. Run it after any future piece.
 
 ## 9. Still open — corrected 2026-09-20
 
