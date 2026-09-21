@@ -213,6 +213,35 @@ Lifespan derives from the block hash, so two pieces sharing a block share a life
 `inscribe.js` keeps `inscribed_blocks.json` as the ledger and refuses a reused block or
 height. **Reset that file before a fresh inscription run** — it currently holds regtest heights.
 
+### 3.5b Repeated hashTails are EXPECTED — decided 2026-09-20, do not "fix"
+
+`inscribe.js:296` maps the block hash's last byte (0..255) onto 0..99 by
+`Math.round(byte * 99 / 255)`. **256 values into 100 buckets, so different blocks
+routinely produce the same hashTail and therefore the same lifespan.** Across 31 pieces
+the chance of at least one collision is **99.5%**; expect roughly 4-5 shared lifespans
+in a full collection. §3.5's ledger guard prevents a repeated *block*, which does not
+and cannot prevent a repeated *hashTail*.
+
+First observed live: pieces 4 (`…1f1e`, byte 30) and 5 (`…de20`, byte 32) both map to
+hashTail 12, lifespan 20.14y.
+
+**§3.5's comment overstates the consequence.** It says colliding pieces "would cease and
+reanimate in lockstep forever". They do not. `cessationBlock = ownBlockHeight +
+lifespan × BLOCKS_PER_YEAR`, and origin blocks differ — pieces 4 and 5 cease **5 blocks
+apart** — after which each reanimation derives a new lifespan from its own cessation
+block hash, so they diverge permanently. Only the first cycle's duration is shared, and
+the pieces already differ in health data, hue, partner and origin.
+
+**DECIDED (creator, 2026-09-20): leave it.** The lifespan is supposed to be drawn from
+Bitcoin; skipping blocks whose hashTail is already taken would be curating that
+randomness rather than taking it. Requiring uniqueness was costed at ~57 extra minutes
+across 25 pieces and rejected on artistic grounds, not practical ones. **Do not add a
+uniqueness guard, and do not report a repeated hashTail as a defect.**
+
+(Widening to the full 0..255 byte would make collisions rare, but
+`lifespanYearsFromHashDigits` takes 0..99 and the engine is inscribed and immutable —
+changing it would break pieces 0-5. Not available.)
+
 ### 3.6 Account for every rare sat after every step
 
 Three of the four failing regtest configurations returned **exit code 0** and looked
